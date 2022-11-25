@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "random.hh"
+#include "libkeepass/random.hh"
 
 namespace keepass {
 
@@ -56,7 +56,7 @@ std::string RandomObfuscator::Process(const std::string& data) {
     if (buffer_pos_ == buffer_.size())
       FillBuffer();
 
-    obfuscated_data[i] = data[i] ^ buffer_[buffer_pos_++];
+    obfuscated_data[i] = static_cast<char>(data[i] ^ buffer_[buffer_pos_++]);
   }
 
   return obfuscated_data;

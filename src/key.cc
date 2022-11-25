@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "key.hh"
+#include "libkeepass/key.hh"
 
 #include <algorithm>
 #include <fstream>
@@ -24,10 +24,10 @@
 
 #include <openssl/sha.h>
 
-#include "base64.hh"
-#include "cipher.hh"
-#include "exception.hh"
-#include "pugixml.hh"
+#include "libkeepass/base64.hh"
+#include "libkeepass/cipher.hh"
+#include "libkeepass/exception.hh"
+#include "libkeepass/pugixml.hh"
 
 namespace keepass {
 
@@ -113,7 +113,7 @@ void Key::SetKeyFile(const std::string& path) {
     if (!std::isxdigit(c[0]) || !std::isxdigit(c[1]))
       throw FormatError("Unknown key file format.");
 
-    uint8_t v = std::stoi(std::string(c, 2), 0, 16);
+    uint8_t v = static_cast<uint8_t>(std::stoi(std::string(c, 2), 0, 16));
     key_.keyfile_key_[i] = v;
   }
 }

@@ -21,19 +21,20 @@
 
 #include <gtest/gtest.h>
 
-#include "exception.hh"
-#include "stream.hh"
+#include "libkeepass/exception.hh"
+#include "libkeepass/stream.hh"
+#include "config.hh"
 
 using namespace keepass;
 
 namespace {
 
 std::string GetTestPath(const std::string& name) {
-  return "./test/data/" + name;
+  return std::string(PROJECT_ROOT_PATH) + "/data/" + name;
 }
 
 std::string GetTmpPath(const std::string& name) {
-  return "./test/tmp/" + name;
+  return std::string(PROJECT_ROOT_PATH) + "/tmp/" + name;
 }
 
 bool FilesEqual(const std::string& path0, const std::string& path1) {

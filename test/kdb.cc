@@ -20,20 +20,21 @@
 
 #include <gtest/gtest.h>
 
-#include "exception.hh"
-#include "kdb.hh"
-#include "key.hh"
+#include "libkeepass/exception.hh"
+#include "libkeepass/kdb.hh"
+#include "libkeepass/key.hh"
+#include "config.hh"
 
 using namespace keepass;
 
 namespace {
 
 std::string GetTestPath(const std::string& name) {
-  return "./test/data/kdb/" + name;
+  return std::string(PROJECT_ROOT_PATH) + "/data/kdb/" + name;
 }
 
 std::string GetTmpPath(const std::string& name) {
-  return "./test/tmp/" + name;
+  return std::string(PROJECT_ROOT_PATH) + "/tmp/" + name;
 }
 
 std::string GetTestJson(const std::string& name) {
@@ -76,9 +77,9 @@ TEST(KdbTest, NonKdbFile) {
   Key key("password");
 
   KdbFile file;
-  EXPECT_THROW(file.Import("./test/data/hashed_stream-0", key),
+  EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-0", key),
                FormatError);  // Too small to even contain header.
-  EXPECT_THROW(file.Import("./test/data/hashed_stream-128", key),
+  EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-128", key),
                FormatError);  // Fits header but doesn't have signature.
 }
 

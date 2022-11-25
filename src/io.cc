@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "io.hh"
+#include "libkeepass/io.hh"
 
 namespace keepass {
 
@@ -70,14 +70,14 @@ std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream& src) {
   std::vector<uint8_t> unsigned_data;
   unsigned_data.resize(data.size());
   for (std::size_t i = 0; i < data.size(); ++i)
-    unsigned_data[i] = data[i];
+    unsigned_data[i] = static_cast<uint8_t>(data[i]);
 
   return unsigned_data;
 }
 
 template <>
 void conserve<std::string>(std::ostream& dst, const std::string& val) {
-  dst.write(val.c_str(), val.size() + 1);   // FIXME: Is this safe?
+  dst.write(val.c_str(), static_cast<std::streamsize>(val.size() + 1));   // FIXME: Is this safe?
   if (!dst.good())
     throw IoError("Write error.");
 }
@@ -85,7 +85,7 @@ void conserve<std::string>(std::ostream& dst, const std::string& val) {
 template <>
 void conserve<std::vector<char>>(std::ostream& dst,
                                  const std::vector<char>& val) {
-  dst.write(val.data(), val.size());
+  dst.write(val.data(), static_cast<std::streamsize>(val.size()));
   if (!dst.good())
     throw IoError("Write error.");
 }
@@ -93,7 +93,7 @@ void conserve<std::vector<char>>(std::ostream& dst,
 template <>
 void conserve<std::vector<uint8_t>>(std::ostream& dst,
                                     const std::vector<uint8_t>& val) {
-  dst.write(reinterpret_cast<const char*>(val.data()), val.size());
+  dst.write(reinterpret_cast<const char*>(val.data()), static_cast<std::streamsize>(val.size()));
   if (!dst.good())
     throw IoError("Write error.");
 }

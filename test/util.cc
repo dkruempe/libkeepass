@@ -20,7 +20,7 @@
 
 #include <gtest/gtest.h>
 
-#include "util.hh"
+#include "libkeepass/util.hh"
 
 using namespace keepass;
 

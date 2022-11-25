@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "kdb.hh"
+#include "libkeepass/kdb.hh"
 
 #include <algorithm>
 #include <cassert>
@@ -25,23 +25,23 @@
 
 #include <openssl/sha.h>
 
-#include "cipher.hh"
-#include "database.hh"
-#include "entry.hh"
-#include "exception.hh"
-#include "format.hh"
-#include "group.hh"
-#include "io.hh"
-#include "key.hh"
-#include "util.hh"
+#include "libkeepass/cipher.hh"
+#include "libkeepass/database.hh"
+#include "libkeepass/entry.hh"
+#include "libkeepass/exception.hh"
+#include "libkeepass/format.hh"
+#include "libkeepass/group.hh"
+#include "libkeepass/io.hh"
+#include "libkeepass/key.hh"
+#include "libkeepass/util.hh"
 
 namespace keepass {
 
 const uint32_t kKdbSignature0 = 0x9aa2d903;
 const uint32_t kKdbSignature1 = 0xb54bfb65;
-//const uint32_t kKdbFlagSha2 = 0x00000001;
+// const uint32_t kKdbFlagSha2 = 0x00000001;
 const uint32_t kKdbFlagRijndael = 0x00000002;
-//const uint32_t kKdbFlagArcFour = 0x00000004;
+// const uint32_t kKdbFlagArcFour = 0x00000004;
 const uint32_t kKdbFlagTwofish = 0x00000008;
 
 #pragma pack(push, 1)
@@ -58,8 +58,7 @@ struct KdbHeader {
   std::array<uint8_t, 32> transform_seed;
   uint32_t transform_rounds;
 };
-static_assert(sizeof(KdbHeader) == 124,
-              "bad packing of header structure.");
+static_assert(sizeof(KdbHeader) == 124, "bad packing of header structure.");
 
 /**
  * @brief KDB time entry.
@@ -68,48 +67,51 @@ static_assert(sizeof(KdbHeader) == 124,
  * 00YYYYYY YYYYYYMM MMDDDDDH HHHHMMMM MMSSSSSS
  */
 struct KdbTime {
-  std::array<uint8_t, 5> packed = { { 0 } };
+  std::array<uint8_t, 5> packed = {{0}};
 
   KdbTime() = default;
 
-  KdbTime(std::time_t time) {
+  explicit KdbTime(std::time_t time) {
     static constexpr std::array<uint8_t, 5> kNeverTimeConstant = {
-      0x2e, 0xdf, 0x39, 0x7e, 0xfb
-    };
+        0x2e, 0xdf, 0x39, 0x7e, 0xfb};
     if (time == -1) {
       packed = kNeverTimeConstant;
     } else {
-      std::tm* time_ptr = std::localtime(&time);
+      std::tm *time_ptr = std::localtime(&time);
 
-      uint32_t year = time_ptr->tm_year + 1900;
-      uint32_t month = time_ptr->tm_mon + 1;
-      uint32_t day = time_ptr->tm_mday;
-      uint32_t hour = time_ptr->tm_hour;
-      uint32_t minute = time_ptr->tm_min;
-      uint32_t second = time_ptr->tm_sec;
+      uint32_t year = static_cast<uint32_t>(time_ptr->tm_year) + 1900;
+      uint32_t month = static_cast<uint32_t>(time_ptr->tm_mon) + 1;
+      auto day = static_cast<uint32_t>(time_ptr->tm_mday);
+      auto hour = static_cast<uint32_t>(time_ptr->tm_hour);
+      auto minute = static_cast<uint32_t>(time_ptr->tm_min);
+      auto second = static_cast<uint32_t>(time_ptr->tm_sec);
 
-      packed[0] = year >> 6;
-      packed[1] = ((year & 0x3f) << 2) | (month >> 2);
-      packed[2] = ((month & 0x3) << 6) | (day << 1) | (hour >> 4);
-      packed[3] = ((hour & 0xf) << 4) | (minute >> 2);
-      packed[4] = ((minute & 0x3) << 6) | second;
+      packed[0] = static_cast<uint8_t>(year) >> 6;
+      packed[1] = static_cast<uint8_t>(((year & 0x3f) << 2) | (month >> 2));
+      packed[2] =
+          static_cast<uint8_t>(((month & 0x3) << 6) | (day << 1) | (hour >> 4));
+      packed[3] = static_cast<uint8_t>(((hour & 0xf) << 4) | (minute >> 2));
+      packed[4] = static_cast<uint8_t>(((minute & 0x3) << 6) | second);
     }
   }
 
   std::time_t ToTime() const {
     static constexpr std::array<uint8_t, 5> kNeverTimeConstant = {
-      0x2e, 0xdf, 0x39, 0x7e, 0xfb
-    };
+        0x2e, 0xdf, 0x39, 0x7e, 0xfb};
 
     // Expand the bytes to 16-bits so that we can shift freely.
-    std::array<uint16_t, 5> packed16;
+    std::array<uint16_t, 5> packed16{};
     std::copy(packed.begin(), packed.end(), packed16.begin());
 
-    uint32_t year = (packed16[0] << 6) | (packed16[1] >> 2);
-    uint32_t month = ((packed16[1] & 0x0003) << 2) | (packed16[2] >> 6);
-    uint32_t day = (packed16[2] >> 1) & 0x001f;
-    uint32_t hour = ((packed16[2] & 0x0001) << 4) | (packed16[3] >> 4);
-    uint32_t minute = ((packed16[3] & 0x000f) << 2) | (packed16[4] >> 6);
+    uint32_t year = (static_cast<uint32_t>(packed16[0] << 6)) |
+                    (static_cast<uint32_t>(packed16[1] >> 2));
+    uint32_t month = ((static_cast<uint32_t>(packed16[1]) & 0x0003) << 2) |
+                     (static_cast<uint32_t>(packed16[2]) >> 6);
+    uint32_t day = (static_cast<uint32_t>(packed16[2]) >> 1) & 0x001f;
+    uint32_t hour = ((static_cast<uint32_t>(packed16[2]) & 0x0001) << 4) |
+                    (static_cast<uint32_t>(packed16[3]) >> 4);
+    uint32_t minute = ((static_cast<uint32_t>(packed16[3]) & 0x000f) << 2) |
+                      (static_cast<uint32_t>(packed16[4]) >> 6);
     uint32_t second = packed16[4] & 0x003f;
 
     if (packed == kNeverTimeConstant)
@@ -122,15 +124,15 @@ struct KdbTime {
     assert(month >= 1 && month <= 12);
     assert(year >= 1900);
 
-    std::tm time;
-    time.tm_sec = second;
-    time.tm_min = minute;
-    time.tm_hour = hour;
-    time.tm_mday = day;
-    time.tm_mon = month - 1;    // [0,11]
-    time.tm_year = year - 1900;
-    time.tm_wday = 0;   // Ignored by std::mktime().
-    time.tm_yday = 0;   // Ignored by std::mktime().
+    std::tm time{};
+    time.tm_sec = static_cast<int32_t>(second);
+    time.tm_min = static_cast<int32_t>(minute);
+    time.tm_hour = static_cast<int32_t>(hour);
+    time.tm_mday = static_cast<int32_t>(day);
+    time.tm_mon = static_cast<int32_t>(month) - 1; // [0,11]
+    time.tm_year = static_cast<int32_t>(year) - 1900;
+    time.tm_wday = 0; // Ignored by std::mktime().
+    time.tm_yday = 0; // Ignored by std::mktime().
     time.tm_isdst = -1;
 
     std::time_t res = std::mktime(&time);
@@ -146,53 +148,52 @@ static_assert(sizeof(KdbTime) == 5, "bad packing of time structure.");
 #pragma pack(pop)
 
 enum class KdbGroupFieldType : uint16_t {
-  kEmpty,               ///< 0 bytes.
-  kId,                  ///< 4 bytes.
-  kName,                ///< N bytes.
-  kCreationTime,        ///< 5 bytes.
-  kModificationTime,    ///< 5 bytes.
-  kAccessTime,          ///< 5 bytes.
-  kExpiryTime,          ///< 5 bytes.
-  kIcon,                ///< 4 bytes.
-  kLevel,               ///< 2 bytes.
-  kFlags,               ///< 2 bytes.
-  kEnd = 0xffff         ///< 0 bytes.
+  kEmpty,            ///< 0 bytes.
+  kId,               ///< 4 bytes.
+  kName,             ///< N bytes.
+  kCreationTime,     ///< 5 bytes.
+  kModificationTime, ///< 5 bytes.
+  kAccessTime,       ///< 5 bytes.
+  kExpiryTime,       ///< 5 bytes.
+  kIcon,             ///< 4 bytes.
+  kLevel,            ///< 2 bytes.
+  kFlags,            ///< 2 bytes.
+  kEnd = 0xffff      ///< 0 bytes.
 };
 
 enum class KdbEntryFieldType : uint16_t {
-  kEmpty,               ///< 0 bytes.
-  kUuid,                ///< 16 bytes.
-  kGroupId,             ///< 4 bytes.
-  kIcon,                ///< 4 bytes.
-  kTitle,               ///< N bytes.
-  kUrl,                 ///< N bytes.
-  kUsername,            ///< N bytes.
-  kPassword,            ///< N bytes.
-  kNotes,               ///< N bytes.
-  kCreationTime,        ///< 5 bytes.
-  kModificationTime,    ///< 5 bytes.
-  kAccessTime,          ///< 5 bytes.
-  kExpiryTime,          ///< 5 bytes.
-  kAttachmentName,      ///< N bytes.
-  kAttachmentData,      ///< N bytes.
+  kEmpty,            ///< 0 bytes.
+  kUuid,             ///< 16 bytes.
+  kGroupId,          ///< 4 bytes.
+  kIcon,             ///< 4 bytes.
+  kTitle,            ///< N bytes.
+  kUrl,              ///< N bytes.
+  kUsername,         ///< N bytes.
+  kPassword,         ///< N bytes.
+  kNotes,            ///< N bytes.
+  kCreationTime,     ///< 5 bytes.
+  kModificationTime, ///< 5 bytes.
+  kAccessTime,       ///< 5 bytes.
+  kExpiryTime,       ///< 5 bytes.
+  kAttachmentName,   ///< N bytes.
+  kAttachmentData,   ///< N bytes.
   kEnd = 0xffff
 };
 
-std::shared_ptr<Group> KdbFile::ReadGroup(std::istream& src, uint32_t& id,
-                                          uint16_t& level) const {
+std::shared_ptr<Group> KdbFile::ReadGroup(std::istream &src, uint32_t &id,
+                                          uint16_t &level) const {
   std::shared_ptr<Group> group = std::make_shared<Group>();
 
   while (src.good()) {
-    uint16_t field_type = consume<uint16_t>(src);
-    uint32_t field_size = consume<uint32_t>(src);
+    auto field_type = consume<uint16_t>(src);
+    auto field_size = consume<uint32_t>(src);
 
     // Read the complete group field into a separate buffer before parsing.
     // This is to guard against reading outside the field as well as for making
     // sure to read the complete field regardless of how much of it that we
     // parse.
     std::stringstream field;
-    std::generate_n(std::ostreambuf_iterator<char>(field),
-                    field_size,
+    std::generate_n(std::ostreambuf_iterator<char>(field), field_size,
                     [&src]() { return src.get(); });
     if (!src.good())
       throw IoError("Read error.");
@@ -201,40 +202,40 @@ std::shared_ptr<Group> KdbFile::ReadGroup(std::istream& src, uint32_t& id,
 
     // Parse the group field.
     switch (static_cast<KdbGroupFieldType>(field_type)) {
-      case KdbGroupFieldType::kEmpty:
-        break;
-      case KdbGroupFieldType::kId:
-        id = consume<uint32_t>(field);
-        break;
-      case KdbGroupFieldType::kName:
-        group->set_name(consume<std::string>(field));
-        break;
-      case KdbGroupFieldType::kCreationTime:
-        group->set_creation_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbGroupFieldType::kModificationTime:
-        group->set_modification_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbGroupFieldType::kAccessTime:
-        group->set_access_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbGroupFieldType::kExpiryTime:
-        group->set_expiry_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbGroupFieldType::kIcon:
-        group->set_icon(consume<uint32_t>(field));
-        break;
-      case KdbGroupFieldType::kLevel:
-        level = consume<uint16_t>(field);
-        break;
-      case KdbGroupFieldType::kFlags:
-        group->set_flags(consume<uint16_t>(field));
-        break;
-      case KdbGroupFieldType::kEnd:
-        return group;
-      default:
-        throw FormatError("Illegal group field in KDB.");
-        break;
+    case KdbGroupFieldType::kEmpty:
+      break;
+    case KdbGroupFieldType::kId:
+      id = consume<uint32_t>(field);
+      break;
+    case KdbGroupFieldType::kName:
+      group->set_name(consume<std::string>(field));
+      break;
+    case KdbGroupFieldType::kCreationTime:
+      group->set_creation_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbGroupFieldType::kModificationTime:
+      group->set_modification_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbGroupFieldType::kAccessTime:
+      group->set_access_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbGroupFieldType::kExpiryTime:
+      group->set_expiry_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbGroupFieldType::kIcon:
+      group->set_icon(consume<uint32_t>(field));
+      break;
+    case KdbGroupFieldType::kLevel:
+      level = consume<uint16_t>(field);
+      break;
+    case KdbGroupFieldType::kFlags:
+      group->set_flags(consume<uint16_t>(field));
+      break;
+    case KdbGroupFieldType::kEnd:
+      return group;
+    default:
+      throw FormatError("Illegal group field in KDB.");
+      break;
     }
   }
 
@@ -242,33 +243,37 @@ std::shared_ptr<Group> KdbFile::ReadGroup(std::istream& src, uint32_t& id,
   return group;
 }
 
-void KdbFile::WriteGroup(std::ostream& dst, std::shared_ptr<Group> group,
+void KdbFile::WriteGroup(std::ostream &dst, const std::shared_ptr<Group>& group,
                          uint32_t group_id, uint16_t level) const {
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kId));
   conserve<uint32_t>(dst, 4);
   conserve<uint32_t>(dst, group_id);
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kName));
-  conserve<uint32_t>(dst, group->name().size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(group->name().size()) + 1);
   conserve<std::string>(dst, group->name());
 
   KdbTime creation_time(group->creation_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kCreationTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbGroupFieldType::kCreationTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, creation_time);
 
   KdbTime modification_time(group->modification_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kModificationTime));
+  conserve<uint16_t>(
+      dst, static_cast<uint16_t>(KdbGroupFieldType::kModificationTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, modification_time);
 
   KdbTime access_time(group->access_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kAccessTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbGroupFieldType::kAccessTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, access_time);
 
   KdbTime expiry_time(group->expiry_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kExpiryTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbGroupFieldType::kExpiryTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, expiry_time);
 
@@ -288,22 +293,21 @@ void KdbFile::WriteGroup(std::ostream& dst, std::shared_ptr<Group> group,
   conserve<uint32_t>(dst, 0);
 }
 
-std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src,
-                                          uint32_t& group_id) const {
+std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream &src,
+                                          uint32_t &group_id) const {
   std::shared_ptr<Entry> entry = std::make_shared<Entry>();
   std::shared_ptr<Entry::Attachment> attachment;
 
   while (src.good()) {
-    uint16_t field_type = consume<uint16_t>(src);
-    uint32_t field_size = consume<uint32_t>(src);
+    auto field_type = consume<uint16_t>(src);
+    auto field_size = consume<uint32_t>(src);
 
     // Read the complete entry field into a separate buffer before parsing.
     // This is to guard against reading outside the field as well as for making
     // sure to read the complete field regardless of how much of it that we
     // parse.
     std::stringstream field;
-    std::generate_n(std::ostreambuf_iterator<char>(field),
-                    field_size,
+    std::generate_n(std::ostreambuf_iterator<char>(field), field_size,
                     [&src]() { return src.get(); });
     if (!src.good())
       throw IoError("Read error.");
@@ -312,80 +316,79 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src,
 
     // Parse the entry field.
     switch (static_cast<KdbEntryFieldType>(field_type)) {
-      case KdbEntryFieldType::kEmpty:
-        break;
-      case KdbEntryFieldType::kUuid:
-        entry->set_uuid(consume<std::array<uint8_t, 16>>(field));
-        break;
-      case KdbEntryFieldType::kGroupId:
-        group_id = consume<uint32_t>(field);
-        break;
-      case KdbEntryFieldType::kIcon:
-        entry->set_icon(consume<uint32_t>(field));
-        break;
-      case KdbEntryFieldType::kTitle:
-        entry->set_title(protect<std::string>(
-            consume<std::string>(field), false));
-        break;
-      case KdbEntryFieldType::kUrl:
-        entry->set_url(protect<std::string>(
-            consume<std::string>(field), false));
-        break;
-      case KdbEntryFieldType::kUsername:
-        entry->set_username(protect<std::string>(
-            consume<std::string>(field), false));
-        break;
-      case KdbEntryFieldType::kPassword:
-        entry->set_password(protect<std::string>(
-            consume<std::string>(field), false));
-        break;
-      case KdbEntryFieldType::kNotes:
-        entry->set_notes(protect<std::string>(
-            consume<std::string>(field), false));
-        break;
-      case KdbEntryFieldType::kCreationTime:
-        entry->set_creation_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbEntryFieldType::kModificationTime:
-        entry->set_modification_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbEntryFieldType::kAccessTime:
-        entry->set_access_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbEntryFieldType::kExpiryTime:
-        entry->set_expiry_time(consume<KdbTime>(field).ToTime());
-        break;
-      case KdbEntryFieldType::kAttachmentName: {
-          std::string name = consume<std::string>(field);
-          // Keepass 1.x seems to add attachment name fields with only a
-          // NULL-character when unused.
-          if (name.empty())
-            continue;
+    case KdbEntryFieldType::kEmpty:
+      break;
+    case KdbEntryFieldType::kUuid:
+      entry->set_uuid(consume<std::array<uint8_t, 16>>(field));
+      break;
+    case KdbEntryFieldType::kGroupId:
+      group_id = consume<uint32_t>(field);
+      break;
+    case KdbEntryFieldType::kIcon:
+      entry->set_icon(consume<uint32_t>(field));
+      break;
+    case KdbEntryFieldType::kTitle:
+      entry->set_title(
+          protect<std::string>(consume<std::string>(field), false));
+      break;
+    case KdbEntryFieldType::kUrl:
+      entry->set_url(protect<std::string>(consume<std::string>(field), false));
+      break;
+    case KdbEntryFieldType::kUsername:
+      entry->set_username(
+          protect<std::string>(consume<std::string>(field), false));
+      break;
+    case KdbEntryFieldType::kPassword:
+      entry->set_password(
+          protect<std::string>(consume<std::string>(field), false));
+      break;
+    case KdbEntryFieldType::kNotes:
+      entry->set_notes(
+          protect<std::string>(consume<std::string>(field), false));
+      break;
+    case KdbEntryFieldType::kCreationTime:
+      entry->set_creation_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbEntryFieldType::kModificationTime:
+      entry->set_modification_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbEntryFieldType::kAccessTime:
+      entry->set_access_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbEntryFieldType::kExpiryTime:
+      entry->set_expiry_time(consume<KdbTime>(field).ToTime());
+      break;
+    case KdbEntryFieldType::kAttachmentName: {
+      std::string name = consume<std::string>(field);
+      // Keepass 1.x seems to add attachment name fields with only a
+      // NULL-character when unused.
+      if (name.empty())
+        continue;
 
-          if (!attachment)
-            attachment = std::make_shared<Entry::Attachment>();
-          attachment->set_name(name);
-        break;
+      if (!attachment)
+        attachment = std::make_shared<Entry::Attachment>();
+      attachment->set_name(name);
+      break;
+    }
+    case KdbEntryFieldType::kAttachmentData:
+      if (field_size > 0) {
+        if (!attachment)
+          attachment = std::make_shared<Entry::Attachment>();
+
+        std::vector<char> data = consume<std::vector<char>>(field);
+
+        std::shared_ptr<Binary> binary = std::make_shared<Binary>(
+            protect<std::string>(std::string(data.begin(), data.end()), false));
+        attachment->set_binary(binary);
       }
-      case KdbEntryFieldType::kAttachmentData:
-        if (field_size > 0) {
-          if (!attachment)
-            attachment = std::make_shared<Entry::Attachment>();
-
-          std::vector<char> data = consume<std::vector<char>>(field);
-
-          std::shared_ptr<Binary> binary = std::make_shared<Binary>(
-              protect<std::string>(std::string(data.begin(), data.end()), false));
-          attachment->set_binary(binary);
-        }
-        break;
-      case KdbEntryFieldType::kEnd:
-        if (attachment)
-          entry->AddAttachment(attachment);
-        return entry;
-      default:
-        throw FormatError("Illegal entry field in KDB.");
-        break;
+      break;
+    case KdbEntryFieldType::kEnd:
+      if (attachment)
+        entry->AddAttachment(attachment);
+      return entry;
+    default:
+      throw FormatError("Illegal entry field in KDB.");
+      break;
     }
   }
 
@@ -393,8 +396,7 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src,
   return entry;
 }
 
-void KdbFile::WriteEntry(std::ostream& dst,
-                         std::shared_ptr<Entry> entry,
+void KdbFile::WriteEntry(std::ostream &dst, const std::shared_ptr<Entry>& entry,
                          uint32_t group_id) const {
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUuid));
   conserve<uint32_t>(dst, 16);
@@ -409,46 +411,46 @@ void KdbFile::WriteEntry(std::ostream& dst,
   conserve<uint32_t>(dst, entry->icon());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kTitle));
-  conserve<uint32_t>(dst, entry->title()->size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(entry->title()->size()) + 1);
   conserve<std::string>(dst, entry->title());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUrl));
-  conserve<uint32_t>(dst, entry->url()->size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(entry->url()->size()) + 1);
   conserve<std::string>(dst, entry->url());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUsername));
-  conserve<uint32_t>(dst, entry->username()->size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(entry->username()->size()) + 1);
   conserve<std::string>(dst, entry->username());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kPassword));
-  conserve<uint32_t>(dst, entry->password()->size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(entry->password()->size()) + 1);
   conserve<std::string>(dst, entry->password());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kNotes));
-  conserve<uint32_t>(dst, entry->notes()->size() + 1);
+  conserve<uint32_t>(dst, static_cast<uint32_t>(entry->notes()->size()) + 1);
   conserve<std::string>(dst, entry->notes());
 
   KdbTime creation_time(entry->creation_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(
-      KdbEntryFieldType::kCreationTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbEntryFieldType::kCreationTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, creation_time);
 
   KdbTime modification_time(entry->modification_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(
-      KdbEntryFieldType::kModificationTime));
+  conserve<uint16_t>(
+      dst, static_cast<uint16_t>(KdbEntryFieldType::kModificationTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, modification_time);
 
   KdbTime access_time(entry->access_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(
-      KdbEntryFieldType::kAccessTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbEntryFieldType::kAccessTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, access_time);
 
   KdbTime expiry_time(entry->expiry_time());
-  conserve<uint16_t>(dst, static_cast<uint16_t>(
-      KdbEntryFieldType::kExpiryTime));
+  conserve<uint16_t>(dst,
+                     static_cast<uint16_t>(KdbEntryFieldType::kExpiryTime));
   conserve<uint32_t>(dst, sizeof(KdbTime));
   conserve<KdbTime>(dst, expiry_time);
 
@@ -456,22 +458,21 @@ void KdbFile::WriteEntry(std::ostream& dst,
     assert(entry->attachments().size() == 1);
     std::shared_ptr<Entry::Attachment> attachment = entry->attachments()[0];
     if (!attachment->name().empty()) {
-      conserve<uint16_t>(dst, static_cast<uint16_t>(
-          KdbEntryFieldType::kAttachmentName));
-      conserve<uint32_t>(dst, attachment->name().size() + 1);
+      conserve<uint16_t>(
+          dst, static_cast<uint16_t>(KdbEntryFieldType::kAttachmentName));
+      conserve<uint32_t>(dst, static_cast<uint32_t>(attachment->name().size()) + 1);
       conserve<std::string>(dst, attachment->name());
     }
 
     if (!attachment->binary()->Empty()) {
-      conserve<uint16_t>(dst, static_cast<uint16_t>(
-          KdbEntryFieldType::kAttachmentData));
-      conserve<uint32_t>(dst, attachment->binary()->Size());
+      conserve<uint16_t>(
+          dst, static_cast<uint16_t>(KdbEntryFieldType::kAttachmentData));
+      conserve<uint32_t>(dst, static_cast<uint32_t>(attachment->binary()->Size()));
 
       std::vector<char> data;
       data.resize(attachment->binary()->Size());
       std::copy(attachment->binary()->data()->begin(),
-                attachment->binary()->data()->end(),
-                data.begin());
+                attachment->binary()->data()->end(), data.begin());
       conserve<std::vector<char>>(dst, data);
     }
   }
@@ -480,17 +481,17 @@ void KdbFile::WriteEntry(std::ostream& dst,
   conserve<uint32_t>(dst, 0);
 }
 
-std::unique_ptr<Database> KdbFile::Import(const std::string& path,
-                                          const Key& key) {
+std::unique_ptr<Database> KdbFile::Import(const std::string &path,
+                                          const Key &key) {
   std::ifstream src(path, std::ios::in | std::ios::binary);
   if (!src.is_open())
     throw FileNotFoundError();
 
   // Read header.
-  KdbHeader header;
+  KdbHeader header{};
   try {
     header = consume<KdbHeader>(src);
-  } catch (std::exception& e) {
+  } catch (std::exception &e) {
     throw FormatError("Not a KDB database.");
   }
   if (header.signature0 != kKdbSignature0 ||
@@ -498,21 +499,21 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
     throw FormatError("Not a KDB database.");
 
   switch (header.version & 0xffffff00) {
-    // Version 1.
-    case 0x00010000:
-      throw FormatError("KDB version 1 is not supported.");
-      break;
-    // Version 2.
-    case 0x00020000:
-      throw FormatError("KDB version 2 is not supported.");
-      break;
-    // Version 3.
-    case 0x00030000:
-      break;
-    default:
-      throw FormatError(
-          Format() << "Unknown KDB version " << header.version << ".");
-      break;
+  // Version 1.
+  case 0x00010000:
+    throw FormatError("KDB version 1 is not supported.");
+    break;
+  // Version 2.
+  case 0x00020000:
+    throw FormatError("KDB version 2 is not supported.");
+    break;
+  // Version 3.
+  case 0x00030000:
+    break;
+  default:
+    throw FormatError(Format()
+                      << "Unknown KDB version " << header.version << ".");
+    break;
   }
 
   std::unique_ptr<Database> db(new Database());
@@ -522,10 +523,10 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
   db->set_transform_rounds(header.transform_rounds);
 
   // Produce the final key used for decrypting the contents.
-  std::array<uint8_t, 32> transformed_key = key.Transform(
-      header.transform_seed, header.transform_rounds,
-      Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
-  std::array<uint8_t, 32> final_key;
+  std::array<uint8_t, 32> transformed_key =
+      key.Transform(header.transform_seed, header.transform_rounds,
+                    Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
+  std::array<uint8_t, 32> final_key{};
 
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
@@ -551,11 +552,11 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
 
   try {
     decrypt_cbc(src, content, *cipher);
-  } catch (std::exception& e) {
+  } catch (std::exception &e) {
     throw PasswordError();
   }
 
-  std::array<uint8_t, 32> content_hash;
+  std::array<uint8_t, 32> content_hash{};
   SHA256_Init(&sha256);
 
   uint8_t buffer[1024];
@@ -563,7 +564,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
     content.read(reinterpret_cast<char *>(buffer), sizeof(buffer));
     std::streamsize read_bytes = content.gcount();
 
-    SHA256_Update(&sha256, buffer, read_bytes);
+    SHA256_Update(&sha256, buffer, static_cast<std::size_t>(read_bytes));
   }
 
   SHA256_Final(content_hash.data(), &sha256);
@@ -584,7 +585,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
     uint16_t group_level = 0;
     std::shared_ptr<Group> group = ReadGroup(content, group_id, group_level);
 
-    groups.push_back(std::make_tuple(group, group_level));
+    groups.emplace_back(group, group_level);
     assert(group_map.count(group_id) == 0);
     group_map[group_id] = group;
   }
@@ -592,8 +593,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
   std::vector<std::tuple<std::shared_ptr<Entry>, uint32_t>> entries;
   for (decltype(header.num_entries) i = 0; i < header.num_entries; ++i) {
     uint32_t entry_group_id = 0;
-    entries.push_back(std::make_tuple(
-        ReadEntry(content, entry_group_id), entry_group_id));
+    entries.emplace_back(ReadEntry(content, entry_group_id), entry_group_id);
   }
 
   // Construct the group and entry tree.
@@ -604,7 +604,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
   std::vector<std::shared_ptr<Group>> last_group_by_level;
   last_group_by_level.push_back(group_root);
 
-  for (auto& group_data : groups) { 
+  for (auto &group_data : groups) {
     std::shared_ptr<Group> group = std::get<0>(group_data);
 
     // Level of current group plus one, because we have inserted the root at
@@ -625,7 +625,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
     last_group_level = group_level;
   }
 
-  for (auto& entry_data : entries) {
+  for (auto &entry_data : entries) {
     std::shared_ptr<Entry> entry = std::get<0>(entry_data);
     uint32_t entry_group_id = std::get<1>(entry_data);
 
@@ -640,11 +640,11 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path,
   return db;
 }
 
-void KdbFile::Export(const std::string& path, const Database& db,
-                     const Key& key) {
+void KdbFile::Export(const std::string &path, const Database &db,
+                     const Key &key) {
   // Extract database values in compatible formats.
   assert(db.master_seed().size() == 16);
-  std::array<uint8_t, 16> master_seed;
+  std::array<uint8_t, 16> master_seed{};
   std::copy(db.master_seed().begin(), db.master_seed().end(),
             master_seed.begin());
 
@@ -653,10 +653,10 @@ void KdbFile::Export(const std::string& path, const Database& db,
     throw IoError("Unable to open database for writing.");
 
   // Produce the final key used for encrypting the contents.
-  std::array<uint8_t, 32> transformed_key = key.Transform(
-      db.transform_seed(), db.transform_rounds(),
-      Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
-  std::array<uint8_t, 32> final_key;
+  std::array<uint8_t, 32> transformed_key =
+      key.Transform(db.transform_seed(), db.transform_rounds(),
+                    Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
+  std::array<uint8_t, 32> final_key{};
 
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
@@ -666,15 +666,15 @@ void KdbFile::Export(const std::string& path, const Database& db,
 
   std::unique_ptr<Cipher<16>> cipher;
   switch (db.cipher()) {
-    case Database::Cipher::kAes:
-      cipher.reset(new AesCipher(final_key, db.init_vector()));
-      break;
-    case Database::Cipher::kTwofish:
-      cipher.reset(new TwofishCipher(final_key, db.init_vector()));
-      break;
-    default:
-      assert(false);
-      break;
+  case Database::Cipher::kAes:
+    cipher.reset(new AesCipher(final_key, db.init_vector()));
+    break;
+  case Database::Cipher::kTwofish:
+    cipher.reset(new TwofishCipher(final_key, db.init_vector()));
+    break;
+  default:
+    assert(false);
+    break;
   }
 
   // Write unencrypted content to temporary stream.
@@ -682,28 +682,26 @@ void KdbFile::Export(const std::string& path, const Database& db,
   decltype(KdbHeader::num_groups) num_groups = 0;
   decltype(KdbHeader::num_entries) num_entries = 0;
 
-  dfs<Group, &Group::Groups>(db.root(),
-                             [&](const std::shared_ptr<Group>& group,
-                                 std::size_t level) {
-    if (level > std::numeric_limits<uint16_t>::max()) {
-      assert(false);
-      throw InternalError("Group hierarchy exceeds KDB maximum.");
-    }
+  dfs<Group, &Group::Groups>(
+      db.root(), [&](const std::shared_ptr<Group> &group, std::size_t level) {
+        if (level > std::numeric_limits<uint16_t>::max()) {
+          assert(false);
+          throw InternalError("Group hierarchy exceeds KDB maximum.");
+        }
 
-    WriteGroup(content, group, num_groups, static_cast<uint16_t>(level));
+        WriteGroup(content, group, num_groups, static_cast<uint16_t>(level));
 
-    if (num_groups == std::numeric_limits<decltype(num_groups)>::max()) {
-      assert(false);
-      throw InternalError("Group count exceeds KDB maximum.");
-    }
-    ++num_groups;
-  });
+        if (num_groups == std::numeric_limits<decltype(num_groups)>::max()) {
+          assert(false);
+          throw InternalError("Group count exceeds KDB maximum.");
+        }
+        ++num_groups;
+      });
 
   num_groups = 0;
-  dfs<Group, &Group::Groups>(db.root(),
-                             [&](const std::shared_ptr<Group>& group,
-                                 std::size_t) {
-    for (const auto& entry : group->Entries()) {
+  dfs<Group, &Group::Groups>(db.root(), [&](const std::shared_ptr<Group> &group,
+                                            std::size_t) {
+    for (const auto &entry : group->Entries()) {
       WriteEntry(content, entry, num_groups);
 
       if (num_entries == std::numeric_limits<decltype(num_entries)>::max()) {
@@ -717,7 +715,7 @@ void KdbFile::Export(const std::string& path, const Database& db,
   });
 
   // Compute hash of content stream.
-  std::array<uint8_t, 32> content_hash;
+  std::array<uint8_t, 32> content_hash{};
   SHA256_Init(&sha256);
 
   uint8_t buffer[1024];
@@ -725,7 +723,7 @@ void KdbFile::Export(const std::string& path, const Database& db,
     content.read(reinterpret_cast<char *>(buffer), sizeof(buffer));
     std::streamsize read_bytes = content.gcount();
 
-    SHA256_Update(&sha256, buffer, read_bytes);
+    SHA256_Update(&sha256, buffer, static_cast<std::size_t>(read_bytes));
   }
 
   SHA256_Final(content_hash.data(), &sha256);
@@ -735,11 +733,11 @@ void KdbFile::Export(const std::string& path, const Database& db,
   content.seekg(0, std::ios::beg);
 
   // Write header.
-  KdbHeader header;
+  KdbHeader header{};
   header.signature0 = kKdbSignature0;
   header.signature1 = kKdbSignature1;
-  header.flags = db.cipher() == Database::Cipher::kAes ?
-      kKdbFlagRijndael : kKdbFlagTwofish;
+  header.flags = db.cipher() == Database::Cipher::kAes ? kKdbFlagRijndael
+                                                       : kKdbFlagTwofish;
   header.version = 0x00030000;
   header.master_seed = master_seed;
   header.init_vector = db.init_vector();
@@ -747,7 +745,7 @@ void KdbFile::Export(const std::string& path, const Database& db,
   header.num_entries = num_entries;
   header.content_hash = content_hash;
   header.transform_seed = db.transform_seed();
-  header.transform_rounds = db.transform_rounds();
+  header.transform_rounds = static_cast<uint32_t>(db.transform_rounds());
 
   conserve<KdbHeader>(dst, header);
 
@@ -755,4 +753,4 @@ void KdbFile::Export(const std::string& path, const Database& db,
   encrypt_cbc(content, dst, *cipher);
 }
 
-}   // namespace keepass
+} // namespace keepass

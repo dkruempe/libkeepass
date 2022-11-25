@@ -18,7 +18,7 @@
 
 #include <gtest/gtest.h>
 
-#include "base64.hh"
+#include "libkeepass/base64.hh"
 
 using namespace keepass;
 

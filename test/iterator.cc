@@ -18,7 +18,7 @@
 
 #include <gtest/gtest.h>
 
-#include "iterator.hh"
+#include "libkeepass/iterator.hh"
 
 using namespace keepass;
 

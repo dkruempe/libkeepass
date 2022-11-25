@@ -44,18 +44,18 @@ class array_iostreambuf :
     if (which == 0)
       return std::streampos(std::streamoff(-1));
 
-    off = clamp<std::streamoff>(0, buffer_.size(), off);
+    off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
 
     std::streamoff lin_off = 0;
     switch (way) {
       case std::ios_base::beg:
-        lin_off = clamp<std::streamoff>(0, buffer_.size(), off);
+        lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
         break;
       case std::ios_base::cur:
-        lin_off = clamp<std::streamoff>(0, buffer_.size(), (gptr() - eback()) + off);
+        lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), (gptr() - eback()) + off);
         break;
       case std::ios_base::end:
-        lin_off = clamp<std::streamoff>(0, buffer_.size(), buffer_.size() - off);
+        lin_off = clamp<std::streamoff>(0, static_cast<std::streamoff>(buffer_.size()), static_cast<std::streamoff>(buffer_.size()) - off);
         break;
       default:
         assert(false);
@@ -73,7 +73,7 @@ class array_iostreambuf :
   virtual std::streampos seekpos(std::streampos sp,
                                  std::ios_base::openmode which) override {
     if (which == 0 || sp < 0 ||
-        sp >= static_cast<std::streampos>(buffer_.size())) {
+        sp >= static_cast<std::streamoff>(buffer_.size())) {
       return std::streampos(std::streamoff(-1));
     }
 
@@ -150,7 +150,7 @@ class gzip_istreambuf final :
   static const std::size_t kBufferSize = 16384;
 
   std::istream& src_;
-  z_stream z_stream_;
+  z_stream z_stream_{};
 
   /** Input buffer for feeding the decompressor. */
   std::array<char, kBufferSize> input_ = { { 0 } };
@@ -170,7 +170,7 @@ class gzip_ostreambuf final :
   static const std::size_t kBufferSize = 16384;
 
   std::ostream& dst_;
-  z_stream z_stream_;
+  z_stream z_stream_{};
 
   std::vector<char> buffer_;
 

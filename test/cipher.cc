@@ -20,7 +20,7 @@
 
 #include <gtest/gtest.h>
 
-#include "cipher.hh"
+#include "libkeepass/cipher.hh"
 
 using namespace keepass;
 

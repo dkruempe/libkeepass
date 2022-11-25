@@ -16,15 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "cipher.hh"
+#include "libkeepass/cipher.hh"
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 
-#include "exception.hh"
-#include "stream.hh"
-#include "util.hh"
+#include "libkeepass/exception.hh"
+#include "libkeepass/stream.hh"
+#include "libkeepass/util.hh"
 
 namespace {
 
@@ -38,7 +37,7 @@ template <std::size_t N>
 void block_transform(
     std::istream& src, std::ostream& dst,
     BlockOperation<N> op) {
-  std::array<uint8_t, N> src_block, dst_block;
+  std::array<uint8_t, N> src_block{}, dst_block{};
 
   std::streampos pos = src.tellg();
   src.seekg(0, std::ios::end);
@@ -56,9 +55,9 @@ void block_transform(
     remaining -= read_bytes;
 
     std::size_t dst_bytes = op(
-        src_block, dst_block, read_bytes, remaining == 0);
+        src_block, dst_block, static_cast<unsigned long>(read_bytes), remaining == 0);
 
-    dst.write(reinterpret_cast<const char*>(dst_block.data()), dst_bytes);
+    dst.write(reinterpret_cast<const char*>(dst_block.data()), static_cast<std::streamsize>(dst_bytes));
   }
 }
 
@@ -135,7 +134,7 @@ void encrypt_cbc(std::istream& src, std::ostream& dst,
                                     std::array<uint8_t, 16>& dst,
                                     std::size_t src_len,
                                     bool) -> std::size_t {
-    std::array<uint8_t, 16> src_xor_iv;
+    std::array<uint8_t, 16> src_xor_iv{};
     std::transform(src.begin(), src.end(),
                    prv.begin(), src_xor_iv.begin(),
                    std::bit_xor<uint8_t>());
@@ -143,7 +142,7 @@ void encrypt_cbc(std::istream& src, std::ostream& dst,
     if (src_len != 16) {
       // Handle PKCS #7 padding for the last block.
       assert(src_len <= 16);
-      pad_len = 16 - src_len;
+      pad_len = 16 - static_cast<uint32_t>(src_len);
       assert(pad_len > 0 && pad_len <= 16);
 
       for (std::size_t i = 16 - pad_len; i < 16; i++) {
@@ -159,8 +158,8 @@ void encrypt_cbc(std::istream& src, std::ostream& dst,
 
   // We must always apply padding.
   if (pad_len == 0) {
-    std::array<uint8_t, 16> src_block, dst_block;
-    std::array<uint8_t, 16> src_block_xor_iv;
+    std::array<uint8_t, 16> src_block{}, dst_block{};
+    std::array<uint8_t, 16> src_block_xor_iv{};
 
     std::fill(src_block.begin(), src_block.end(), 16);
     std::transform(src_block.begin(), src_block.end(),
@@ -239,8 +238,8 @@ uint32_t TwofishCipher::ReedSolomonEncode(uint32_t k0, uint32_t k1) const {
 
     // Shift one byte at a time.
     for (std::size_t j = 0; j < 4; ++j) {
-      uint8_t b = static_cast<uint8_t>(r >> 24);
-      uint32_t g2 = ((b << 1) ^ ((b & 0x80) ? kRsGfFdbk : 0)) & 0xff;
+      auto b = static_cast<uint8_t>(r >> 24);
+      uint32_t g2 = ((static_cast<uint32_t>(b) << 1) ^ ((b & 0x80) ? kRsGfFdbk : 0)) & 0xff;
       uint32_t g3 = ((b >> 1) & 0x7f) ^ ((b & 1) ? kRsGfFdbk >> 1 : 0 ) ^ g2;
       r = (r << 8) ^ (g3 << 24) ^ (g2 << 16) ^ (g3 << 8) ^ b;
     }
@@ -311,7 +310,7 @@ uint32_t TwofishCipher::F32(uint32_t x, const uint32_t* k32) const {
 
   // Run each byte thru 8x8 S-boxes, xoring with key byte at each stage. Note
   // that each byte goes through a different combination of S-boxes.
-  uint8_t* b = reinterpret_cast<uint8_t*>(&x);
+  auto* b = reinterpret_cast<uint8_t*>(&x);
   for (std::size_t i = 0; i < 4; ++i) {
     b[i] = p8(i, 4)[b[i]] ^ reinterpret_cast<const uint8_t*>(&k32[3])[i];
     b[i] = p8(i, 3)[b[i]] ^ reinterpret_cast<const uint8_t*>(&k32[2])[i];
@@ -348,7 +347,7 @@ uint32_t TwofishCipher::F32(uint32_t x, const uint32_t* k32) const {
   uint32_t res = 0;
   for (std::size_t i = 0; i < 4; ++i) {
     for (std::size_t j = 0; j < 4; ++j)
-      res ^= m[i][j] << (i * 8);
+      res ^= static_cast<uint32_t>(m[i][j]) << (static_cast<uint32_t>(i) * 8);
   }
 
   return res;
@@ -373,8 +372,8 @@ void TwofishCipher::InitializeKey(const std::array<uint8_t, 32>& key) {
 
   // Compute round subkeys for PHT.
   for (int i = 0; i < num_subkeys / 2; ++i) {
-    uint32_t a = F32(i * kSubKeyStep, k32e);
-    uint32_t b = F32(i * kSubKeyStep + kSubKeyBump, k32o);
+    uint32_t a = F32(static_cast<uint32_t>(i) * kSubKeyStep, k32e);
+    uint32_t b = F32(static_cast<uint32_t>(i) * kSubKeyStep + kSubKeyBump, k32o);
     b = RotateLeft(b, 8);
     key_.sub_keys[2 * i] = a + b;   // Combine with a PHT.
     key_.sub_keys[2 * i + 1] = RotateLeft(a + 2 * b, 9);
@@ -389,7 +388,7 @@ TwofishCipher::TwofishCipher(const std::array<uint8_t, 32>& key,
 
 void TwofishCipher::Decrypt(const std::array<uint8_t, 16>& src,
                             std::array<uint8_t, 16>& dst) const {
-  uint32_t* dst_ptr = reinterpret_cast<uint32_t*>(dst.data());
+  auto* dst_ptr = reinterpret_cast<uint32_t*>(dst.data());
 
   // Copy in the block, add whitening.
   for (std::size_t i = 0; i < 4; ++i) {
@@ -421,7 +420,7 @@ void TwofishCipher::Decrypt(const std::array<uint8_t, 16>& src,
 
 void TwofishCipher::Encrypt(const std::array<uint8_t, 16>& src,
                             std::array<uint8_t, 16>& dst) const {
-  uint32_t* dst_ptr = reinterpret_cast<uint32_t*>(dst.data());
+  auto* dst_ptr = reinterpret_cast<uint32_t*>(dst.data());
 
   // Copy in the block, add whitening.
   for (std::size_t i = 0; i < 4; ++i) {
@@ -523,7 +522,7 @@ std::array<uint8_t, 64> Salsa20Cipher::WordToByte(
   for (std::size_t i = 0; i < 16; ++i)
     x[i] = x[i] + input[i];
 
-  std::array<uint8_t, 64> output;
+  std::array<uint8_t, 64> output{};
   for (std::size_t i = 0; i < 16; ++i)
     *reinterpret_cast<uint32_t*>(output.data() + 4 * i) = x[i];
 

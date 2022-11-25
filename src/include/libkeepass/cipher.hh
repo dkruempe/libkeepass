@@ -55,8 +55,8 @@ class Cipher {
 class AesCipher final : public Cipher<16> {
  private:
   const std::array<uint8_t, 16> init_vec_;
-  AES_KEY key_dec_;
-  AES_KEY key_enc_;
+  AES_KEY key_dec_{};
+  AES_KEY key_enc_{};
 
  public:
   AesCipher(const std::array<uint8_t, 32>& key) :
@@ -83,7 +83,7 @@ class TwofishCipher final : public Cipher<16> {
     uint32_t sbox_keys[4];
     /** Round subkeys, input/output whitening bits. */
     uint32_t sub_keys[40];
-  } key_;
+  } key_{};
 
   const std::array<uint8_t, 16> init_vec_;
 

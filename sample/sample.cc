@@ -18,9 +18,9 @@
 
 #include <iostream>
 
-#include "kdb.hh"
-#include "kdbx.hh"
-#include "key.hh"
+#include "libkeepass/kdb.hh"
+#include "libkeepass/kdbx.hh"
+#include "libkeepass/key.hh"
 
 using namespace keepass;
 
