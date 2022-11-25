@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cpp-base-library)
+project(libkeepass)
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

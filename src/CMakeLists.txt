@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0025 NEW)
-project(base_library VERSION 0.0.1)
+project(libkeepass_src VERSION 0.0.1)
 set(CMAKE_MACOSX_RPATH OFF)
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 
