@@ -55,7 +55,7 @@ int main(int argc, const char * argv[]) {
           std::endl;
     } else {
       KdbFile file;
-      std::cout << file.Import(path, key)->root()->ToJson() <<
+      std::cout << keepass::KdbFile::Import(path, key)->root()->ToJson() <<
           std::endl;
     }
   } catch (std::exception& e) {
