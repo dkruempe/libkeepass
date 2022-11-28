@@ -1,10 +1,13 @@
 # Introduction
+
 libkeepass is a C++11 library for importing and exporting
 [KeePass](http://keepass.info) password databases. It supports importing and
 exporting from/to both the legacy KDB format, as well as the new KDBX format.
 
 # Building
+
 The following 3rd party libraries are required to build libkeepass:
+
 * [OpenSSL](https://www.openssl.org/)
 * [zlib](http://zlib.net)
 * [pugixml](https://pugixml.org)
@@ -13,20 +16,41 @@ For running the unit tests [gtest](https://code.google.com/p/googletest/)
 is also required.
 
 To build, simply do the following:
+
+1. make sure that conan is installed
+2. create build directory
+3. change directory via cd command
+4. install libraries via
+
+```sh
+conan install .. --build=missing
+````
+
+5. cmake
+
+```sh
+cmake .. -DCMAKE_BUILD_TYPE=Release 
+```
+
+6. build
+
 ```sh
 make -j8
 ```
 
-to run the unit tests, do the following:
+to run the unit tests, do the following in the build directory:
+
 ```sh
 make test
 ```
 
 # Using
+
 The main library entry points are the *KdbFile* and *KdbxFile* classes. They
 take care of both importing and exporting.
 
 Example:
+
 ```cpp
 keepass::Key key("password");
 
