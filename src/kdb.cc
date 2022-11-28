@@ -181,7 +181,7 @@ enum class KdbEntryFieldType : uint16_t {
 };
 
 std::shared_ptr<Group> KdbFile::ReadGroup(std::istream &src, uint32_t &id,
-                                          uint16_t &level) const {
+                                          uint16_t &level) {
   std::shared_ptr<Group> group = std::make_shared<Group>();
 
   while (src.good()) {
@@ -243,8 +243,8 @@ std::shared_ptr<Group> KdbFile::ReadGroup(std::istream &src, uint32_t &id,
   return group;
 }
 
-void KdbFile::WriteGroup(std::ostream &dst, const std::shared_ptr<Group>& group,
-                         uint32_t group_id, uint16_t level) const {
+void KdbFile::WriteGroup(std::ostream &dst, const std::shared_ptr<Group> &group,
+                         uint32_t group_id, uint16_t level) {
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbGroupFieldType::kId));
   conserve<uint32_t>(dst, 4);
   conserve<uint32_t>(dst, group_id);
@@ -294,7 +294,7 @@ void KdbFile::WriteGroup(std::ostream &dst, const std::shared_ptr<Group>& group,
 }
 
 std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream &src,
-                                          uint32_t &group_id) const {
+                                          uint32_t &group_id) {
   std::shared_ptr<Entry> entry = std::make_shared<Entry>();
   std::shared_ptr<Entry::Attachment> attachment;
 
@@ -396,8 +396,8 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream &src,
   return entry;
 }
 
-void KdbFile::WriteEntry(std::ostream &dst, const std::shared_ptr<Entry>& entry,
-                         uint32_t group_id) const {
+void KdbFile::WriteEntry(std::ostream &dst, const std::shared_ptr<Entry> &entry,
+                         uint32_t group_id) {
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUuid));
   conserve<uint32_t>(dst, 16);
   conserve<std::array<uint8_t, 16>>(dst, entry->uuid());
@@ -412,23 +412,23 @@ void KdbFile::WriteEntry(std::ostream &dst, const std::shared_ptr<Entry>& entry,
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kTitle));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->title()->size()) + 1);
-  conserve<std::string>(dst, entry->title());
+  conserve<std::string>(dst, entry->title().value());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUrl));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->url()->size()) + 1);
-  conserve<std::string>(dst, entry->url());
+  conserve<std::string>(dst, entry->url().value());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUsername));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->username()->size()) + 1);
-  conserve<std::string>(dst, entry->username());
+  conserve<std::string>(dst, entry->username().value());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kPassword));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->password()->size()) + 1);
-  conserve<std::string>(dst, entry->password());
+  conserve<std::string>(dst, entry->password().value());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kNotes));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->notes()->size()) + 1);
-  conserve<std::string>(dst, entry->notes());
+  conserve<std::string>(dst, entry->notes().value());
 
   KdbTime creation_time(entry->creation_time());
   conserve<uint16_t>(dst,
@@ -460,14 +460,16 @@ void KdbFile::WriteEntry(std::ostream &dst, const std::shared_ptr<Entry>& entry,
     if (!attachment->name().empty()) {
       conserve<uint16_t>(
           dst, static_cast<uint16_t>(KdbEntryFieldType::kAttachmentName));
-      conserve<uint32_t>(dst, static_cast<uint32_t>(attachment->name().size()) + 1);
+      conserve<uint32_t>(dst,
+                         static_cast<uint32_t>(attachment->name().size()) + 1);
       conserve<std::string>(dst, attachment->name());
     }
 
     if (!attachment->binary()->Empty()) {
       conserve<uint16_t>(
           dst, static_cast<uint16_t>(KdbEntryFieldType::kAttachmentData));
-      conserve<uint32_t>(dst, static_cast<uint32_t>(attachment->binary()->Size()));
+      conserve<uint32_t>(dst,
+                         static_cast<uint32_t>(attachment->binary()->Size()));
 
       std::vector<char> data;
       data.resize(attachment->binary()->Size());
@@ -511,8 +513,8 @@ std::unique_ptr<Database> KdbFile::Import(const std::string &path,
   case 0x00030000:
     break;
   default:
-    throw FormatError(Format()
-                      << "Unknown KDB version " << header.version << ".");
+    throw FormatError(std::string(Format()
+                      << "Unknown KDB version " << header.version << "."));
     break;
   }
 

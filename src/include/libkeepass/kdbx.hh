@@ -18,8 +18,8 @@
 
 #pragma once
 #include <cstdint>
-#include <memory>
 #include <istream>
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -27,9 +27,9 @@
 #include "security.hh"
 
 namespace pugi {
-  class xml_document;
-  class xml_node;
-}
+class xml_document;
+class xml_node;
+} // namespace pugi
 
 namespace keepass {
 
@@ -45,38 +45,37 @@ class RandomObfuscator;
  * @brief Keepass2 database file representation.
  */
 class KdbxFile final {
- private:
+private:
   typedef std::unordered_map<std::string, std::shared_ptr<Binary>> BinaryPool;
 
   typedef std::unordered_map<std::string, std::weak_ptr<Icon>> IconPool;
 
   typedef std::unordered_map<std::string, std::shared_ptr<Group>> GroupPool;
 
- private:
+private:
   BinaryPool binary_pool_;
   IconPool icon_pool_;
   GroupPool group_pool_;
-  std::array<uint8_t, 32> header_hash_ = { { 0 } }; 
+  std::array<uint8_t, 32> header_hash_ = {{0}};
 
   void Reset();
 
-  std::shared_ptr<Group> GetGroup(const std::string& uuid_str);
+  std::shared_ptr<Group> GetGroup(const std::string &uuid_str);
 
-  std::time_t ParseDateTime(const char* text) const;
-  std::string WriteDateTime(std::time_t time) const;
+  static std::time_t ParseDateTime(const char *text);
+  static std::string WriteDateTime(std::time_t time);
 
-  protect<std::string> ParseProtectedString(
-      const pugi::xml_node& node,
-      const char* name,
-      RandomObfuscator& obfuscator) const;
-  void WriteProtectedString(pugi::xml_node& node,
-                            const protect<std::string>& str,
-                            RandomObfuscator& obfuscator) const;
+  static protect<std::string> ParseProtectedString(const pugi::xml_node &node,
+                                            const char *name,
+                                            RandomObfuscator &obfuscator);
+  static void WriteProtectedString(pugi::xml_node &node,
+                            const protect<std::string> &str,
+                            RandomObfuscator &obfuscator);
 
-  std::shared_ptr<Metadata> ParseMeta(const pugi::xml_node& meta_node,
-                                      RandomObfuscator& obfuscator);
-  void WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
-                 std::shared_ptr<Metadata> meta);
+  std::shared_ptr<Metadata> ParseMeta(const pugi::xml_node &meta_node,
+                                      RandomObfuscator &obfuscator);
+  void WriteMeta(pugi::xml_node &meta_node, RandomObfuscator &obfuscator,
+                 const std::shared_ptr<Metadata>& meta);
 
   /**
    * Parses a an entry in the XML tree.
@@ -85,29 +84,27 @@ class KdbxFile final {
    * @param [in] obfuscator Random stream obfuscator.
    * @return Pointer to entry object.
    */
-  std::shared_ptr<Entry> ParseEntry(const pugi::xml_node& entry_node,
-                                    std::array<uint8_t, 16>& entry_uuid,
-                                    RandomObfuscator& obfuscator);
-  void WriteEntry(pugi::xml_node& entry_node,
-                  RandomObfuscator& obfuscator,
-                  std::shared_ptr<Entry> entry);
+  std::shared_ptr<Entry> ParseEntry(const pugi::xml_node &entry_node,
+                                    std::array<uint8_t, 16> &entry_uuid,
+                                    RandomObfuscator &obfuscator);
+  void WriteEntry(pugi::xml_node &entry_node, RandomObfuscator &obfuscator,
+                  const std::shared_ptr<Entry> &entry);
 
-  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node,
-                                    RandomObfuscator& obfuscator);
-  void WriteGroup(pugi::xml_node& group_node,
-                  RandomObfuscator& obfuscator,
-                  std::shared_ptr<Group> group);
+  std::shared_ptr<Group> ParseGroup(const pugi::xml_node &group_node,
+                                    RandomObfuscator &obfuscator);
+  void WriteGroup(pugi::xml_node &group_node, RandomObfuscator &obfuscator,
+                  const std::shared_ptr<Group> &group);
 
-  void ParseXml(std::istream& src, RandomObfuscator& obfuscator, Database& db);
+  void ParseXml(std::istream &src, RandomObfuscator &obfuscator, Database &db);
 #ifdef DEBUG
-  void PrintXml(pugi::xml_document& doc);
+  void PrintXml(pugi::xml_document &doc);
 #endif
-  void WriteXml(std::ostream& dst, RandomObfuscator& obfuscator,
-                const Database& db);
+  void WriteXml(std::ostream &dst, RandomObfuscator &obfuscator,
+                const Database &db);
 
- public:
-  std::unique_ptr<Database> Import(const std::string& path, const Key& key);
-  void Export(const std::string& path, const Database& db, const Key& key);
+public:
+  std::unique_ptr<Database> Import(const std::string &path, const Key &key);
+  void Export(const std::string &path, const Database &db, const Key &key);
 };
 
-}   // keepass
+} // namespace keepass

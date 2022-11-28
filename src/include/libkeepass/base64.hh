@@ -35,7 +35,7 @@ std::string base64_encode(InputIterator first, InputIterator last) {
   std::string dst;
 
   while (first != last) {
-    uint8_t c0 = static_cast<uint8_t>(*first++);
+    auto c0 = static_cast<uint8_t>(*first++);
     if (first == last) {
       dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
       dst.push_back(
@@ -43,7 +43,7 @@ std::string base64_encode(InputIterator first, InputIterator last) {
       dst.push_back('=');
       dst.push_back('=');
     } else {
-      uint8_t c1 = static_cast<uint8_t>(*first++);
+      auto c1 = static_cast<uint8_t>(*first++);
       if (first == last) {
         dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
         dst.push_back(kBase64[static_cast<std::string::size_type>(
@@ -52,7 +52,7 @@ std::string base64_encode(InputIterator first, InputIterator last) {
             kBase64[static_cast<std::string::size_type>(((c1 & 0xf) << 2))]);
         dst.push_back('=');
       } else {
-        uint8_t c2 = static_cast<uint8_t>(*first++);
+        auto c2 = static_cast<uint8_t>(*first++);
         dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
         dst.push_back(kBase64[static_cast<std::string::size_type>(
             ((c0 & 0x3) << 4) | (c1 >> 4))]);

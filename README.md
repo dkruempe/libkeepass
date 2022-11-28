@@ -7,8 +7,9 @@ exporting from/to both the legacy KDB format, as well as the new KDBX format.
 The following 3rd party libraries are required to build libkeepass:
 * [OpenSSL](https://www.openssl.org/)
 * [zlib](http://zlib.net)
+* [pugixml](https://pugixml.org)
 
-For running the unit tests [googletest](https://code.google.com/p/googletest/)
+For running the unit tests [gtest](https://code.google.com/p/googletest/)
 is also required.
 
 To build, simply do the following:

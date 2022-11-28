@@ -21,60 +21,48 @@
 namespace keepass {
 
 class PasswordError final : public std::exception {
- public:
-  explicit PasswordError() {}
+public:
+  explicit PasswordError() = default;
 
-  virtual const char* what() const throw() override {
-    return "Invalid password.";
-  }
+  const char *what() const noexcept override { return "Invalid password."; }
 };
 
 class FormatError final : public std::exception {
- private:
-  const std::string msg_;
+private:
+  const std::string msg_{};
 
- public:
-  explicit FormatError(const std::string& msg) :
-      msg_(msg) {}
+public:
+  explicit FormatError(std::string msg) : msg_(std::move(msg)) {}
 
-  virtual const char* what() const throw() override {
-    return msg_.c_str();
-  }
+  const char *what() const noexcept override { return msg_.c_str(); }
 };
 
 /**
  * @brief Used for the same class of errors as asserts but for release builds.
  */
 class InternalError : public std::exception {
- private:
-  const std::string msg_;
+private:
+  const std::string msg_{};
 
- public:
-  explicit InternalError(const std::string& msg) :
-      msg_(msg) {}
+public:
+  explicit InternalError(std::string msg) : msg_(std::move(msg)) {}
 
-  virtual const char* what() const throw() override {
-    return msg_.c_str();
-  }
+  const char *what() const noexcept override { return msg_.c_str(); }
 };
 
 class IoError : public std::exception {
- private:
-  const std::string msg_;
+private:
+  const std::string msg_{};
 
- public:
-  explicit IoError(const std::string& msg) :
-      msg_(msg) {}
+public:
+  explicit IoError(std::string msg) : msg_(std::move(msg)) {}
 
-  virtual const char* what() const throw() override {
-    return msg_.c_str();
-  }
+  const char *what() const noexcept override { return msg_.c_str(); }
 };
 
 class FileNotFoundError final : public IoError {
- public:
-  FileNotFoundError() :
-      IoError("File not found.") {}
+public:
+  FileNotFoundError() : IoError("File not found.") {}
 };
 
-}   // namespace keepass
+} // namespace keepass

@@ -31,16 +31,16 @@ namespace keepass {
 class Group;
 
 class Metadata final {
- public:
+public:
   class MemoryProtection final {
-   private:
+  private:
     bool title_ = false;
     bool username_ = false;
     bool password_ = true;
     bool url_ = false;
     bool notes_ = false;
 
-   public:
+  public:
     bool title() const { return title_; }
     void set_title(bool title) { title_ = title; }
 
@@ -58,38 +58,35 @@ class Metadata final {
   };
 
   class Field final {
-   private:
+  private:
     std::string key_;
     std::string value_;
 
-   public:
-    Field(const std::string& key, const std::string& value) :
-        key_(key), value_(value) {}
-    Field(const Field& other) {
+  public:
+    Field(std::string key, std::string value)
+        : key_(std::move(key)), value_(std::move(value)) {}
+    Field(const Field &other) {
       key_ = other.key_;
       value_ = other.value_;
     }
-    Field(Field&& other) {
+    Field(Field &&other) noexcept {
       key_ = std::move(other.key_);
       value_ = std::move(other.value_);
     }
 
-    const std::string& key() const { return key_; }
-    const std::string& value() const { return value_; }
+    const std::string &key() const { return key_; }
+    const std::string &value() const { return value_; }
 
-    Field& operator=(const Field& other) {
-      key_ = other.key_;
-      value_ = other.value_;
-      return *this;
-    }
-    Field& operator=(Field&& other) {
+    Field &operator=(const Field &other) = default;
+
+    Field &operator=(Field &&other) noexcept {
       key_ = std::move(other.key_);
       value_ = std::move(other.value_);
       return *this;
     }
   };
 
- private:
+private:
   std::string generator_;
   temporal<std::string> database_name_;
   temporal<std::string> database_desc_;
@@ -113,24 +110,24 @@ class Metadata final {
   std::vector<std::shared_ptr<Icon>> icons_;
   std::vector<Field> fields_;
 
- public:
-  const std::string& generator() const { return generator_; }
-  void set_generator(const std::string& generator) { generator_ = generator; }
+public:
+  const std::string &generator() const { return generator_; }
+  void set_generator(const std::string &generator) { generator_ = generator; }
 
-  const temporal<std::string>& database_name() const { return database_name_; }
-  void set_database_name(const temporal<std::string>& name) {
+  const temporal<std::string> &database_name() const { return database_name_; }
+  void set_database_name(const temporal<std::string> &name) {
     database_name_ = name;
   }
 
-  const temporal<std::string>& database_desc() const { return database_desc_; }
-  void set_database_desc(const temporal<std::string>& desc) {
+  const temporal<std::string> &database_desc() const { return database_desc_; }
+  void set_database_desc(const temporal<std::string> &desc) {
     database_desc_ = desc;
   }
 
-  const temporal<std::string>& default_username() const {
+  const temporal<std::string> &default_username() const {
     return default_username_;
   }
-  void set_default_username(const temporal<std::string>& username) {
+  void set_default_username(const temporal<std::string> &username) {
     default_username_ = username;
   }
 
@@ -139,15 +136,11 @@ class Metadata final {
     maintenance_hist_days_ = days;
   }
 
-  const std::string& database_color() const { return database_color_; }
-  void set_database_color(const std::string& color) {
-    database_color_ = color;
-  }
+  const std::string &database_color() const { return database_color_; }
+  void set_database_color(const std::string &color) { database_color_ = color; }
 
   std::time_t master_key_changed() const { return master_key_changed_; }
-  void set_master_key_changed(std::time_t time) {
-    master_key_changed_ = time;
-  }
+  void set_master_key_changed(std::time_t time) { master_key_changed_ = time; }
 
   int64_t master_key_change_rec() const { return master_key_change_rec_; }
   void set_master_key_change_rec(int64_t rec) { master_key_change_rec_ = rec; }
@@ -157,10 +150,10 @@ class Metadata final {
     master_key_change_force_ = force;
   }
 
-  MemoryProtection& memory_protection() { return memory_protection_; }
+  MemoryProtection &memory_protection() { return memory_protection_; }
 
   std::shared_ptr<Group> recycle_bin() const { return recycle_bin_; }
-  void set_recycle_bin(std::shared_ptr<Group> bin) { recycle_bin_ = bin; }
+  void set_recycle_bin(std::shared_ptr<Group> bin) { recycle_bin_ = std::move(bin); }
 
   std::time_t recycle_bin_changed() const { return recycle_bin_changed_; }
   void set_recycle_bin_changed(std::time_t time) {
@@ -169,7 +162,7 @@ class Metadata final {
 
   std::shared_ptr<Group> entry_templates() const { return entry_templates_; }
   void set_entry_templates(std::shared_ptr<Group> entry_templates) {
-    entry_templates_ = entry_templates;
+    entry_templates_ = std::move(entry_templates);
   }
 
   std::time_t entry_templates_changed() const {
@@ -189,27 +182,25 @@ class Metadata final {
     return last_selected_group_;
   }
   void set_last_selected_group(std::weak_ptr<Group> group) {
-    last_selected_group_ = group;
+    last_selected_group_ = std::move(group);
   }
 
   std::weak_ptr<Group> last_visible_group() const {
     return last_visible_group_;
   }
   void set_last_visible_group(std::weak_ptr<Group> group) {
-    last_visible_group_ = group;
+    last_visible_group_ = std::move(group);
   }
 
-  const std::vector<std::shared_ptr<Binary>>& binaries() const {
+  const std::vector<std::shared_ptr<Binary>> &binaries() const {
     return binaries_;
   }
-  const std::vector<std::shared_ptr<Icon>>& icons() const {
-    return icons_;
-  }
-  const std::vector<Field>& fields() const { return fields_; }
+  const std::vector<std::shared_ptr<Icon>> &icons() const { return icons_; }
+  const std::vector<Field> &fields() const { return fields_; }
 
-  void AddBinary(std::shared_ptr<Binary> binary);
-  void AddIcon(std::shared_ptr<Icon> icon);
-  void AddField(const std::string& key, const std::string& value);
+  void AddBinary(const std::shared_ptr<Binary> &binary);
+  void AddIcon(const std::shared_ptr<Icon> &icon);
+  void AddField(const std::string &key, const std::string &value);
 };
 
-}   // namespace keepass
+} // namespace keepass

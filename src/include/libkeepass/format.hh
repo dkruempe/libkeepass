@@ -17,25 +17,27 @@
  */
 
 #pragma once
+#include <ostream>
 #include <sstream>
 
 class Format {
- private:
+private:
   std::stringstream str_;
 
-  Format(const Format& rhs) = delete;
-  Format& operator=(const Format& rhs) = delete;
-
- public:
+public:
+  Format(const Format &rhs) = delete;
+  Format &operator=(const Format &rhs) = delete;
   Format() = default;
 
-  template <typename T>
-  Format& operator<<(const T& val) {
+  template <typename T> Format &operator<<(const T &val) {
     str_ << val;
     return *this;
   }
 
-  operator std::string() const {
-    return str_.str();
+  explicit operator std::string() const { return str_.str(); }
+
+  friend std::ostream &operator<<(std::ostream &os, const Format &format) {
+    os << format.str_.str();
+    return os;
   }
 };

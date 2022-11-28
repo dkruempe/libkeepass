@@ -28,7 +28,7 @@ namespace keepass {
 class Icon;
 
 class Group final {
- private:
+private:
   std::array<uint8_t, 16> uuid_;
   uint32_t icon_ = 0;
   std::weak_ptr<Icon> custom_icon_;
@@ -51,43 +51,43 @@ class Group final {
   std::vector<std::shared_ptr<Group>> groups_;
   std::vector<std::shared_ptr<Entry>> entries_;
 
- public:
+public:
   Group();
 
-  const std::array<uint8_t, 16>& uuid() const { return uuid_; }
-  void set_uuid(const std::array<uint8_t, 16>& uuid) { uuid_ = uuid; }
+  const std::array<uint8_t, 16> &uuid() const { return uuid_; }
+  void set_uuid(const std::array<uint8_t, 16> &uuid) { uuid_ = uuid; }
 
   uint32_t icon() const { return icon_; }
-  void set_icon(const uint32_t& icon) { icon_ = icon; }
+  void set_icon(const uint32_t &icon) { icon_ = icon; }
 
   std::weak_ptr<Icon> custom_icon() const { return custom_icon_; }
-  void set_custom_icon(std::weak_ptr<Icon> icon) { custom_icon_ = icon; }
+  void set_custom_icon(std::weak_ptr<Icon> icon) { custom_icon_ = std::move(icon); }
 
-  const std::string& name() const { return name_; }
-  void set_name(const std::string& name) { name_ = name; }
+  const std::string &name() const { return name_; }
+  void set_name(const std::string &name) { name_ = name; }
 
-  const std::string& notes() const { return notes_; }
-  void set_notes(const std::string& notes) { notes_ = notes; }
+  const std::string &notes() const { return notes_; }
+  void set_notes(const std::string &notes) { notes_ = notes; }
 
   std::time_t creation_time() const { return creation_time_; }
-  void set_creation_time(const std::time_t& time) { creation_time_ = time; }
+  void set_creation_time(const std::time_t &time) { creation_time_ = time; }
 
   std::time_t modification_time() const { return modification_time_; }
-  void set_modification_time(const std::time_t& time) {
+  void set_modification_time(const std::time_t &time) {
     modification_time_ = time;
   }
 
   std::time_t access_time() const { return access_time_; }
-  void set_access_time(const std::time_t& time) { access_time_ = time; }
+  void set_access_time(const std::time_t &time) { access_time_ = time; }
 
   std::time_t expiry_time() const { return expiry_time_; }
-  void set_expiry_time(const std::time_t& time) { expiry_time_ = time; }
+  void set_expiry_time(const std::time_t &time) { expiry_time_ = time; }
 
   std::time_t move_time() const { return move_time_; }
-  void set_move_time(const std::time_t& time) { move_time_ = time; }
+  void set_move_time(const std::time_t &time) { move_time_ = time; }
 
   uint16_t flags() const { return flags_; }
-  void set_flags(const uint16_t& flags) { flags_ = flags; }
+  void set_flags(const uint16_t &flags) { flags_ = flags; }
 
   bool expires() const { return expires_; }
   void set_expires(bool expires) { expires_ = expires; }
@@ -98,11 +98,11 @@ class Group final {
   uint32_t usage_count() const { return usage_count_; }
   void set_usage_count(uint32_t usage_count) { usage_count_ = usage_count; }
 
-  const std::string& default_autotype_sequence() const {
+  const std::string &default_autotype_sequence() const {
     return default_autotype_sequence_;
   }
   void set_default_autotype_sequence(std::string sequence) {
-    default_autotype_sequence_ = sequence;
+    default_autotype_sequence_ = std::move(sequence);
   }
 
   bool autotype() const { return autotype_; }
@@ -115,21 +115,21 @@ class Group final {
     return last_visible_entry_;
   }
   void set_last_visible_entry(std::weak_ptr<Entry> entry) {
-    last_visible_entry_ = entry;
+    last_visible_entry_ = std::move(entry);
   }
 
-  const std::vector<std::shared_ptr<Group>>& Groups() const;
-  const std::vector<std::shared_ptr<Entry>>& Entries() const;
+  const std::vector<std::shared_ptr<Group>> &Groups() const;
+  const std::vector<std::shared_ptr<Entry>> &Entries() const;
 
-  void AddGroup(std::shared_ptr<Group> group);
-  void AddEntry(std::shared_ptr<Entry> entry);
+  void AddGroup(const std::shared_ptr<Group> &group);
+  void AddEntry(const std::shared_ptr<Entry> &entry);
 
   bool HasNonMetaEntries() const;
 
   std::string ToJson() const;
 
-  bool operator==(const Group& other) const;
-  bool operator!=(const Group& other) const;
+  bool operator==(const Group &other) const;
+  bool operator!=(const Group &other) const;
 };
 
-}   // namespace keepass
+} // namespace keepass

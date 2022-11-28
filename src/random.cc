@@ -20,21 +20,20 @@
 
 namespace keepass {
 
-RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32>& key,
-                                   const std::array<uint8_t, 8>& init_vec) :
-    cipher_(key, init_vec) {
-}
+RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32> &key,
+                                   const std::array<uint8_t, 8> &init_vec)
+    : cipher_(key, init_vec) {}
 
 void RandomObfuscator::FillBuffer() {
-  static constexpr std::array<uint8_t, 64> kZeroBlock = { 0 };
+  static constexpr std::array<uint8_t, 64> kZeroBlock = {0};
 
   assert(buffer_pos_ == buffer_.size());
   cipher_.Process(kZeroBlock, buffer_);
   buffer_pos_ = 0;
 }
 
-std::vector<uint8_t> RandomObfuscator::Process(
-    const std::vector<uint8_t>& data) {
+std::vector<uint8_t>
+RandomObfuscator::Process(const std::vector<uint8_t> &data) {
   std::vector<uint8_t> obfuscated_data;
   obfuscated_data.resize(data.size());
 
@@ -48,7 +47,7 @@ std::vector<uint8_t> RandomObfuscator::Process(
   return obfuscated_data;
 }
 
-std::string RandomObfuscator::Process(const std::string& data) {
+std::string RandomObfuscator::Process(const std::string &data) {
   std::string obfuscated_data;
   obfuscated_data.resize(data.size());
 
@@ -62,4 +61,4 @@ std::string RandomObfuscator::Process(const std::string& data) {
   return obfuscated_data;
 }
 
-}   // namespace keepass
+} // namespace keepass

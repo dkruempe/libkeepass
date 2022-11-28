@@ -7,6 +7,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(pugixml REQUIRED)
 
 # build
 FILE(GLOB_RECURSE headers include/libkeepass/*.hh)
@@ -19,7 +20,7 @@ target_include_directories(libkeepass
         "$<BUILD_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/include>"
         "$<INSTALL_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};include>"
         )
-target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto PRIVATE project_warnings)
+target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml PRIVATE project_warnings)
 add_library(kruempelmann::libkeepass ALIAS libkeepass)
 INSTALL(TARGETS libkeepass
         EXPORT libkeepass_targets

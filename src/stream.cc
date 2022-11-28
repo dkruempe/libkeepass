@@ -39,19 +39,18 @@ std::array<uint8_t, 32> hashed_basic_streambuf::GetBlockHash() const {
 }
 
 int hashed_istreambuf::underflow() {
-  static constexpr std::array<uint8_t, 32> kEmptyHash = { { 0 } };
+  static constexpr std::array<uint8_t, 32> kEmptyHash = {{0}};
 
   if (gptr() == egptr()) {
     BlockHeader header;
-    src_.read(reinterpret_cast<char*>(&header), sizeof(BlockHeader));
+    src_.read(reinterpret_cast<char *>(&header), sizeof(BlockHeader));
 
     if (header.block_index != block_index_)
       throw IoError("Block index mismatch.");
     block_index_++;
 
     block_.clear();
-    std::generate_n(std::back_inserter(block_),
-                    header.block_size,
+    std::generate_n(std::back_inserter(block_), header.block_size,
                     [&]() { return src_.get(); });
 
     if (header.block_size == 0) {
@@ -68,13 +67,12 @@ int hashed_istreambuf::underflow() {
     setg(block_.data(), block_.data(), block_.data() + block_.size());
   }
 
-  return gptr() == egptr() ?
-      std::char_traits<char>::eof() :
-      std::char_traits<char>::to_int_type(*gptr());
+  return gptr() == egptr() ? std::char_traits<char>::eof()
+                           : std::char_traits<char>::to_int_type(*gptr());
 }
 
 bool hashed_ostreambuf::FlushBlock() {
-  static constexpr std::array<uint8_t, 32> kEmptyHash = { { 0 } };
+  static constexpr std::array<uint8_t, 32> kEmptyHash = {{0}};
 
   // Write block header and data.
   BlockHeader header;
@@ -82,7 +80,7 @@ bool hashed_ostreambuf::FlushBlock() {
   header.block_hash = block_.empty() ? kEmptyHash : GetBlockHash();
   header.block_size = static_cast<uint32_t>(block_.size());
 
-  dst_.write(reinterpret_cast<const char*>(&header), sizeof(BlockHeader));
+  dst_.write(reinterpret_cast<const char *>(&header), sizeof(BlockHeader));
   dst_.write(block_.data(), static_cast<std::streamsize>(block_.size()));
   if (!dst_.good())
     return false;
@@ -120,15 +118,14 @@ int hashed_ostreambuf::sync() {
   return FlushBlock() ? 0 : -1;
 }
 
-gzip_istreambuf::gzip_istreambuf(std::istream& src) :
-    src_(src) {
+gzip_istreambuf::gzip_istreambuf(std::istream &src) : src_(src) {
   z_stream_.zalloc = Z_NULL;
   z_stream_.zfree = Z_NULL;
   z_stream_.opaque = Z_NULL;
   z_stream_.avail_in = 0;
-  z_stream_.next_in = reinterpret_cast<uint8_t*>(input_.data());
+  z_stream_.next_in = reinterpret_cast<uint8_t *>(input_.data());
   z_stream_.avail_out = static_cast<uInt>(output_.size());
-  z_stream_.next_out = reinterpret_cast<uint8_t*>(output_.data());
+  z_stream_.next_out = reinterpret_cast<uint8_t *>(output_.data());
 
   if (inflateInit2(&z_stream_, 16 + MAX_WBITS) != Z_OK) {
     assert(false);
@@ -136,9 +133,7 @@ gzip_istreambuf::gzip_istreambuf(std::istream& src) :
   }
 }
 
-gzip_istreambuf::~gzip_istreambuf() {
-  inflateEnd(&z_stream_);
-}
+gzip_istreambuf::~gzip_istreambuf() { inflateEnd(&z_stream_); }
 
 int gzip_istreambuf::underflow() {
   if (gptr() == egptr()) {
@@ -150,32 +145,30 @@ int gzip_istreambuf::underflow() {
       src_.read(input_.data(), static_cast<std::streamsize>(input_.size()));
 
       z_stream_.avail_in = static_cast<uInt>(src_.gcount());
-      z_stream_.next_in = reinterpret_cast<uint8_t*>(input_.data());
+      z_stream_.next_in = reinterpret_cast<uint8_t *>(input_.data());
 
       if (z_stream_.avail_in < 1)
         return std::char_traits<char>::eof();
     }
 
     z_stream_.avail_out = static_cast<uInt>(output_.size());
-    z_stream_.next_out = reinterpret_cast<uint8_t*>(output_.data());
+    z_stream_.next_out = reinterpret_cast<uint8_t *>(output_.data());
 
     int res = inflate(&z_stream_, Z_NO_FLUSH);
     assert(res != Z_STREAM_ERROR);
     if (res < 0) {
-      throw IoError(Format() << "Gzip inflation error (" << res << ").");
+      throw IoError(std::string(Format() << "Gzip inflation error (" << res << ")."));
     }
 
     std::size_t output_bytes = output_.size() - z_stream_.avail_out;
     setg(output_.data(), output_.data(), output_.data() + output_bytes);
   }
 
-  return gptr() == egptr() ?
-      std::char_traits<char>::eof() :
-      std::char_traits<char>::to_int_type(*gptr());
+  return gptr() == egptr() ? std::char_traits<char>::eof()
+                           : std::char_traits<char>::to_int_type(*gptr());
 }
 
-gzip_ostreambuf::gzip_ostreambuf(std::ostream& dst) :
-    dst_(dst) {
+gzip_ostreambuf::gzip_ostreambuf(std::ostream &dst) : dst_(dst) {
   z_stream_.zalloc = Z_NULL;
   z_stream_.zfree = Z_NULL;
   z_stream_.opaque = Z_NULL;
@@ -191,19 +184,17 @@ gzip_ostreambuf::gzip_ostreambuf(std::ostream& dst) :
   }
 }
 
-gzip_ostreambuf::~gzip_ostreambuf() {
-  deflateEnd(&z_stream_);
-}
+gzip_ostreambuf::~gzip_ostreambuf() { deflateEnd(&z_stream_); }
 
 bool gzip_ostreambuf::WriteOutput(bool flush) {
   std::array<char, kBufferSize> out{};
 
   z_stream_.avail_in = static_cast<uInt>(buffer_.size());
-  z_stream_.next_in = reinterpret_cast<uint8_t*>(buffer_.data());
+  z_stream_.next_in = reinterpret_cast<uint8_t *>(buffer_.data());
 
   do {
     z_stream_.avail_out = out.size();
-    z_stream_.next_out = reinterpret_cast<uint8_t*>(out.data());
+    z_stream_.next_out = reinterpret_cast<uint8_t *>(out.data());
 
     int res = deflate(&z_stream_, flush ? Z_FINISH : Z_NO_FLUSH);
     assert(res != Z_STREAM_ERROR);
@@ -241,8 +232,6 @@ int gzip_ostreambuf::overflow(int c) {
   return std::char_traits<char>::to_int_type(static_cast<char>(c));
 }
 
-int gzip_ostreambuf::sync() {
-  return WriteOutput(true) ? 0 : -1;
-}
+int gzip_ostreambuf::sync() { return WriteOutput(true) ? 0 : -1; }
 
-}   // namespace keepass
+} // namespace keepass

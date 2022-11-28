@@ -24,25 +24,21 @@
 
 namespace keepass {
 
-Entry::Entry() :
-    uuid_(generate_uuid()) {
-}
+Entry::Entry() : uuid_(generate_uuid()) {}
 
-void Entry::AddAttachment(std::shared_ptr<Attachment> attachment) {
+void Entry::AddAttachment(const std::shared_ptr<Attachment> &attachment) {
   attachments_.push_back(attachment);
 }
 
-bool Entry::HasAttachment() const {
-  return !attachments_.empty();
-}
+bool Entry::HasAttachment() const { return !attachments_.empty(); }
 
-void Entry::AddHistoryEntry(std::shared_ptr<Entry> entry) {
+void Entry::AddHistoryEntry(const std::shared_ptr<Entry> &entry) {
   history_.push_back(entry);
 }
 
-void Entry::AddCustomField(std::string& key,
-                           const protect<std::string>& value) {
-  custom_fields_.push_back(Field(key, value));
+void Entry::AddCustomField(std::string &key,
+                           const protect<std::string> &value) {
+  custom_fields_.emplace_back(key, value);
 }
 
 bool Entry::HasNonDefaultAutoTypeSettings() const {
@@ -51,7 +47,7 @@ bool Entry::HasNonDefaultAutoTypeSettings() const {
 
 bool Entry::IsMetaEntry() const {
   bool has_binstream_attachment = false;
-  for (auto& attachment : attachments_) {
+  for (auto &attachment : attachments_) {
     if (attachment->name() == "bin-stream") {
       has_binstream_attachment = true;
       break;
@@ -59,7 +55,7 @@ bool Entry::IsMetaEntry() const {
   }
 
   return *title_ == "Meta-Info" && *url_ == "$" && *username_ == "SYSTEM" &&
-      !notes_->empty() && has_binstream_attachment;
+         !notes_->empty() && has_binstream_attachment;
 }
 
 std::string Entry::Attachment::ToJson() const {
@@ -67,10 +63,10 @@ std::string Entry::Attachment::ToJson() const {
 
   json << "{";
   if (!name_.empty())
-    json << "\"name\":\"" << name_ << "\"";
+    json << R"("name":")" << name_ << "\"";
   if (!binary_->Empty()) {
-    json << (name_.empty() ? "" : ",") << "\"data\":\"" <<
-        *binary_->data() << "\"";
+    json << (name_.empty() ? "" : ",") << R"("data":")" << *binary_->data()
+         << "\"";
   }
   json << "}";
 
@@ -83,26 +79,26 @@ std::string Entry::ToJson() const {
   json << "{";
   json << "\"icon\":" << icon_;
   if (!title_->empty())
-    json << ",\"title\":\"" << *title_ << "\"";
+    json << R"(,"title":")" << *title_ << "\"";
   if (!url_->empty())
-    json << ",\"url\":\"" << *url_ << "\"";
+    json << R"(,"url":")" << *url_ << "\"";
   if (!username_->empty())
-    json << ",\"username\":\"" << *username_ << "\"";
+    json << R"(,"username":")" << *username_ << "\"";
   if (!password_->empty())
-    json << ",\"password\":\"" << *password_ << "\"";
+    json << R"(,"password":")" << *password_ << "\"";
   if (!notes_->empty())
-    json << ",\"notes\":\"" << *notes_ << "\"";
+    json << R"(,"notes":")" << *notes_ << "\"";
   if (creation_time_ != 0)
-    json << ",\"creation_time\":\"" << time_to_str(creation_time_) << "\"";
+    json << R"(,"creation_time":")" << time_to_str(creation_time_) << "\"";
   if (modification_time_ != 0) {
-    json << ",\"modification_time\":\"" << time_to_str(modification_time_) <<
-        "\"";
+    json << R"(,"modification_time":")" << time_to_str(modification_time_)
+         << "\"";
   }
   if (access_time_ != 0)
-    json << ",\"access_time\":\"" << time_to_str(access_time_) << "\"";
+    json << R"(,"access_time":")" << time_to_str(access_time_) << "\"";
   if (expiry_time_ != 0)
-    json << ",\"expiry_time\":\"" << time_to_str(expiry_time_) << "\"";
-  for (auto& attachment : attachments_) {
+    json << R"(,"expiry_time":")" << time_to_str(expiry_time_) << "\"";
+  for (auto &attachment : attachments_) {
     json << ",\"attachment\":" << attachment->ToJson();
   }
   json << "}";
@@ -110,41 +106,31 @@ std::string Entry::ToJson() const {
   return json.str();
 }
 
-bool Entry::operator==(const Entry& other) const {
-  if ((!!custom_icon_.lock().get()) != (!!other.custom_icon_.lock().get()))
+bool Entry::operator==(const Entry &other) const {
+  if (custom_icon_.lock() != nullptr != (other.custom_icon_.lock() != nullptr))
     return false;
 
-  bool same_custom_icon = !custom_icon_.lock() ||
+  bool same_custom_icon =
+      !custom_icon_.lock() ||
       custom_icon_.lock().get() == other.custom_icon_.lock().get();
 
-  return uuid_ == other.uuid_ &&
-      icon_ == other.icon_ &&
-      same_custom_icon &&
-      title_ == other.title_ &&
-      url_ == other.url_ &&
-      override_url_ == other.override_url_ &&
-      username_ == other.username_ &&
-      password_ == other.password_ &&
-      notes_ == other.notes_ &&
-      tags_ == other.tags_ &&
-      creation_time_ == other.creation_time_ &&
-      modification_time_ == other.modification_time_ &&
-      access_time_ == other.access_time_ &&
-      expiry_time_ == other.expiry_time_ &&
-      move_time_ == other.move_time_ &&
-      expires_ == other.expires_ &&
-      usage_count_ == other.usage_count_ &&
-      bg_color_ == other.bg_color_ &&
-      fg_color_ == other.fg_color_ &&
-      auto_type_ == other.auto_type_ &&
-      indirect_equal<std::shared_ptr<Attachment>>(attachments_,
-                                                  other.attachments_) &&
-      indirect_equal<std::shared_ptr<Entry>>(history_, other.history_) &&
-      custom_fields_ == other.custom_fields_;
+  return uuid_ == other.uuid_ && icon_ == other.icon_ && same_custom_icon &&
+         title_ == other.title_ && url_ == other.url_ &&
+         override_url_ == other.override_url_ && username_ == other.username_ &&
+         password_ == other.password_ && notes_ == other.notes_ &&
+         tags_ == other.tags_ && creation_time_ == other.creation_time_ &&
+         modification_time_ == other.modification_time_ &&
+         access_time_ == other.access_time_ &&
+         expiry_time_ == other.expiry_time_ && move_time_ == other.move_time_ &&
+         expires_ == other.expires_ && usage_count_ == other.usage_count_ &&
+         bg_color_ == other.bg_color_ && fg_color_ == other.fg_color_ &&
+         auto_type_ == other.auto_type_ &&
+         indirect_equal<std::shared_ptr<Attachment>>(attachments_,
+                                                     other.attachments_) &&
+         indirect_equal<std::shared_ptr<Entry>>(history_, other.history_) &&
+         custom_fields_ == other.custom_fields_;
 }
 
-bool Entry::operator!=(const Entry& other) const {
-  return !(*this == other);
-}
+bool Entry::operator!=(const Entry &other) const { return !(*this == other); }
 
-}   // namespace keepass
+} // namespace keepass

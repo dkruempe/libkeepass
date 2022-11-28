@@ -28,55 +28,52 @@ namespace keepass {
 class Metadata;
 
 class Database final {
- public:
-  enum class Cipher {
-    kAes,
-    kTwofish
-  };
+public:
+  enum class Cipher { kAes, kTwofish };
 
- private:
+private:
   std::shared_ptr<Group> root_;
   Cipher cipher_ = Cipher::kAes;
   std::vector<uint8_t> master_seed_;
-  std::array<uint8_t, 16> init_vector_ = { { 0 } };
-  std::array<uint8_t, 32> transform_seed_ { { 0 } };
-  std::array<uint8_t, 32> inner_random_stream_key_ = { { 0 } };
+  std::array<uint8_t, 16> init_vector_ = {{0}};
+  std::array<uint8_t, 32> transform_seed_{{0}};
+  std::array<uint8_t, 32> inner_random_stream_key_ = {{0}};
   uint64_t transform_rounds_ = 8192;
   bool compress_ = false;
   std::shared_ptr<Metadata> meta_;
 
- public:
+public:
   std::shared_ptr<Group> root() const { return root_; }
-  void set_root(std::shared_ptr<Group> root) { root_ = root; }
+  void set_root(std::shared_ptr<Group> root) { root_ = std::move(root); }
 
   Cipher cipher() const { return cipher_; }
   void set_cipher(Cipher cipher) { cipher_ = cipher; }
 
-  const std::vector<uint8_t>& master_seed() const { return master_seed_; }
-  void set_master_seed(const std::array<uint8_t, 16>& master_seed) {
+  const std::vector<uint8_t> &master_seed() const { return master_seed_; }
+  void set_master_seed(const std::array<uint8_t, 16> &master_seed) {
     master_seed_.resize(16);
     std::copy(master_seed.begin(), master_seed.end(), master_seed_.begin());
   }
-  void set_master_seed(const std::vector<uint8_t>& master_seed) {
+  void set_master_seed(const std::vector<uint8_t> &master_seed) {
     master_seed_ = master_seed;
   }
 
-  const std::array<uint8_t, 16>& init_vector() const { return init_vector_; }
-  void set_init_vector(const std::array<uint8_t, 16>& init_vector) {
+  const std::array<uint8_t, 16> &init_vector() const { return init_vector_; }
+  void set_init_vector(const std::array<uint8_t, 16> &init_vector) {
     init_vector_ = init_vector;
   }
 
-  const std::array<uint8_t, 32>& transform_seed() const {
+  const std::array<uint8_t, 32> &transform_seed() const {
     return transform_seed_;
   }
-  void set_transform_seed(const std::array<uint8_t, 32>& transform_seed) {
+  void set_transform_seed(const std::array<uint8_t, 32> &transform_seed) {
     transform_seed_ = transform_seed;
   }
 
-  const std::array<uint8_t, 32>& inner_random_stream_key() const {
+  const std::array<uint8_t, 32> &inner_random_stream_key() const {
     return inner_random_stream_key_;
   }
-  void set_inner_random_stream_key(const std::array<uint8_t, 32>& key) {
+  void set_inner_random_stream_key(const std::array<uint8_t, 32> &key) {
     inner_random_stream_key_ = key;
   }
 
@@ -89,7 +86,7 @@ class Database final {
   void set_compress(bool compress) { compress_ = compress; }
 
   std::shared_ptr<Metadata> meta() const { return meta_; }
-  void set_meta(std::shared_ptr<Metadata> meta) { meta_ = meta; }
+  void set_meta(std::shared_ptr<Metadata> meta) { meta_ = std::move(meta); }
 };
 
-}   // namespace keepass
+} // namespace keepass

@@ -19,13 +19,13 @@
 #pragma once
 #include <array>
 #include <cstdint>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace keepass {
 
 class Key final {
- public:
+public:
   /**
    * Strategies for how to resolve sub keys before applying the
    * transformation.
@@ -41,24 +41,24 @@ class Key final {
     kHashSubKeysOnlyIfCompositeKey
   };
 
- private:
+private:
   struct CompositeKey {
-    std::array<uint8_t, 32> password_key_ = { { 0 } };
-    std::array<uint8_t, 32> keyfile_key_ = { { 0 } };
+    std::array<uint8_t, 32> password_key_ = {{0}};
+    std::array<uint8_t, 32> keyfile_key_ = {{0}};
 
     std::array<uint8_t, 32> Resolve(SubKeyResolution resolution) const;
   } key_;
 
- public:
+public:
   Key() = default;
-  Key(const std::string& password);
+  explicit Key(const std::string &password);
 
-  void SetPassword(const std::string& password);
-  void SetKeyFile(const std::string& path);
+  void SetPassword(const std::string &password);
+  void SetKeyFile(const std::string &path);
 
-  std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32>& seed,
-                                    const uint64_t rounds,
+  std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32> &seed,
+                                    uint64_t rounds,
                                     SubKeyResolution resolution) const;
 };
 
-}
+} // namespace keepass

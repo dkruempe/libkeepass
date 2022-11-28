@@ -24,31 +24,29 @@
 
 namespace keepass {
 
-Group::Group() :
-    uuid_(generate_uuid()) {
-}
+Group::Group() : uuid_(generate_uuid()) {}
 
-const std::vector<std::shared_ptr<Group>>& Group::Groups() const {
+const std::vector<std::shared_ptr<Group>> &Group::Groups() const {
   return groups_;
 }
 
-const std::vector<std::shared_ptr<Entry>>& Group::Entries() const {
+const std::vector<std::shared_ptr<Entry>> &Group::Entries() const {
   return entries_;
 }
 
-void Group::AddGroup(std::shared_ptr<Group> group) {
+void Group::AddGroup(const std::shared_ptr<Group> &group) {
   groups_.push_back(group);
 }
 
-void Group::AddEntry(std::shared_ptr<Entry> entry) {
+void Group::AddEntry(const std::shared_ptr<Entry> &entry) {
   entries_.push_back(entry);
 }
 
 bool Group::HasNonMetaEntries() const {
   return std::find_if(entries_.begin(), entries_.end(),
-      [](const std::shared_ptr<Entry>& entry) {
-        return !entry->IsMetaEntry();
-      }) != entries_.end();
+                      [](const std::shared_ptr<Entry> &entry) {
+                        return !entry->IsMetaEntry();
+                      }) != entries_.end();
 }
 
 std::string Group::ToJson() const {
@@ -57,31 +55,31 @@ std::string Group::ToJson() const {
   json << "{";
   json << "\"icon\":" << icon_;
   if (custom_icon_.lock())
-    json << ",\"custom_icon\":\"" << true << "\"";
+    json << R"(,"custom_icon":")" << true << "\"";
   if (!name_.empty())
-    json << ",\"name\":\"" << name_ << "\"";
+    json << R"(,"name":")" << name_ << "\"";
   if (!notes_.empty())
-    json << ",\"notes\":\"" << notes_ << "\"";
+    json << R"(,"notes":")" << notes_ << "\"";
   if (creation_time_ != 0)
-    json << ",\"creation_time\":\"" << time_to_str(creation_time_) << "\"";
+    json << R"(,"creation_time":")" << time_to_str(creation_time_) << "\"";
   if (modification_time_ != 0) {
-    json << ",\"modification_time\":\"" << time_to_str(modification_time_) <<
-        "\"";
+    json << R"(,"modification_time":")" << time_to_str(modification_time_)
+         << "\"";
   }
   if (access_time_ != 0)
-    json << ",\"access_time\":\"" << time_to_str(access_time_) << "\"";
+    json << R"(,"access_time":")" << time_to_str(access_time_) << "\"";
   if (expiry_time_ != 0)
-    json << ",\"expiry_time\":\"" << time_to_str(expiry_time_) << "\"";
+    json << R"(,"expiry_time":")" << time_to_str(expiry_time_) << "\"";
   if (move_time_ != 0)
-    json << ",\"move_time\":\"" << time_to_str(move_time_) << "\"";
+    json << R"(,"move_time":")" << time_to_str(move_time_) << "\"";
   if (flags_ != 0)
     json << ",\"flags\":" << flags_;
   if (!groups_.empty()) {
     json << ",\"groups\":[";
 
     std::string sep;
-    for (auto it = groups_.begin(); it != groups_.end(); ++it) {
-      json << sep << (*it)->ToJson();
+    for (const auto &group : groups_) {
+      json << sep << group->ToJson();
       sep = ",";
     }
 
@@ -91,8 +89,7 @@ std::string Group::ToJson() const {
     json << ",\"entries\":[";
 
     std::string sep;
-    for (auto it = entries_.begin(); it != entries_.end(); ++it) {
-      const auto& entry = *it;
+    for (const auto &entry : entries_) {
       if (entry->IsMetaEntry())
         continue;
 
@@ -107,31 +104,23 @@ std::string Group::ToJson() const {
   return json.str();
 }
 
-bool Group::operator==(const Group& other) const {
-  return uuid_ == other.uuid_ &&
-      icon_ == other.icon_ &&
-      custom_icon_.lock() == other.custom_icon_.lock() &&
-      name_ == other.name_ &&
-      notes_ == other.notes_ &&
-      creation_time_ == other.creation_time_ &&
-      modification_time_ == other.modification_time_ &&
-      access_time_ == other.access_time_ &&
-      expiry_time_ == other.expiry_time_ &&
-      move_time_ == other.move_time_ &&
-      flags_ == other.flags_ &&
-      expires_ == other.expires_ &&
-      expanded_ == other.expanded_ &&
-      usage_count_ == other.usage_count_ &&
-      default_autotype_sequence_ == other.default_autotype_sequence_ &&
-      autotype_ == other.autotype_ &&
-      search_ == other.search_ &&
-      last_visible_entry_.lock() == other.last_visible_entry_.lock() &&
-      indirect_equal<std::shared_ptr<Group>>(groups_, other.groups_) &&
-      indirect_equal<std::shared_ptr<Entry>>(entries_, other.entries_);
+bool Group::operator==(const Group &other) const {
+  return uuid_ == other.uuid_ && icon_ == other.icon_ &&
+         custom_icon_.lock() == other.custom_icon_.lock() &&
+         name_ == other.name_ && notes_ == other.notes_ &&
+         creation_time_ == other.creation_time_ &&
+         modification_time_ == other.modification_time_ &&
+         access_time_ == other.access_time_ &&
+         expiry_time_ == other.expiry_time_ && move_time_ == other.move_time_ &&
+         flags_ == other.flags_ && expires_ == other.expires_ &&
+         expanded_ == other.expanded_ && usage_count_ == other.usage_count_ &&
+         default_autotype_sequence_ == other.default_autotype_sequence_ &&
+         autotype_ == other.autotype_ && search_ == other.search_ &&
+         last_visible_entry_.lock() == other.last_visible_entry_.lock() &&
+         indirect_equal<std::shared_ptr<Group>>(groups_, other.groups_) &&
+         indirect_equal<std::shared_ptr<Entry>>(entries_, other.entries_);
 }
 
-bool Group::operator!=(const Group& other) const {
-  return !(*this == other);
-}
+bool Group::operator!=(const Group &other) const { return !(*this == other); }
 
-}   // namespace keepass
+} // namespace keepass

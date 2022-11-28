@@ -17,11 +17,11 @@
  */
 
 #pragma once
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cassert>
-#include <memory>
 #include <istream>
+#include <memory>
 #include <ostream>
 #include <vector>
 
@@ -32,72 +32,75 @@
 namespace keepass {
 
 template <std::size_t N>
-class array_iostreambuf :
-    public std::basic_streambuf<char, std::char_traits<char>> {
- private:
-  std::array<uint8_t, N>& buffer_;
+class array_iostreambuf
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
+  std::array<uint8_t, N> &buffer_;
 
- protected:
-  virtual std::streampos seekoff(std::streamoff off,
-                                 std::ios_base::seekdir way,
+protected:
+  std::streampos seekoff(std::streamoff off, std::ios_base::seekdir way,
                                  std::ios_base::openmode which) override {
     if (which == 0)
-      return std::streampos(std::streamoff(-1));
+      return {std::streamoff(-1)};
 
     off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
 
     std::streamoff lin_off = 0;
     switch (way) {
-      case std::ios_base::beg:
-        lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
-        break;
-      case std::ios_base::cur:
-        lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), (gptr() - eback()) + off);
-        break;
-      case std::ios_base::end:
-        lin_off = clamp<std::streamoff>(0, static_cast<std::streamoff>(buffer_.size()), static_cast<std::streamoff>(buffer_.size()) - off);
-        break;
-      default:
-        assert(false);
-        break;
+    case std::ios_base::beg:
+      lin_off =
+          clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
+      break;
+    case std::ios_base::cur:
+      lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()),
+                                      (gptr() - eback()) + off);
+      break;
+    case std::ios_base::end:
+      lin_off = clamp<std::streamoff>(
+          0, static_cast<std::streamoff>(buffer_.size()),
+          static_cast<std::streamoff>(buffer_.size()) - off);
+      break;
+    default:
+      assert(false);
+      break;
     };
 
     if (which & std::ios_base::in) {
-      char* buffer_ptr = reinterpret_cast<char*>(buffer_.data());
+      char *buffer_ptr = reinterpret_cast<char *>(buffer_.data());
       setg(buffer_ptr, buffer_ptr + lin_off, buffer_ptr + buffer_.size());
     }
 
     return lin_off;
   }
 
-  virtual std::streampos seekpos(std::streampos sp,
+  std::streampos seekpos(std::streampos sp,
                                  std::ios_base::openmode which) override {
     if (which == 0 || sp < 0 ||
         sp >= static_cast<std::streamoff>(buffer_.size())) {
-      return std::streampos(std::streamoff(-1));
+     return {std::streamoff(-1)};;
     }
 
     if (which & std::ios_base::in) {
-      char* buffer_ptr = reinterpret_cast<char*>(buffer_.data());
+      char *buffer_ptr = reinterpret_cast<char *>(buffer_.data());
       setg(buffer_ptr, buffer_ptr + sp, buffer_ptr + buffer_.size());
     }
 
     return sp;
   }
 
- public:
-  array_iostreambuf(std::array<uint8_t, N>& buffer) : buffer_(buffer) {
-    char* buffer_ptr = reinterpret_cast<char*>(buffer.data());
+public:
+  explicit array_iostreambuf(std::array<uint8_t, N> &buffer) : buffer_(buffer) {
+    char *buffer_ptr = reinterpret_cast<char *>(buffer.data());
     setg(buffer_ptr, buffer_ptr, buffer_ptr + buffer.size());
     setp(buffer_ptr, buffer_ptr + buffer.size());
   }
 };
 
 class hashed_basic_streambuf {
- protected:
+protected:
   struct BlockHeader {
-    uint32_t block_index;
-    std::array<uint8_t, 32> block_hash;
+    uint32_t block_index{};
+    std::array<uint8_t, 32> block_hash{};
     uint32_t block_size = 0;
   };
 
@@ -106,70 +109,69 @@ class hashed_basic_streambuf {
 
   std::array<uint8_t, 32> GetBlockHash() const;
 
- public:
+public:
   virtual ~hashed_basic_streambuf() = default;
 };
 
-class hashed_istreambuf final :
-    private hashed_basic_streambuf,
-    public std::basic_streambuf<char, std::char_traits<char>> {
- private:
-  std::istream& src_;
+class hashed_istreambuf final
+    : private hashed_basic_streambuf,
+      public std::basic_streambuf<char, std::char_traits<char>> {
+private:
+  std::istream &src_;
 
 public:
-  hashed_istreambuf(std::istream& src)
-    : src_(src) {}
+  explicit hashed_istreambuf(std::istream &src) : src_(src) {}
 
-  virtual int underflow() override;
+  int underflow() override;
 };
 
-class hashed_ostreambuf final :
-    private hashed_basic_streambuf,
-    public std::basic_streambuf<char, std::char_traits<char>> {
- private:
+class hashed_ostreambuf final
+    : private hashed_basic_streambuf,
+      public std::basic_streambuf<char, std::char_traits<char>> {
+private:
   static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
 
-  std::ostream& dst_;
+  std::ostream &dst_;
   const uint32_t block_size_;
 
   bool FlushBlock();
 
 public:
-  hashed_ostreambuf(std::ostream& dst)
-    : dst_(dst), block_size_(kDefaultBlockSize) {}
-  hashed_ostreambuf(std::ostream& dst, uint32_t block_size)
-    : dst_(dst), block_size_(block_size) {}
+  explicit hashed_ostreambuf(std::ostream &dst)
+      : dst_(dst), block_size_(kDefaultBlockSize) {}
+  hashed_ostreambuf(std::ostream &dst, uint32_t block_size)
+      : dst_(dst), block_size_(block_size) {}
 
-  virtual int overflow(int c) override;
-  virtual int sync() override;
+  int overflow(int c) override;
+  int sync() override;
 };
 
-class gzip_istreambuf final :
-    public std::basic_streambuf<char, std::char_traits<char>> {
- private:
+class gzip_istreambuf final
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
   static const std::size_t kBufferSize = 16384;
 
-  std::istream& src_;
+  std::istream &src_;
   z_stream z_stream_{};
 
   /** Input buffer for feeding the decompressor. */
-  std::array<char, kBufferSize> input_ = { { 0 } };
+  std::array<char, kBufferSize> input_ = {{0}};
   /** Output buffer for the decompressor to write to. */
-  std::array<char, kBufferSize> output_ = { { 0 } };
+  std::array<char, kBufferSize> output_ = {{0}};
 
 public:
-  gzip_istreambuf(std::istream& src);
-  ~gzip_istreambuf();
+  explicit gzip_istreambuf(std::istream &src);
+  ~gzip_istreambuf() override;
 
-  virtual int underflow() override;
+  int underflow() override;
 };
 
-class gzip_ostreambuf final :
-    public std::basic_streambuf<char, std::char_traits<char>> {
- private:
+class gzip_ostreambuf final
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
   static const std::size_t kBufferSize = 16384;
 
-  std::ostream& dst_;
+  std::ostream &dst_;
   z_stream z_stream_{};
 
   std::vector<char> buffer_;
@@ -177,11 +179,11 @@ class gzip_ostreambuf final :
   bool WriteOutput(bool flush);
 
 public:
-  gzip_ostreambuf(std::ostream& dst);
-  ~gzip_ostreambuf();
+  explicit gzip_ostreambuf(std::ostream &dst);
+  ~gzip_ostreambuf() override;
 
-  virtual int overflow(int c) override;
-  virtual int sync() override;
+  int overflow(int c) override;
+  int sync() override;
 };
 
-}   // namespace keepass
+} // namespace keepass
