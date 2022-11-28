@@ -30,8 +30,14 @@ int main(int argc, const char * argv[]) {
     return 1;
   }
 
+  std::string password = "password";
+  // implies that password is set
+  if (argc == 3) {
+    password = argv[2];
+  }
+
   try {
-    Key key("password");
+    Key key(password);
 
     bool kdbx = true;   // Assume KDBX by default.
 

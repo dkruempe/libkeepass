@@ -974,7 +974,7 @@ std::unique_ptr<Database> KdbxFile::Import(const std::string &path,
     throw FileNotFoundError();
 
   // Read header.
-  KdbxHeader header;
+  KdbxHeader header{};
   try {
     header = consume<KdbxHeader>(src);
   } catch (std::exception &e) {
