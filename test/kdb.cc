@@ -429,7 +429,7 @@ TEST(KdbTest, ExportGroups1) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -474,7 +474,7 @@ TEST(KdbTest, ExportGroups2) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -510,7 +510,7 @@ TEST(KdbTest, ExportGroups3) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -552,7 +552,7 @@ TEST(KdbTest, ExportGroups4) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -594,7 +594,7 @@ TEST(KdbTest, ExportGroups5) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -636,7 +636,7 @@ TEST(KdbTest, ExportGroups6) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -678,7 +678,7 @@ TEST(KdbTest, ExportGroups7) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -711,7 +711,7 @@ TEST(KdbTest, ExportGroups8) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -744,7 +744,7 @@ TEST(KdbTest, ExportGroups9) {
     EXPECT_NO_THROW({
       db = file.Import(t.src_path, key);
     });
-    file.Export(t.dst_path, *db, key);
+    keepass::KdbFile::Export(t.dst_path, *db, key);
     EXPECT_NO_THROW({
       db = file.Import(t.dst_path, key);
     });
@@ -769,7 +769,7 @@ TEST(KdbTest, ExportComplex1) {
   EXPECT_NO_THROW({
     db = file.Import(src_path, key);
   });
-  file.Export(dst_path, *db, key);
+  keepass::KdbFile::Export(dst_path, *db, key);
   EXPECT_NO_THROW({
     db = file.Import(dst_path, key);
   });
@@ -794,7 +794,7 @@ TEST(KdbTest, ExportComplex1KeyFile) {
   EXPECT_NO_THROW({
     db = file.Import(src_path, key);
   });
-  file.Export(dst_path, *db, key);
+  keepass::KdbFile::Export(dst_path, *db, key);
   EXPECT_NO_THROW({
     db = file.Import(dst_path, key);
   });
@@ -819,7 +819,7 @@ TEST(KdbTest, ExportComplex1KeyFileAndPassword) {
   EXPECT_NO_THROW({
     db = file.Import(src_path, key);
   });
-  file.Export(dst_path, *db, key);
+  keepass::KdbFile::Export(dst_path, *db, key);
   EXPECT_NO_THROW({
     db = file.Import(dst_path, key);
   });

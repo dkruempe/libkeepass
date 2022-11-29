@@ -58,8 +58,8 @@ std::string GetFileAsText(const std::string& path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
-  return std::string(std::istreambuf_iterator<char>(file),
-                     std::istreambuf_iterator<char>());
+  return {std::istreambuf_iterator<char>(file),
+                     std::istreambuf_iterator<char>()};
 }
 
 }   // namespace

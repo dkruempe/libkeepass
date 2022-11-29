@@ -34,7 +34,7 @@ std::array<uint8_t, N> GetRandomBlock() {
   std::uniform_int_distribution<uint8_t> uniform_dist(0, 255);
 
   // Fill block with random values.
-  std::array<uint8_t, N> block;
+  std::array<uint8_t, N> block{};
   for (std::size_t i = 0; i < N; ++i)
     block[i] = uniform_dist(engine);
 
@@ -76,7 +76,7 @@ TEST(CipherTest, AesRandomBlock) {
   AesCipher cipher(GetRandomKey());
 
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
-  std::array<uint8_t, 16> dst_block, tst_block;
+  std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
   cipher.Decrypt(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -86,7 +86,7 @@ TEST(CipherTest, AesZeroBlock) {
   AesCipher cipher(GetRandomKey());
 
   std::array<uint8_t, 16> src_block = { 0 };
-  std::array<uint8_t, 16> dst_block, tst_block;
+  std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
   cipher.Decrypt(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -137,7 +137,7 @@ TEST(CipherTest, AesKnownBlocks) {
     0x50, 0xc9, 0x3c, 0x32, 0x12, 0x80, 0x58, 0xdb
   };
 
-  std::array<uint8_t, 16> dst_block;
+  std::array<uint8_t, 16> dst_block{};
 
   cipher.Encrypt(src_block0, dst_block);
   EXPECT_EQ(dst_block, exp_block0);
@@ -155,7 +155,7 @@ TEST(CipherTest, TwofishRandomBlock) {
   TwofishCipher cipher(GetRandomKey());
 
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
-  std::array<uint8_t, 16> dst_block, tst_block;
+  std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
   cipher.Decrypt(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -165,7 +165,7 @@ TEST(CipherTest, TwofishZeroBlock) {
   TwofishCipher cipher(GetRandomKey());
 
   std::array<uint8_t, 16> src_block = { 0 };
-  std::array<uint8_t, 16> dst_block, tst_block;
+  std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
   cipher.Decrypt(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -216,7 +216,7 @@ TEST(CipherTest, TwofishKnownBlocks) {
     0xbf, 0xf8, 0xd5, 0x72, 0x30, 0xa1, 0xd7, 0x8e
   };
 
-  std::array<uint8_t, 16> dst_block;
+  std::array<uint8_t, 16> dst_block{};
 
   cipher.Encrypt(src_block0, dst_block);
   EXPECT_EQ(dst_block, exp_block0);
@@ -236,7 +236,7 @@ TEST(CipherTest, Salsa20RandomBlock) {
   Salsa20Cipher dst_cipher(key);
 
   std::array<uint8_t, 64> src_block = GetRandomBlock<64>();
-  std::array<uint8_t, 64> dst_block, tst_block;
+  std::array<uint8_t, 64> dst_block{}, tst_block{};
   src_cipher.Process(src_block, dst_block);
   dst_cipher.Process(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -248,7 +248,7 @@ TEST(CipherTest, Salsa20ZeroBlock) {
   Salsa20Cipher dst_cipher(key);
 
   std::array<uint8_t, 64> src_block = { 0 };
-  std::array<uint8_t, 64> dst_block, tst_block;
+  std::array<uint8_t, 64> dst_block{}, tst_block{};
   src_cipher.Process(src_block, dst_block);
   dst_cipher.Process(dst_block, tst_block);
   EXPECT_EQ(src_block, tst_block);
@@ -360,7 +360,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
     0x70, 0x6c, 0x3e, 0x98, 0x4e, 0x9e, 0x79, 0x2f
   };
 
-  std::array<uint8_t, 64> dst_block;
+  std::array<uint8_t, 64> dst_block{};
 
   cipher0.Process(src_block0, dst_block);
   EXPECT_EQ(dst_block, exp_block0);
@@ -378,7 +378,7 @@ TEST(CipherTest, Ecb) {
   AesCipher cipher(GetRandomKey());
 
   std::array<uint8_t, 32> src_blocks = GetRandomBlock<32>();
-  std::array<uint8_t, 32> dst_blocks, tst_blocks;
+  std::array<uint8_t, 32> dst_blocks{}, tst_blocks{};
   EXPECT_NO_THROW({
     dst_blocks = encrypt_ecb(src_blocks, cipher);
   });
