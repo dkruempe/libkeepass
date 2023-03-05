@@ -34,7 +34,7 @@ using BlockOperation =
 
 template <std::size_t N>
 void block_transform(std::istream &src, std::ostream &dst,
-                     BlockOperation<N> op) {
+                     BlockOperation<N> &&op) {
   std::array<uint8_t, N> src_block{}, dst_block{};
 
   std::streampos pos = src.tellg();
@@ -67,34 +67,35 @@ namespace keepass {
 
 void encrypt_ecb(std::istream &src, std::ostream &dst,
                  const Cipher<16> &cipher) {
-  block_transform<16>(
-      src, dst,
-      [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
-          std::size_t src_len, bool) -> std::size_t {
-        if (src_len != 16) {
-          assert(false);
-          throw InternalError("ECB can only encrypt an even number of blocks.");
-        }
+  static auto func = [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
+                         std::size_t src_len, bool) -> std::size_t {
+    if (src_len != 16) {
+ assert(false);
+      throw InternalError("ECB can only encrypt an even number of blocks.");
+    }
 
-        cipher.Encrypt(src, dst);
-        return 16;
-      });
+    cipher.Encrypt(src, dst);
+    return 16;
+  };
+  block_transform<16>(
+      src, dst, func);
 }
 
 void decrypt_ecb(std::istream &src, std::ostream &dst,
                  const Cipher<16> &cipher) {
+  static auto func = [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
+                         std::size_t src_len, bool) -> std::size_t {
+    if (src_len != 16) {
+      assert(false);
+      throw InternalError("ECB can only decrypt an even number of blocks.");
+    }
+
+    cipher.Decrypt(src, dst);
+    return 16;
+  };
   block_transform<16>(
       src, dst,
-      [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
-          std::size_t src_len, bool) -> std::size_t {
-        if (src_len != 16) {
-          assert(false);
-          throw InternalError("ECB can only decrypt an even number of blocks.");
-        }
-
-        cipher.Decrypt(src, dst);
-        return 16;
-      });
+      func);
 }
 
 std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32> &src,
@@ -107,7 +108,6 @@ std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32> &src,
 
   std::istream src_stream(&src_buf);
   std::ostream dst_stream(&dst_buf);
-
   encrypt_ecb(src_stream, dst_stream, cipher);
   return dst;
 }
