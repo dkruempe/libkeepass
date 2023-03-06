@@ -19,29 +19,28 @@ To build, simply do the following:
 
 1. make sure that conan is installed
 2. create build directory
-3. change directory via cd command
-4. install libraries via
+3. install libraries via
 
 ```sh
-conan install .. --build=missing
+conan install . --output-folder=build --build=missing
 ````
-
+4. change directory via cd command
 5. cmake
 
 ```sh
-cmake .. -DCMAKE_BUILD_TYPE=Release 
+cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -GNinja
 ```
 
 6. build
 
 ```sh
-make -j8
+ninja
 ```
 
 to run the unit tests, do the following in the build directory:
 
 ```sh
-make test
+ninja test
 ```
 
 # Using
