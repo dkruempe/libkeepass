@@ -23,13 +23,10 @@ jobs:
       - name: Install Conan
         run: |
           pip install conan
-          conan profile detect
-
-      - name: Install Dependencies
-        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
+          conan profile detect --force
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/build/${{ matrix.build-type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
@@ -54,13 +51,10 @@ jobs:
       - name: Install Conan
         run: |
           pip install conan
-          conan profile detect
-
-      - name: Install Dependencies
-        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
+          conan profile detect --force
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/build/${{ matrix.build-type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(sysctl -n hw.ncpu)
@@ -85,13 +79,10 @@ jobs:
       - name: Install Conan
         run: |
           pip install conan
-          conan profile detect
-
-      - name: Install Dependencies
-        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
+          conan profile detect --force
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/build/${{ matrix.build-type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }}
