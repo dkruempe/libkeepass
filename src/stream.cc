@@ -20,9 +20,8 @@
 
 #include <cassert>
 
-#include <openssl/sha.h>
-#include <openssl/hmac.h>
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
@@ -32,10 +31,12 @@ namespace keepass {
 std::array<uint8_t, 32> hashed_basic_streambuf::GetBlockHash() const {
   std::array<uint8_t, 32> block_hash{};
 
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, block_.data(), block_.size());
-  SHA256_Final(block_hash.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, block_.data(), block_.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, block_hash.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   return block_hash;
 }
@@ -125,17 +126,19 @@ int hashed_ostreambuf::sync() {
 std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
   std::array<uint8_t, 64> hmac_key{};
 
-  SHA512_CTX ctx;
-  SHA512_Init(&ctx);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
   for (std::size_t i = 0; i < 8; ++i) {
     index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
     block_index >>= 8;
   }
-  SHA512_Update(&ctx, index_bytes, 8);
-  SHA512_Update(&ctx, hmac_key_.data(), hmac_key_.size());
-  SHA512_Final(hmac_key.data(), &ctx);
+  EVP_DigestUpdate(mdctx, index_bytes, 8);
+  EVP_DigestUpdate(mdctx, hmac_key_.data(), hmac_key_.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, hmac_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   return hmac_key;
 }
@@ -201,17 +204,19 @@ int hmac_istreambuf::underflow() {
 std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
   std::array<uint8_t, 64> hmac_key{};
 
-  SHA512_CTX ctx;
-  SHA512_Init(&ctx);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
   for (std::size_t i = 0; i < 8; ++i) {
     index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
     block_index >>= 8;
   }
-  SHA512_Update(&ctx, index_bytes, 8);
-  SHA512_Update(&ctx, hmac_key_.data(), hmac_key_.size());
-  SHA512_Final(hmac_key.data(), &ctx);
+  EVP_DigestUpdate(mdctx, index_bytes, 8);
+  EVP_DigestUpdate(mdctx, hmac_key_.data(), hmac_key_.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, hmac_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   return hmac_key;
 }

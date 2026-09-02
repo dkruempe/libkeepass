@@ -23,7 +23,7 @@
 #include <iostream>
 #include <memory>
 
-#include <openssl/aes.h>
+#include <openssl/evp.h>
 
 namespace keepass {
 
@@ -53,14 +53,15 @@ public:
 class AesCipher final : public Cipher<16> {
 private:
   const std::array<uint8_t, 16> init_vec_;
-  AES_KEY key_dec_{};
-  AES_KEY key_enc_{};
+  EVP_CIPHER_CTX *ctx_dec_ = nullptr;
+  EVP_CIPHER_CTX *ctx_enc_ = nullptr;
 
 public:
   explicit AesCipher(const std::array<uint8_t, 32> &key)
       : AesCipher(key, {0}) {}
   AesCipher(const std::array<uint8_t, 32> &key,
             const std::array<uint8_t, 16> &init_vec);
+  ~AesCipher();
 
   const std::array<uint8_t, 16> &InitializationVector() const override {
     return init_vec_;

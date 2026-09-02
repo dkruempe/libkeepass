@@ -26,8 +26,8 @@
 #include <iostream>
 #endif
 
+#include <openssl/evp.h>
 #include <openssl/hmac.h>
-#include <openssl/sha.h>
 #include <pugixml.hpp>
 
 #include "libkeepass/base64.hh"
@@ -517,8 +517,6 @@ void KdbxFile::WriteMeta(pugi::xml_node &meta_node,
         .set(base64_encode(meta->entry_templates()->uuid().begin(),
                            meta->entry_templates()->uuid().end())
                  .c_str());
-  } else {
-    assert(false);
   }
   meta_node.append_child("EntryTemplatesGroupChanged")
       .text()
@@ -1026,15 +1024,11 @@ void KdbxFile::ParseXml(std::istream &src, RandomObfuscator &obfuscator,
   auto it = group_pool_.find(meta_node.child_value("LastSelectedGroup"));
   if (it != group_pool_.end()) {
     meta->set_last_selected_group(it->second);
-  } else {
-    assert(false);
   }
 
   it = group_pool_.find(meta_node.child_value("LastTopVisibleGroup"));
   if (it != group_pool_.end()) {
     meta->set_last_visible_group(it->second);
-  } else {
-    assert(false);
   }
 }
 
@@ -1194,10 +1188,12 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
   src.read(header_data.data(), header_end);
 
   std::array<uint8_t, 32> header_hash{};
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, header_data.data(), header_data.size());
-  SHA256_Final(header_hash.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, header_data.data(), header_data.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, header_hash.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   // Produce the final key used for encrypting the contents.
   std::array<uint8_t, 32> transformed_key =
@@ -1206,10 +1202,12 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
   db->set_transformed_key(transformed_key);
   std::array<uint8_t, 32> final_key{};
 
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db->master_seed().data(), db->master_seed().size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db->master_seed().data(), db->master_seed().size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   std::unique_ptr<Cipher<16>> cipher;
   switch (db->cipher()) {
@@ -1241,10 +1239,12 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
 
   // Prepare deobfuscation stream.
   std::array<uint8_t, 32> final_inner_random_stream_key{};
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db->inner_random_stream_key().data(),
-                db->inner_random_stream_key().size());
-  SHA256_Final(final_inner_random_stream_key.data(), &sha256);
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db->inner_random_stream_key().data(),
+                   db->inner_random_stream_key().size());
+  EVP_DigestFinal_ex(mdctx, final_inner_random_stream_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
   RandomObfuscator obfuscator(final_inner_random_stream_key,
                               kKdbxInnerRandomStreamInitVec);
 
@@ -1380,10 +1380,12 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
   src.read(header_data.data(), header_end);
 
   std::array<uint8_t, 32> header_hash{};
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, header_data.data(), header_data.size());
-  SHA256_Final(header_hash.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, header_data.data(), header_data.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, header_hash.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   const std::array<uint8_t, 32> stored_header_hash =
       consume<std::array<uint8_t, 32>>(src);
@@ -1417,22 +1419,25 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
   // Compute the HMAC key for the header. The block index 0xFFFFFFFFFFFFFFFF
   // denotes the header in the HMAC key derivation.
   std::array<uint8_t, 64> hmac_key{};
-  SHA512_CTX sha512;
-  SHA512_Init(&sha512);
-  SHA512_Update(&sha512, db->master_seed().data(), db->master_seed().size());
-  SHA512_Update(&sha512, transformed_key.data(), transformed_key.size());
+  EVP_MD_CTX *mdctx512 = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
+  EVP_DigestUpdate(mdctx512, db->master_seed().data(), db->master_seed().size());
+  EVP_DigestUpdate(mdctx512, transformed_key.data(), transformed_key.size());
   static constexpr uint8_t kKdbxHmacKeyIndex1 = 0x01;
-  SHA512_Update(&sha512, &kKdbxHmacKeyIndex1, 1);
-  SHA512_Final(hmac_key.data(), &sha512);
+  EVP_DigestUpdate(mdctx512, &kKdbxHmacKeyIndex1, 1);
+  EVP_DigestFinal_ex(mdctx512, hmac_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx512);
 
   std::array<uint8_t, 64> header_hmac_key{};
   const std::array<uint8_t, 8> kKdbxHeaderHmacIndex = {
       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-  SHA512_Init(&sha512);
-  SHA512_Update(&sha512, kKdbxHeaderHmacIndex.data(),
-                kKdbxHeaderHmacIndex.size());
-  SHA512_Update(&sha512, hmac_key.data(), hmac_key.size());
-  SHA512_Final(header_hmac_key.data(), &sha512);
+  mdctx512 = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
+  EVP_DigestUpdate(mdctx512, kKdbxHeaderHmacIndex.data(),
+                   kKdbxHeaderHmacIndex.size());
+  EVP_DigestUpdate(mdctx512, hmac_key.data(), hmac_key.size());
+  EVP_DigestFinal_ex(mdctx512, header_hmac_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx512);
 
   unsigned char computed_hmac[EVP_MAX_MD_SIZE];
   unsigned int computed_hmac_len = 0;
@@ -1447,10 +1452,12 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
 
   // Produce the final key used for encrypting the contents.
   std::array<uint8_t, 32> final_key{};
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db->master_seed().data(), db->master_seed().size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db->master_seed().data(), db->master_seed().size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
@@ -1628,11 +1635,13 @@ void KdbxFile::Export3(std::ostream &dst, const Database &db,
                           Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
 
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db.master_seed().data(), db.master_seed().size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db.master_seed().data(), db.master_seed().size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   assert(db.cipher() == Database::Cipher::kAes);
   std::unique_ptr<Cipher<16>> cipher(
@@ -1702,9 +1711,12 @@ void KdbxFile::Export3(std::ostream &dst, const Database &db,
 
   // Compute the header hash.
   std::string header_data = header_stream.str();
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, header_data.c_str(), header_data.size());
-  SHA256_Final(header_hash_.data(), &sha256);
+  EVP_MD_CTX *mdctx2 = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx2, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx2, header_data.c_str(), header_data.size());
+  unsigned int out_len2 = 0;
+  EVP_DigestFinal_ex(mdctx2, header_hash_.data(), &out_len2);
+  EVP_MD_CTX_free(mdctx2);
 
   // Write header to file.
   std::copy(std::istreambuf_iterator<char>(header_stream),
@@ -1713,10 +1725,13 @@ void KdbxFile::Export3(std::ostream &dst, const Database &db,
 
   // Prepare deobfuscation stream.
   std::array<uint8_t, 32> final_inner_random_stream_key{};
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db.inner_random_stream_key().data(),
-                db.inner_random_stream_key().size());
-  SHA256_Final(final_inner_random_stream_key.data(), &sha256);
+  EVP_MD_CTX *mdctx3 = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx3, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx3, db.inner_random_stream_key().data(),
+                   db.inner_random_stream_key().size());
+  unsigned int out_len3 = 0;
+  EVP_DigestFinal_ex(mdctx3, final_inner_random_stream_key.data(), &out_len3);
+  EVP_MD_CTX_free(mdctx3);
   RandomObfuscator obfuscator(final_inner_random_stream_key,
                               kKdbxInnerRandomStreamInitVec);
 
@@ -1776,11 +1791,13 @@ void KdbxFile::Export4(std::ostream &dst, const Database &db,
   }
 
   std::array<uint8_t, 32> final_key{};
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db.master_seed().data(), db.master_seed().size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db.master_seed().data(), db.master_seed().size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
@@ -1916,27 +1933,33 @@ conserve<Kdbx4HeaderField>(
   // Compute the header hash and HMAC.
   std::string header_data = header_stream.str();
 
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, header_data.c_str(), header_data.size());
-  SHA256_Final(header_hash_.data(), &sha256);
+  EVP_MD_CTX *mdctx_h = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx_h, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx_h, header_data.c_str(), header_data.size());
+  unsigned int out_len_h = 0;
+  EVP_DigestFinal_ex(mdctx_h, header_hash_.data(), &out_len_h);
+  EVP_MD_CTX_free(mdctx_h);
 
   std::array<uint8_t, 64> hmac_key{};
-  SHA512_CTX sha512;
-  SHA512_Init(&sha512);
-  SHA512_Update(&sha512, db.master_seed().data(), db.master_seed().size());
-  SHA512_Update(&sha512, transformed_key.data(), transformed_key.size());
+  EVP_MD_CTX *mdctx512 = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
+  EVP_DigestUpdate(mdctx512, db.master_seed().data(), db.master_seed().size());
+  EVP_DigestUpdate(mdctx512, transformed_key.data(), transformed_key.size());
   static constexpr uint8_t kKdbxHmacKeyIndex1 = 0x01;
-  SHA512_Update(&sha512, &kKdbxHmacKeyIndex1, 1);
-  SHA512_Final(hmac_key.data(), &sha512);
+  EVP_DigestUpdate(mdctx512, &kKdbxHmacKeyIndex1, 1);
+  EVP_DigestFinal_ex(mdctx512, hmac_key.data(), &out_len_h);
+  EVP_MD_CTX_free(mdctx512);
 
   std::array<uint8_t, 64> header_hmac_key{};
   const std::array<uint8_t, 8> kKdbxHeaderHmacIndex = {
       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-  SHA512_Init(&sha512);
-  SHA512_Update(&sha512, kKdbxHeaderHmacIndex.data(),
-                kKdbxHeaderHmacIndex.size());
-  SHA512_Update(&sha512, hmac_key.data(), hmac_key.size());
-  SHA512_Final(header_hmac_key.data(), &sha512);
+  EVP_MD_CTX *mdctx512b = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx512b, EVP_sha512(), nullptr);
+  EVP_DigestUpdate(mdctx512b, kKdbxHeaderHmacIndex.data(),
+                   kKdbxHeaderHmacIndex.size());
+  EVP_DigestUpdate(mdctx512b, hmac_key.data(), hmac_key.size());
+  EVP_DigestFinal_ex(mdctx512b, header_hmac_key.data(), &out_len_h);
+  EVP_MD_CTX_free(mdctx512b);
 
   std::array<uint8_t, 32> header_hmac{};
   unsigned int header_hmac_len = 0;

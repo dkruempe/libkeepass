@@ -23,7 +23,7 @@
 #include <fstream>
 #include <unordered_map>
 
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 #include "libkeepass/cipher.hh"
 #include "libkeepass/database.hh"
@@ -530,11 +530,13 @@ std::unique_ptr<Database> KdbFile::Import(const std::string &path,
                     Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   std::array<uint8_t, 32> final_key{};
 
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, header.master_seed.data(), header.master_seed.size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, header.master_seed.data(), header.master_seed.size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   std::unique_ptr<Cipher<16>> cipher;
   if (header.flags & kKdbFlagRijndael) {
@@ -559,17 +561,19 @@ std::unique_ptr<Database> KdbFile::Import(const std::string &path,
   }
 
   std::array<uint8_t, 32> content_hash{};
-  SHA256_Init(&sha256);
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
 
   uint8_t buffer[1024];
   while (content.good()) {
     content.read(reinterpret_cast<char *>(buffer), sizeof(buffer));
     std::streamsize read_bytes = content.gcount();
 
-    SHA256_Update(&sha256, buffer, static_cast<std::size_t>(read_bytes));
+    EVP_DigestUpdate(mdctx, buffer, static_cast<std::size_t>(read_bytes));
   }
 
-  SHA256_Final(content_hash.data(), &sha256);
+  EVP_DigestFinal_ex(mdctx, content_hash.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   // Reset stream.
   content.clear();
@@ -660,11 +664,13 @@ void KdbFile::Export(const std::string &path, const Database &db,
                     Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   std::array<uint8_t, 32> final_key{};
 
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, db.master_seed().data(), db.master_seed().size());
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(final_key.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, db.master_seed().data(), db.master_seed().size());
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   std::unique_ptr<Cipher<16>> cipher;
   switch (db.cipher()) {
@@ -718,17 +724,19 @@ void KdbFile::Export(const std::string &path, const Database &db,
 
   // Compute hash of content stream.
   std::array<uint8_t, 32> content_hash{};
-  SHA256_Init(&sha256);
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
 
   uint8_t buffer[1024];
   while (content.good()) {
     content.read(reinterpret_cast<char *>(buffer), sizeof(buffer));
     std::streamsize read_bytes = content.gcount();
 
-    SHA256_Update(&sha256, buffer, static_cast<std::size_t>(read_bytes));
+    EVP_DigestUpdate(mdctx, buffer, static_cast<std::size_t>(read_bytes));
   }
 
-  SHA256_Final(content_hash.data(), &sha256);
+  EVP_DigestFinal_ex(mdctx, content_hash.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
   // Reset stream.
   content.clear();

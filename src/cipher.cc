@@ -213,22 +213,44 @@ void decrypt_cbc(std::istream &src, std::ostream &dst,
 AesCipher::AesCipher(const std::array<uint8_t, 32> &key,
                      const std::array<uint8_t, 16> &init_vec)
     : init_vec_(init_vec) {
-  if (AES_set_decrypt_key(key.data(), 256, &key_dec_) != 0) {
+  ctx_dec_ = EVP_CIPHER_CTX_new();
+  ctx_enc_ = EVP_CIPHER_CTX_new();
+  if (!ctx_dec_ || !ctx_enc_) {
+    if (ctx_dec_) EVP_CIPHER_CTX_free(ctx_dec_);
+    if (ctx_enc_) EVP_CIPHER_CTX_free(ctx_enc_);
     assert(false);
+    throw InternalError("Failed to create AES cipher context.");
   }
-  if (AES_set_encrypt_key(key.data(), 256, &key_enc_) != 0) {
+  if (EVP_DecryptInit_ex(ctx_dec_, EVP_aes_256_ecb(), nullptr, key.data(),
+                         nullptr) != 1 ||
+      EVP_EncryptInit_ex(ctx_enc_, EVP_aes_256_ecb(), nullptr, key.data(),
+                         nullptr) != 1) {
+    EVP_CIPHER_CTX_free(ctx_dec_);
+    EVP_CIPHER_CTX_free(ctx_enc_);
     assert(false);
+    throw InternalError("Failed to initialize AES cipher.");
   }
+  EVP_CIPHER_CTX_set_padding(ctx_dec_, 0);
+  EVP_CIPHER_CTX_set_padding(ctx_enc_, 0);
+}
+
+AesCipher::~AesCipher() {
+  if (ctx_dec_) EVP_CIPHER_CTX_free(ctx_dec_);
+  if (ctx_enc_) EVP_CIPHER_CTX_free(ctx_enc_);
 }
 
 void AesCipher::Decrypt(const std::array<uint8_t, 16> &src,
                         std::array<uint8_t, 16> &dst) const {
-  AES_decrypt(src.data(), dst.data(), &key_dec_);
+  int outl = 0;
+  EVP_DecryptUpdate(ctx_dec_, dst.data(), &outl, src.data(),
+                    static_cast<int>(src.size()));
 }
 
 void AesCipher::Encrypt(const std::array<uint8_t, 16> &src,
                         std::array<uint8_t, 16> &dst) const {
-  AES_encrypt(src.data(), dst.data(), &key_enc_);
+  int outl = 0;
+  EVP_EncryptUpdate(ctx_enc_, dst.data(), &outl, src.data(),
+                    static_cast<int>(src.size()));
 }
 
 uint32_t TwofishCipher::ReedSolomonEncode(uint32_t k0, uint32_t k1) {

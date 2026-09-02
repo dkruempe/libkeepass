@@ -18,7 +18,7 @@
 
 #include "libkeepass/random.hh"
 
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 namespace keepass {
 
@@ -43,10 +43,12 @@ RandomObfuscator::RandomObfuscator(Type type,
   if (type_ == Type::kChaCha20) {
     std::array<uint8_t, 64> key_iv{};
 
-    SHA512_CTX sha512;
-    SHA512_Init(&sha512);
-    SHA512_Update(&sha512, stream_key.data(), stream_key.size());
-    SHA512_Final(key_iv.data(), &sha512);
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
+    EVP_DigestUpdate(mdctx, stream_key.data(), stream_key.size());
+    unsigned int out_len = 0;
+    EVP_DigestFinal_ex(mdctx, key_iv.data(), &out_len);
+    EVP_MD_CTX_free(mdctx);
 
     std::array<uint8_t, 32> key{};
     std::copy(key_iv.begin(), key_iv.begin() + 32, key.begin());
@@ -58,10 +60,12 @@ RandomObfuscator::RandomObfuscator(Type type,
   } else {
     std::array<uint8_t, 32> key{};
 
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, stream_key.data(), stream_key.size());
-    SHA256_Final(key.data(), &sha256);
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+    EVP_DigestUpdate(mdctx, stream_key.data(), stream_key.size());
+    unsigned int out_len = 0;
+    EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
+    EVP_MD_CTX_free(mdctx);
 
     salsa_cipher_ = Salsa20Cipher(key, kSalsa20Iv);
   }

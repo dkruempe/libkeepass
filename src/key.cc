@@ -24,7 +24,6 @@
 
 #include <argon2.h>
 #include <openssl/evp.h>
-#include <openssl/sha.h>
 #include <pugixml.hpp>
 
 #include "libkeepass/aes_ni.hh"
@@ -41,13 +40,15 @@ Key::CompositeKey::Resolve(SubKeyResolution resolution) const {
   if (resolution == SubKeyResolution::kHashSubKeys) {
     std::array<uint8_t, 32> key{};
 
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
     if (password_key_ != kEmptyKey)
-      SHA256_Update(&sha256, password_key_.data(), password_key_.size());
+      EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
     if (keyfile_key_ != kEmptyKey)
-      SHA256_Update(&sha256, keyfile_key_.data(), keyfile_key_.size());
-    SHA256_Final(key.data(), &sha256);
+      EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
+    unsigned int out_len = 0;
+    EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
+    EVP_MD_CTX_free(mdctx);
 
     return key;
   } else {
@@ -55,11 +56,13 @@ Key::CompositeKey::Resolve(SubKeyResolution resolution) const {
       if (keyfile_key_ != kEmptyKey) {
         std::array<uint8_t, 32> key{};
 
-        SHA256_CTX sha256;
-        SHA256_Init(&sha256);
-        SHA256_Update(&sha256, password_key_.data(), password_key_.size());
-        SHA256_Update(&sha256, keyfile_key_.data(), keyfile_key_.size());
-        SHA256_Final(key.data(), &sha256);
+        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+        EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+        EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
+        EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
+        unsigned int out_len = 0;
+        EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
+        EVP_MD_CTX_free(mdctx);
 
         return key;
       } else {
@@ -74,11 +77,13 @@ Key::CompositeKey::Resolve(SubKeyResolution resolution) const {
 Key::Key(const std::string &password) { SetPassword(password); }
 
 void Key::SetPassword(const std::string &password) {
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, reinterpret_cast<const uint8_t *>(password.c_str()),
-                password.size());
-  SHA256_Final(key_.password_key_.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, reinterpret_cast<const uint8_t *>(password.c_str()),
+                   password.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, key_.password_key_.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 }
 
 void Key::SetKeyFile(const std::string &path) {
@@ -153,10 +158,12 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
     EVP_CIPHER_CTX_free(ctx);
   }
 
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
-  SHA256_Final(transformed_key.data(), &sha256);
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, transformed_key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
   return transformed_key;
 }
 
