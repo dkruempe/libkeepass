@@ -45,9 +45,13 @@ function(set_project_warnings project_name)
             -Wpedantic # warn if non-standard C++ is used
             -Wconversion # warn on type conversions that may lose data
             -Wsign-conversion # warn on sign conversions
-            -Wnull-dereference # warn if a null dereference is detected
             -Wdouble-promotion # warn if float is implicit promoted to double
             -Wformat=2 # warn on security issues around functions that format output (ie printf)
+            )
+
+    # Clang-only: -Wnull-dereference triggers false positives in GCC 13 standard library headers
+    set(CLANG_ONLY_WARNINGS
+            -Wnull-dereference # warn if a null dereference is detected
             )
 
     if (WARNINGS_AS_ERRORS)
@@ -67,7 +71,7 @@ function(set_project_warnings project_name)
     if (MSVC)
         set(PROJECT_WARNINGS ${MSVC_WARNINGS})
     elseif (CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-        set(PROJECT_WARNINGS ${CLANG_WARNINGS})
+        set(PROJECT_WARNINGS ${CLANG_WARNINGS} ${CLANG_ONLY_WARNINGS})
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         set(PROJECT_WARNINGS ${GCC_WARNINGS})
     else ()
