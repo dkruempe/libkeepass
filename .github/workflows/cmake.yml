@@ -117,6 +117,22 @@ jobs:
             conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
 
+      # Windows builds are otherwise surprisingly sequential: OpenSSL is built
+      # with nmake (no -j) and project-level /m parallelism is disabled by
+      # default. Write a Conan global.conf that explicitly enables file-level
+      # (/MP, tools.build:jobs) and project-level (/m, msbuild:max_cpu_count)
+      # parallelism, using all available cores.
+      - name: Configure Conan parallel builds
+        shell: pwsh
+        run: |
+          $jobs = $env:NUMBER_OF_PROCESSORS
+          $confDir = "$env:USERPROFILE\.conan2"
+          New-Item -ItemType Directory -Force -Path $confDir | Out-Null
+          @"
+          tools.build:jobs=$jobs
+          tools.microsoft.msbuild:max_cpu_count=0
+          "@ | Set-Content -Path (Join-Path $confDir "global.conf") -Encoding ascii
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
