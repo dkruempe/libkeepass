@@ -43,6 +43,8 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
+        env:
+          TZ: UTC
 
   macos-build:
     strategy:
@@ -80,6 +82,8 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
+        env:
+          TZ: UTC
 
   windows-build:
     strategy:
@@ -117,3 +121,5 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
+        env:
+          TZ: UTC
