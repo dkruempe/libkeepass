@@ -23,10 +23,10 @@ add_library(libkeepass SHARED ${headers} ${sources})
 # portable EVP-based AES-KDF fallback in Key::Transform is used instead.
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles(
-        "#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+        "#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)) && !defined(_MSC_VER)
          int main() { return 0; }
          #else
-         #error AES-NI requires x86/x86-64
+         #error AES-NI is disabled on MSVC
          #endif"
         LIBKEEPASS_HAS_AES_NI)
 if (LIBKEEPASS_HAS_AES_NI)

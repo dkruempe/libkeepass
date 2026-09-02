@@ -24,8 +24,13 @@
 // AES-NI is an x86/x86-64 instruction-set extension. It is only compiled (and
 // declared) on architectures that support it; elsewhere the portable EVP-based
 // AES-KDF fallback in Key::Transform is used instead.
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
-    defined(_M_IX86)
+//
+// MSVC is excluded: aes_ni.cc relies on GCC/Clang-only helpers (<cpuid.h>,
+// __get_cpuid) and the -maes ISA flag, so on MSVC the portable EVP path is
+// used. OpenSSL uses AES-NI internally, so the fallback is still fast.
+#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
+     defined(_M_IX86)) &&                                                \
+    !defined(_MSC_VER)
 #define LIBKEEPASS_AES_NI 1
 #else
 #define LIBKEEPASS_AES_NI 0
