@@ -68,14 +68,14 @@ namespace keepass {
 
 void encrypt_ecb(std::istream &src, std::ostream &dst,
                  const Cipher<16> &cipher) {
-  static auto func = [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
+  static auto func = [&](const std::array<uint8_t, 16> &block_in, std::array<uint8_t, 16> &block_out,
                          std::size_t src_len, bool) -> std::size_t {
     if (src_len != 16) {
  assert(false);
       throw InternalError("ECB can only encrypt an even number of blocks.");
     }
 
-    cipher.Encrypt(src, dst);
+    cipher.Encrypt(block_in, block_out);
     return 16;
   };
   block_transform<16>(
@@ -84,14 +84,14 @@ void encrypt_ecb(std::istream &src, std::ostream &dst,
 
 void decrypt_ecb(std::istream &src, std::ostream &dst,
                  const Cipher<16> &cipher) {
-  static auto func = [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
+  static auto func = [&](const std::array<uint8_t, 16> &block_in, std::array<uint8_t, 16> &block_out,
                          std::size_t src_len, bool) -> std::size_t {
     if (src_len != 16) {
       assert(false);
       throw InternalError("ECB can only decrypt an even number of blocks.");
     }
 
-    cipher.Decrypt(src, dst);
+    cipher.Decrypt(block_in, block_out);
     return 16;
   };
   block_transform<16>(
@@ -138,10 +138,10 @@ void encrypt_cbc(std::istream &src, std::ostream &dst,
   uint32_t pad_len = 0;
   block_transform<16>(
       src, dst,
-      [&](const std::array<uint8_t, 16> &src, std::array<uint8_t, 16> &dst,
+      [&](const std::array<uint8_t, 16> &block_in, std::array<uint8_t, 16> &block_out,
           std::size_t src_len, bool) -> std::size_t {
         std::array<uint8_t, 16> src_xor_iv{};
-        std::transform(src.begin(), src.end(), prv.begin(), src_xor_iv.begin(),
+        std::transform(block_in.begin(), block_in.end(), prv.begin(), src_xor_iv.begin(),
                        std::bit_xor<uint8_t>());
 
         if (src_len != 16) {
@@ -155,8 +155,8 @@ void encrypt_cbc(std::istream &src, std::ostream &dst,
           }
         }
 
-        cipher.Encrypt(src_xor_iv, dst);
-        prv = dst;
+        cipher.Encrypt(src_xor_iv, block_out);
+        prv = block_out;
 
         return 16;
       });
@@ -181,32 +181,32 @@ void decrypt_cbc(std::istream &src, std::ostream &dst,
   std::array<uint8_t, 16> prv = cipher.InitializationVector();
 
   block_transform<16>(src, dst,
-                      [&](const std::array<uint8_t, 16> &src,
-                          std::array<uint8_t, 16> &dst, std::size_t src_len,
+                      [&](const std::array<uint8_t, 16> &block_in,
+                          std::array<uint8_t, 16> &block_out, std::size_t src_len,
                           bool last) -> std::size_t {
                         if (src_len != 16)
                           throw IoError("Decryption error.");
 
-                        cipher.Decrypt(src, dst);
+                        cipher.Decrypt(block_in, block_out);
 
-                        std::transform(dst.begin(), dst.end(), prv.begin(),
-                                       dst.begin(), std::bit_xor<uint8_t>());
+                        std::transform(block_out.begin(), block_out.end(), prv.begin(),
+                                       block_out.begin(), std::bit_xor<uint8_t>());
 
                         if (last) {
                           // Handle PKCS #7 padding for the last block.
-                          uint32_t pad_len = dst[15];
+                          uint32_t pad_len = block_out[15];
                           if (pad_len > 16)
                             throw IoError("Decryption error.");
 
                           for (std::size_t i = 16 - pad_len; i < 16; ++i) {
-                            if (dst[i] != pad_len)
+                            if (block_out[i] != pad_len)
                               throw IoError("Decryption error.");
                           }
 
                           return 16 - pad_len;
                         }
 
-                        prv = src;
+                        prv = block_in;
                         return 16;
                       });
 }
@@ -277,7 +277,7 @@ uint32_t TwofishCipher::ReedSolomonEncode(uint32_t k0, uint32_t k1) {
 }
 
 uint32_t TwofishCipher::F32(uint32_t x, const uint32_t *k32) {
-  static auto p8 = [&](std::size_t x, std::size_t y) -> const uint8_t * {
+  static auto p8 = [&](std::size_t xe, std::size_t ye) -> const uint8_t * {
     // Fixed 8x8 permutation S-boxes.
     static constexpr uint8_t p8x8[2][256] = {
         {0xa9, 0x67, 0xb3, 0xe8, 0x04, 0xfd, 0xa3, 0x76, 0x9a, 0x92, 0x80, 0x78,
@@ -328,7 +328,7 @@ uint32_t TwofishCipher::F32(uint32_t x, const uint32_t *k32) {
     static constexpr std::size_t p[4][5] = {
         {1, 0, 0, 1, 1}, {0, 0, 1, 1, 0}, {1, 1, 0, 0, 0}, {0, 1, 1, 0, 1}};
 
-    return p8x8[p[x][y]];
+    return p8x8[p[xe][ye]];
   };
 
   // Run each byte thru 8x8 S-boxes, xoring with key byte at each stage. Note
@@ -345,17 +345,17 @@ uint32_t TwofishCipher::F32(uint32_t x, const uint32_t *k32) {
   // Now perform the MDS matrix multiply inline.
   static constexpr uint32_t kMdsGfFdbk = 0x169;
 
-  auto lfsr1 = [](uint8_t x) -> uint8_t {
-    return (x >> 1) ^ ((x & 0x01) ? kMdsGfFdbk / 2 : 0);
+  auto lfsr1 = [](uint8_t v) -> uint8_t {
+    return (v >> 1) ^ ((v & 0x01) ? kMdsGfFdbk / 2 : 0);
   };
-  auto lfsr2 = [](uint8_t x) -> uint8_t {
-    return (x >> 2) ^ ((x & 0x02) ? kMdsGfFdbk / 2 : 0) ^
-           ((x & 0x01) ? kMdsGfFdbk / 4 : 0);
+  auto lfsr2 = [](uint8_t v) -> uint8_t {
+    return (v >> 2) ^ ((v & 0x02) ? kMdsGfFdbk / 2 : 0) ^
+           ((v & 0x01) ? kMdsGfFdbk / 4 : 0);
   };
 
-  auto mx_x = [lfsr2](uint8_t x) -> uint8_t { return x ^ lfsr2(x); };
-  auto mx_y = [lfsr1, lfsr2](uint8_t x) -> uint8_t {
-    return x ^ lfsr1(x) ^ lfsr2(x);
+  auto mx_x = [lfsr2](uint8_t v) -> uint8_t { return v ^ lfsr2(v); };
+  auto mx_y = [lfsr1, lfsr2](uint8_t v) -> uint8_t {
+    return v ^ lfsr1(v) ^ lfsr2(v);
   };
 
   uint8_t m[4][4] = {{b[0], mx_y(b[1]), mx_x(b[2]), mx_x(b[3])},

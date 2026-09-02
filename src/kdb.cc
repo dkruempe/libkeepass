@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cassert>
 #include <fstream>
+#include <limits>
 #include <unordered_map>
 
 #include <openssl/evp.h>

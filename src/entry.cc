@@ -108,7 +108,7 @@ std::string Entry::ToJson() const {
 }
 
 bool Entry::operator==(const Entry &other) const {
-  if (custom_icon_.lock() != nullptr != (other.custom_icon_.lock() != nullptr))
+  if ((custom_icon_.lock() != nullptr) != (other.custom_icon_.lock() != nullptr))
     return false;
 
   bool same_custom_icon =
