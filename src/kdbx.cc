@@ -1203,6 +1203,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
   std::array<uint8_t, 32> transformed_key =
       key.Transform(db->transform_seed(), db->transform_rounds(),
                     Key::SubKeyResolution::kHashSubKeys);
+  db->set_transformed_key(transformed_key);
   std::array<uint8_t, 32> final_key{};
 
   SHA256_Init(&sha256);
@@ -1411,6 +1412,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
         Key::SubKeyResolution::kHashSubKeys);
     break;
   }
+  db->set_transformed_key(transformed_key);
 
   // Compute the HMAC key for the header. The block index 0xFFFFFFFFFFFFFFFF
   // denotes the header in the HMAC key derivation.
@@ -1620,8 +1622,10 @@ void KdbxFile::Export3(std::ostream &dst, const Database &db,
                        const Key &key) {
   // Produce the final key used for encrypting the contents.
   std::array<uint8_t, 32> transformed_key =
-      key.Transform(db.transform_seed(), db.transform_rounds(),
-                    Key::SubKeyResolution::kHashSubKeys);
+      db.has_transformed_key()
+          ? db.transformed_key()
+          : key.Transform(db.transform_seed(), db.transform_rounds(),
+                          Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
 
   SHA256_CTX sha256;
@@ -1746,24 +1750,29 @@ void KdbxFile::Export4(std::ostream &dst, const Database &db,
          db.cipher() == Database::Cipher::kChaCha20);
 
   // Derive the transformed key used for the final encryption key and the HMAC
-  // key.
+  // key. If the database was imported and the KDF parameters were not modified,
+  // the cached key can be reused; otherwise recompute it.
   std::array<uint8_t, 32> transformed_key{};
-  switch (db.kdf()) {
-  case Database::Kdf::kAes:
-    transformed_key = key.Transform(db.transform_seed(),
-                                    db.transform_rounds(),
-                                    Key::SubKeyResolution::kHashSubKeys);
-    break;
-  case Database::Kdf::kArgon2d:
-  case Database::Kdf::kArgon2id:
-    // The Argon2 parameters are stored in the KDF variant dictionary below.
-    transformed_key = key.TransformArgon2(
-        db.kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d
-                                            : Key::Kdf::kArgon2id,
-        db.argon2_salt(), db.argon2_iterations(), db.argon2_memory(),
-        db.argon2_parallelism(), db.argon2_version(),
-        Key::SubKeyResolution::kHashSubKeys);
-    break;
+  if (db.has_transformed_key()) {
+    transformed_key = db.transformed_key();
+  } else {
+    switch (db.kdf()) {
+    case Database::Kdf::kAes:
+      transformed_key = key.Transform(db.transform_seed(),
+                                      db.transform_rounds(),
+                                      Key::SubKeyResolution::kHashSubKeys);
+      break;
+    case Database::Kdf::kArgon2d:
+    case Database::Kdf::kArgon2id:
+      // The Argon2 parameters are stored in the KDF variant dictionary below.
+      transformed_key = key.TransformArgon2(
+          db.kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d
+                                              : Key::Kdf::kArgon2id,
+          db.argon2_salt(), db.argon2_iterations(), db.argon2_memory(),
+          db.argon2_parallelism(), db.argon2_version(),
+          Key::SubKeyResolution::kHashSubKeys);
+      break;
+    }
   }
 
   std::array<uint8_t, 32> final_key{};

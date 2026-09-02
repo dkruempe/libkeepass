@@ -15,6 +15,11 @@ FILE(GLOB_RECURSE headers include/libkeepass/*.hh)
 FILE(GLOB_RECURSE sources *.cc)
 
 add_library(libkeepass SHARED ${headers} ${sources})
+
+# aes_ni.cc uses AES-NI intrinsics; compile it with the required ISA flags
+# so the rest of the codebase remains portable.
+set_source_files_properties(aes_ni.cc PROPERTIES
+        COMPILE_FLAGS "-maes")
 target_compile_features(libkeepass PUBLIC cxx_std_11)
 target_include_directories(libkeepass
         SYSTEM PUBLIC

@@ -24,8 +24,10 @@
 #include <sstream>
 
 #include <gtest/gtest.h>
+#include <openssl/evp.h>
 
 #include "config.hh"
+#include "libkeepass/aes_ni.hh"
 #include "libkeepass/binary.hh"
 #include "libkeepass/database.hh"
 #include "libkeepass/entry.hh"
@@ -809,4 +811,47 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
             "oldsecret");
 
   std::remove(dst_path.c_str());
+}
+
+TEST(KdbxAesNi, TransformMatchesEVPReference) {
+  std::array<uint8_t, 32> seed = {
+      {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+       0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+       0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+       0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20}};
+  std::array<uint8_t, 32> composite = {
+      {0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33,
+       0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,
+       0xcc, 0xdd, 0xee, 0xff, 0x12, 0x34, 0x56, 0x78,
+       0x9a, 0xbc, 0xde, 0xf0, 0x0f, 0x1e, 0x2d, 0x3c}};
+  const uint64_t rounds = 1000;
+
+  std::array<uint8_t, 32> evp_result = composite;
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  ASSERT_NE(ctx, nullptr);
+  ASSERT_EQ(EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
+                               nullptr),
+            1);
+  EVP_CIPHER_CTX_set_padding(ctx, 0);
+  std::array<uint8_t, 32> buf{};
+  for (uint64_t i = 0; i < rounds; ++i) {
+    int outl = 0;
+    ASSERT_EQ(EVP_EncryptUpdate(ctx, buf.data(), &outl, evp_result.data(),
+                                evp_result.size()),
+              1);
+    ASSERT_EQ(outl, 32);
+    evp_result = buf;
+  }
+  EVP_CIPHER_CTX_free(ctx);
+
+  std::array<uint8_t, 32> aeni_result{};
+  aes_ni_transform_aes_kdf(seed.data(), composite.data(), rounds,
+                           aeni_result.data());
+
+  EXPECT_EQ(aeni_result, evp_result);
+}
+
+TEST(KdbxAesNi, SupportedFlagConsistent) {
+  bool supported = aes_ni_supported();
+  EXPECT_EQ(supported, aes_ni_supported());
 }

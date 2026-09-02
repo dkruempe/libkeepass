@@ -27,6 +27,7 @@
 #include <openssl/sha.h>
 #include <pugixml.hpp>
 
+#include "libkeepass/aes_ni.hh"
 #include "libkeepass/base64.hh"
 #include "libkeepass/cipher.hh"
 #include "libkeepass/exception.hh"
@@ -121,29 +122,36 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
                                        uint64_t rounds,
                                        SubKeyResolution resolution) const {
   std::array<uint8_t, 32> transformed_key = key_.Resolve(resolution);
-
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-  if (ctx == nullptr ||
-      EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
-                         nullptr) != 1) {
-    if (ctx != nullptr)
-      EVP_CIPHER_CTX_free(ctx);
-    throw InternalError("Failed to initialize AES-KDF.");
-  }
-  EVP_CIPHER_CTX_set_padding(ctx, 0);
-
   std::array<uint8_t, 32> encrypted{};
-  for (uint64_t i = 0; i < rounds; ++i) {
-    int outl = 0;
-    if (EVP_EncryptUpdate(ctx, encrypted.data(), &outl, transformed_key.data(),
-                          transformed_key.size()) != 1 ||
-        outl != static_cast<int>(transformed_key.size())) {
-      EVP_CIPHER_CTX_free(ctx);
-      throw InternalError("AES-KDF transform failed.");
-    }
+
+  if (aes_ni_supported()) {
+    aes_ni_transform_aes_kdf(seed.data(), transformed_key.data(), rounds,
+                             encrypted.data());
     transformed_key = encrypted;
+  } else {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (ctx == nullptr ||
+        EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
+                           nullptr) != 1) {
+      if (ctx != nullptr)
+        EVP_CIPHER_CTX_free(ctx);
+      throw InternalError("Failed to initialize AES-KDF.");
+    }
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+    for (uint64_t i = 0; i < rounds; ++i) {
+      int outl = 0;
+      if (EVP_EncryptUpdate(ctx, encrypted.data(), &outl,
+                            transformed_key.data(),
+                            transformed_key.size()) != 1 ||
+          outl != static_cast<int>(transformed_key.size())) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw InternalError("AES-KDF transform failed.");
+      }
+      transformed_key = encrypted;
+    }
+    EVP_CIPHER_CTX_free(ctx);
   }
-  EVP_CIPHER_CTX_free(ctx);
 
   SHA256_CTX sha256;
   SHA256_Init(&sha256);

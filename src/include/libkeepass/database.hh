@@ -49,6 +49,8 @@ private:
   uint64_t argon2_iterations_ = 0;
   bool compress_ = false;
   std::shared_ptr<Metadata> meta_;
+  std::array<uint8_t, 32> transformed_key_{{0}};
+  bool has_transformed_key_ = false;
 
 public:
   std::shared_ptr<Group> root() const { return root_; }
@@ -58,7 +60,12 @@ public:
   void set_cipher(Cipher cipher) { cipher_ = cipher; }
 
   Kdf kdf() const { return kdf_; }
-  void set_kdf(Kdf kdf) { kdf_ = kdf; }
+  void set_kdf(Kdf kdf) {
+    if (kdf_ != kdf) {
+      kdf_ = kdf;
+      clear_transformed_key();
+    }
+  }
 
   const std::vector<uint8_t> &master_seed() const { return master_seed_; }
   void set_master_seed(const std::array<uint8_t, 16> &master_seed) {
@@ -79,6 +86,7 @@ public:
   }
   void set_transform_seed(const std::array<uint8_t, 32> &transform_seed) {
     transform_seed_ = transform_seed;
+    clear_transformed_key();
   }
 
   const std::array<uint8_t, 32> &inner_random_stream_key() const {
@@ -91,35 +99,51 @@ public:
   uint64_t transform_rounds() const { return transform_rounds_; }
   void set_transform_rounds(uint64_t transform_rounds) {
     transform_rounds_ = transform_rounds;
+    clear_transformed_key();
   }
 
   uint64_t argon2_memory() const { return argon2_memory_; }
   void set_argon2_memory(uint64_t argon2_memory) {
     argon2_memory_ = argon2_memory;
+    clear_transformed_key();
   }
 
   uint32_t argon2_parallelism() const { return argon2_parallelism_; }
   void set_argon2_parallelism(uint32_t argon2_parallelism) {
     argon2_parallelism_ = argon2_parallelism;
+    clear_transformed_key();
   }
 
   uint32_t argon2_version() const { return argon2_version_; }
   void set_argon2_version(uint32_t argon2_version) {
     argon2_version_ = argon2_version;
+    clear_transformed_key();
   }
 
   const std::vector<uint8_t> &argon2_salt() const { return argon2_salt_; }
   void set_argon2_salt(const std::vector<uint8_t> &salt) {
     argon2_salt_ = salt;
+    clear_transformed_key();
   }
 
   uint64_t argon2_iterations() const { return argon2_iterations_; }
   void set_argon2_iterations(uint64_t iterations) {
     argon2_iterations_ = iterations;
+    clear_transformed_key();
   }
 
   bool compress() const { return compress_; }
   void set_compress(bool compress) { compress_ = compress; }
+
+  const std::array<uint8_t, 32> &transformed_key() const {
+    return transformed_key_;
+  }
+  bool has_transformed_key() const { return has_transformed_key_; }
+  void set_transformed_key(const std::array<uint8_t, 32> &key) {
+    transformed_key_ = key;
+    has_transformed_key_ = true;
+  }
+  void clear_transformed_key() { has_transformed_key_ = false; }
 
   std::shared_ptr<Metadata> meta() const { return meta_; }
   void set_meta(std::shared_ptr<Metadata> meta) { meta_ = std::move(meta); }
