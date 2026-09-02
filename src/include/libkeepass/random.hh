@@ -71,12 +71,12 @@ template <std::size_t N> std::array<uint8_t, N> random_array() {
   std::random_device rd;
   std::mt19937 engine(rd());
 
-  std::uniform_int_distribution<uint8_t> uniform_dist(0, 255);
+  std::uniform_int_distribution<int> uniform_dist(0, 255);
 
   // Fill block with random values.
   std::array<uint8_t, N> array;
   for (std::size_t i = 0; i < N; ++i)
-    array[i] = uniform_dist(engine);
+    array[i] = static_cast<uint8_t>(uniform_dist(engine));
 
   return array;
 }

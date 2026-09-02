@@ -166,7 +166,7 @@ void encrypt_cbc(std::istream &src, std::ostream &dst,
     std::array<uint8_t, 16> src_block{}, dst_block{};
     std::array<uint8_t, 16> src_block_xor_iv{};
 
-    std::fill(src_block.begin(), src_block.end(), 16);
+    std::fill(src_block.begin(), src_block.end(), static_cast<uint8_t>(16));
     std::transform(src_block.begin(), src_block.end(), prv.begin(),
                    src_block_xor_iv.begin(), std::bit_xor<uint8_t>());
 

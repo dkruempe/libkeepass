@@ -24,6 +24,13 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+// OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
+#ifdef _MSC_VER
+#define KEEPASS_HMAC_DATA_LEN(x) static_cast<int>(x)
+#else
+#define KEEPASS_HMAC_DATA_LEN(x) (x)
+#endif
+
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
 
@@ -182,8 +189,8 @@ int hmac_istreambuf::underflow() {
 
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_len = 0;
-    HMAC(EVP_sha256(), key_64.data(), key_64.size(), mac_input.data(),
-         mac_input.size(), digest, &digest_len);
+    HMAC(EVP_sha256(), key_64.data(), static_cast<int>(key_64.size()), mac_input.data(),
+         KEEPASS_HMAC_DATA_LEN(mac_input.size()), digest, &digest_len);
 
     std::array<uint8_t, 32> computed{};
     std::copy(digest, digest + 32, computed.begin());
@@ -242,8 +249,8 @@ bool hmac_ostreambuf::FlushBlock() {
 
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int digest_len = 0;
-  HMAC(EVP_sha256(), key_64.data(), key_64.size(), mac_input.data(),
-       mac_input.size(), digest, &digest_len);
+  HMAC(EVP_sha256(), key_64.data(), static_cast<int>(key_64.size()), mac_input.data(),
+       KEEPASS_HMAC_DATA_LEN(mac_input.size()), digest, &digest_len);
 
   dst_.write(reinterpret_cast<const char *>(digest), 32);
   dst_.write(reinterpret_cast<const char *>(&block_size), 4);
@@ -361,7 +368,7 @@ bool gzip_ostreambuf::WriteOutput(bool flush) {
   z_stream_.next_in = reinterpret_cast<uint8_t *>(buffer_.data());
 
   do {
-    z_stream_.avail_out = out.size();
+    z_stream_.avail_out = static_cast<uInt>(out.size());
     z_stream_.next_out = reinterpret_cast<uint8_t *>(out.data());
 
     int res = deflate(&z_stream_, flush ? Z_FINISH : Z_NO_FLUSH);

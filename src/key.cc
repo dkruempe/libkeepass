@@ -152,7 +152,7 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
       int outl = 0;
       if (EVP_EncryptUpdate(ctx, encrypted.data(), &outl,
                             transformed_key.data(),
-                            transformed_key.size()) != 1 ||
+                            static_cast<int>(transformed_key.size())) != 1 ||
           outl != static_cast<int>(transformed_key.size())) {
         EVP_CIPHER_CTX_free(ctx);
         throw InternalError("AES-KDF transform failed.");

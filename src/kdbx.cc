@@ -31,6 +31,38 @@
 #include <openssl/hmac.h>
 #include <pugixml.hpp>
 
+// OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
+#ifdef _MSC_VER
+#define KEEPASS_HMAC_DATA_LEN(x) static_cast<int>(x)
+#else
+#define KEEPASS_HMAC_DATA_LEN(x) (x)
+#endif
+
+#ifdef _MSC_VER
+#include <cstdio>
+namespace {
+char *portable_strptime(const char *buf, const char * /*format*/, std::tm *tm) {
+  int year, month, day, hour, min, sec;
+  if (std::sscanf(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min,
+                  &sec) == 6) {
+    tm->tm_year = year - 1900;
+    tm->tm_mon = month - 1;
+    tm->tm_mday = day;
+    tm->tm_hour = hour;
+    tm->tm_min = min;
+    tm->tm_sec = sec;
+    tm->tm_isdst = 0;
+    const char *p = buf;
+    while (*p && *p != 'Z' && *p != '\0')
+      ++p;
+    return const_cast<char *>(p);
+  }
+  return nullptr;
+}
+} // namespace
+#define strptime portable_strptime
+#endif
+
 #include "libkeepass/base64.hh"
 #include "libkeepass/cipher.hh"
 #include "libkeepass/exception.hh"
@@ -198,7 +230,11 @@ int64_t KdbxFile::NeverSeconds() const {
   static const int64_t kNeverSeconds = []() {
     std::tm tm{};
     strptime("2999-12-28T22:59:59Z", "%Y-%m-%dT%H:%M:%S", &tm);
+#ifdef _MSC_VER
+    return _mkgmtime(&tm) + kKdbxEpochBias;
+#else
     return timegm(&tm) + kKdbxEpochBias;
+#endif
   }();
 
   return kNeverSeconds;
@@ -238,7 +274,11 @@ std::time_t KdbxFile::ParseDateTime(const char *text) {
   // Format is expected to always be in UTC.
   assert(*res == 'Z' || *res == '\0');
 
+#ifdef _MSC_VER
+  return _mkgmtime(&tm);
+#else
   return timegm(&tm);
+#endif
 }
 
 std::string KdbxFile::WriteDateTime(std::time_t time) {
@@ -260,8 +300,14 @@ std::string KdbxFile::WriteDateTime(std::time_t time) {
     return "2999-12-28T22:59:59Z";
 
   char buffer[128];
+#ifdef _MSC_VER
+  std::tm time_buf{};
+  gmtime_s(&time_buf, &time);
+  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &time_buf);
+#else
   std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ",
                 std::gmtime(&time));
+#endif
   return buffer;
 }
 
@@ -1441,9 +1487,11 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
 
   unsigned char computed_hmac[EVP_MAX_MD_SIZE];
   unsigned int computed_hmac_len = 0;
-  HMAC(EVP_sha256(), header_hmac_key.data(), header_hmac_key.size(),
+  HMAC(EVP_sha256(), header_hmac_key.data(),
+       static_cast<int>(header_hmac_key.size()),
        reinterpret_cast<const unsigned char *>(header_data.data()),
-       header_data.size(), computed_hmac, &computed_hmac_len);
+       KEEPASS_HMAC_DATA_LEN(header_data.size()), computed_hmac,
+       &computed_hmac_len);
   if (computed_hmac_len != stored_header_hmac.size() ||
       std::memcmp(computed_hmac, stored_header_hmac.data(),
                   stored_header_hmac.size()) != 0) {
@@ -1963,9 +2011,11 @@ conserve<Kdbx4HeaderField>(
 
   std::array<uint8_t, 32> header_hmac{};
   unsigned int header_hmac_len = 0;
-  HMAC(EVP_sha256(), header_hmac_key.data(), header_hmac_key.size(),
+  HMAC(EVP_sha256(), header_hmac_key.data(),
+       static_cast<int>(header_hmac_key.size()),
        reinterpret_cast<const unsigned char *>(header_data.c_str()),
-       header_data.size(), header_hmac.data(), &header_hmac_len);
+       KEEPASS_HMAC_DATA_LEN(header_data.size()), header_hmac.data(),
+       &header_hmac_len);
   assert(header_hmac_len == header_hmac.size());
 
   // Write header, stored hash and stored HMAC to the file.

@@ -25,8 +25,15 @@
 namespace keepass {
 
 std::string time_to_str(const std::time_t &time) {
+#ifdef _MSC_VER
+  std::tm utc_time_buf{};
+  errno_t err = gmtime_s(&utc_time_buf, &time);
+  assert(err == 0);
+  const std::tm *utc_time = &utc_time_buf;
+#else
   const std::tm *utc_time = std::gmtime(&time);
   assert(utc_time != nullptr);
+#endif
 
   char buffer[128];
   strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_time);
@@ -37,12 +44,12 @@ std::array<uint8_t, 16> generate_uuid() {
   std::random_device rd;
   std::mt19937 engine(rd());
 
-  std::uniform_int_distribution<uint8_t> uniform_dist(0, 255);
+  std::uniform_int_distribution<int> uniform_dist(0, 255);
 
   // Fill block with random values.
   std::array<uint8_t, 16> uuid{};
   for (std::size_t i = 0; i < 16; ++i)
-    uuid[i] = uniform_dist(engine);
+    uuid[i] = static_cast<uint8_t>(uniform_dist(engine));
 
   return uuid;
 }

@@ -28,8 +28,8 @@ jobs:
           pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
-      - name: Cache Conan packages
-        uses: actions/cache@v4
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
           key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
@@ -39,6 +39,15 @@ jobs:
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
+
+      # Save the cache immediately after dependency provisioning but before
+      # building the project, so that a later build failure does not lose the
+      # fetched/built dependencies. The next run can then restore them.
+      - name: Cache Conan packages (save before build)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
@@ -68,8 +77,8 @@ jobs:
           pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
-      - name: Cache Conan packages
-        uses: actions/cache@v4
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
           key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
@@ -79,6 +88,15 @@ jobs:
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
+
+      # Save the cache immediately after dependency provisioning but before
+      # building the project, so that a later build failure does not lose the
+      # fetched/built dependencies. The next run can then restore them.
+      - name: Cache Conan packages (save before build)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(sysctl -n hw.ncpu)
@@ -108,8 +126,8 @@ jobs:
           pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
-      - name: Cache Conan packages
-        uses: actions/cache@v4
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
           key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
@@ -135,6 +153,15 @@ jobs:
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
+
+      # Save the cache immediately after dependency provisioning but before
+      # building the project, so that a later build failure does not lose the
+      # fetched/built dependencies. The next run can then restore them.
+      - name: Cache Conan packages (save before build)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }}
