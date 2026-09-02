@@ -15,6 +15,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      CONAN_VERSION: "2.31.2"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,16 +25,16 @@ jobs:
 
       - name: Install Conan
         run: |
-          pip install conan
+          pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
           restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
 
       - name: Configure CMake
@@ -52,6 +55,9 @@ jobs:
 
     runs-on: macos-latest
 
+    env:
+      CONAN_VERSION: "2.31.2"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,16 +65,16 @@ jobs:
 
       - name: Install Conan
         run: |
-          pip install conan
+          pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
           restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
 
       - name: Configure CMake
@@ -89,6 +95,9 @@ jobs:
 
     runs-on: windows-latest
 
+    env:
+      CONAN_VERSION: "2.31.2"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,16 +105,16 @@ jobs:
 
       - name: Install Conan
         run: |
-          pip install conan
+          pip install "conan==${{ env.CONAN_VERSION }}"
           conan profile detect --force
 
       - name: Cache Conan packages
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
           restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
 
       - name: Configure CMake
