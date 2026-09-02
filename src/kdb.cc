@@ -79,7 +79,7 @@ struct KdbTime {
     if (time == -1) {
       packed = kNeverTimeConstant;
     } else {
-      std::tm *time_ptr = std::localtime(&time);
+      std::tm *time_ptr = std::gmtime(&time);
 
       uint32_t year = static_cast<uint32_t>(time_ptr->tm_year) + 1900;
       uint32_t month = static_cast<uint32_t>(time_ptr->tm_mon) + 1;
@@ -133,11 +133,11 @@ struct KdbTime {
     time.tm_mday = static_cast<int32_t>(day);
     time.tm_mon = static_cast<int32_t>(month) - 1; // [0,11]
     time.tm_year = static_cast<int32_t>(year) - 1900;
-    time.tm_wday = 0; // Ignored by std::mktime().
-    time.tm_yday = 0; // Ignored by std::mktime().
-    time.tm_isdst = -1;
+    time.tm_wday = 0;   // Ignored by timegm().
+    time.tm_yday = 0;   // Ignored by timegm().
+    time.tm_isdst = -1; // Ignored by timegm().
 
-    std::time_t res = std::mktime(&time);
+    std::time_t res = timegm(&time);
     if (res == -1) {
       assert(false);
       return 0;

@@ -91,10 +91,12 @@ dfs(const std::shared_ptr<T> &current,
 }
 
 /**
- * Converts an UTC date and time value into localtime and prints the result to
- * a string.
+ * Converts an UTC date and time value into an UTC string.
+ *
+ * The time is rendered in UTC regardless of the system timezone, so that the
+ * output is deterministic across machines.
  * @param [in] time Date and time in UTC.
- * @return @a time as a human readable string.
+ * @return @a time as a human readable string in UTC.
  */
 std::string time_to_str(const std::time_t &time);
 

@@ -25,11 +25,11 @@
 namespace keepass {
 
 std::string time_to_str(const std::time_t &time) {
-  const std::tm *local_time = std::localtime(&time);
-  assert(local_time != nullptr);
+  const std::tm *utc_time = std::gmtime(&time);
+  assert(utc_time != nullptr);
 
   char buffer[128];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", local_time);
+  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", utc_time);
   return buffer;
 }
 
