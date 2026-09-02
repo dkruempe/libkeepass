@@ -32,11 +32,11 @@ Dieses Projekt ist ein Fork von [libkeepass](https://github.com/nickvdyck/libkee
 # Dependencies installieren
 conan install . --output-folder=build --build=missing
 
-# CMake konfigurieren
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+# CMake konfigurieren (Release)
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 
 # Bauen
-cmake --build build
+cmake --build build --config Release
 ```
 
 ### Unit Tests ausführen
