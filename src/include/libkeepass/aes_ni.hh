@@ -21,7 +21,19 @@
 
 #include <cstdint>
 
+// AES-NI is an x86/x86-64 instruction-set extension. It is only compiled (and
+// declared) on architectures that support it; elsewhere the portable EVP-based
+// AES-KDF fallback in Key::Transform is used instead.
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
+    defined(_M_IX86)
+#define LIBKEEPASS_AES_NI 1
+#else
+#define LIBKEEPASS_AES_NI 0
+#endif
+
 namespace keepass {
+
+#if LIBKEEPASS_AES_NI
 
 // Returns true if this CPU supports AES-NI hardware instructions.
 bool aes_ni_supported();
@@ -36,5 +48,7 @@ bool aes_ni_supported();
 // out:   32-byte buffer receiving the encrypted result
 void aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32],
                               uint64_t rounds, uint8_t out[32]);
+
+#endif // LIBKEEPASS_AES_NI
 
 } // namespace keepass

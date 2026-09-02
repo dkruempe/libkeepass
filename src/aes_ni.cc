@@ -33,6 +33,10 @@
  * processed interleaved so a superscalar pipeline executes both in parallel.
  */
 
+#include "libkeepass/aes_ni.hh"
+
+#if LIBKEEPASS_AES_NI
+
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -163,3 +167,5 @@ void aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32],
 }
 
 } // namespace keepass
+
+#endif // LIBKEEPASS_AES_NI

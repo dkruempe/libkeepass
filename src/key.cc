@@ -130,11 +130,14 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
   std::array<uint8_t, 32> transformed_key = key_.Resolve(resolution);
   std::array<uint8_t, 32> encrypted{};
 
+#if LIBKEEPASS_AES_NI
   if (aes_ni_supported()) {
     aes_ni_transform_aes_kdf(seed.data(), transformed_key.data(), rounds,
                              encrypted.data());
     transformed_key = encrypted;
-  } else {
+  } else
+#endif
+  {
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (ctx == nullptr ||
         EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
