@@ -814,6 +814,8 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   std::remove(dst_path.c_str());
 }
 
+#if LIBKEEPASS_AES_NI
+
 TEST(KdbxAesNi, TransformMatchesEVPReference) {
   std::array<uint8_t, 32> seed = {
       {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -856,3 +858,5 @@ TEST(KdbxAesNi, SupportedFlagConsistent) {
   bool supported = aes_ni_supported();
   EXPECT_EQ(supported, aes_ni_supported());
 }
+
+#endif // LIBKEEPASS_AES_NI

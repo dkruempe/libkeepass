@@ -25,6 +25,15 @@ jobs:
           pip install conan
           conan profile detect --force
 
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
@@ -53,6 +62,15 @@ jobs:
           pip install conan
           conan profile detect --force
 
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
 
@@ -80,6 +98,15 @@ jobs:
         run: |
           pip install conan
           conan profile detect --force
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.build-type }}-
+            conan-${{ runner.os }}-
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17

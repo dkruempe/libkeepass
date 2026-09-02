@@ -16,11 +16,20 @@ FILE(GLOB_RECURSE sources *.cc)
 
 add_library(libkeepass SHARED ${headers} ${sources})
 
-# aes_ni.cc uses AES-NI intrinsics, which are an x86/x86-64 extension. Compile
-# it with the required ISA flag only on x86 architectures; on others the file
-# is compiled out via its own preprocessor guard and the EVP-based AES-KDF
-# fallback in Key::Transform is used instead.
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86|x86)$")
+# aes_ni.cc uses AES-NI intrinsics, which are an x86/x86-64 extension. Detect
+# the target architecture by asking the compiler directly (this mirrors the
+# LIBKEEPASS_AES_NI preprocessor guard in aes_ni.hh), so the -maes ISA flag is
+# only applied on x86. On other architectures aes_ni.cc is compiled out and the
+# portable EVP-based AES-KDF fallback in Key::Transform is used instead.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles(
+        "#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+         int main() { return 0; }
+         #else
+         #error AES-NI requires x86/x86-64
+         #endif"
+        LIBKEEPASS_HAS_AES_NI)
+if (LIBKEEPASS_HAS_AES_NI)
     set_source_files_properties(aes_ni.cc PROPERTIES
             COMPILE_FLAGS "-maes")
 endif()
