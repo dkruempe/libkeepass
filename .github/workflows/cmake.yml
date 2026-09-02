@@ -12,41 +12,30 @@ jobs:
       fail-fast: false
       matrix:
         build-type: [Debug, Release]
-        gcc-version: [10]
 
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: Update GCC
-        id: update-gcc
-        uses: egor-tensin/setup-gcc@v1
-        with:
-          version: ${{ matrix.gcc-version }}
-
-      - name: Get Conan
-        uses: turtlebrowser/get-conan@v1.1
-
-      - name: Create default profile
+      - name: Install Conan
         run: |
-          conan profile new default --detect
-          conan profile update settings.build_type=${{ matrix.build-type }} default
-          conan profile update settings.compiler.libcxx=libstdc++11 default
+          pip install conan
+          conan profile detect
 
       - name: Install Dependencies
-        run: conan install . -if ${{ github.workspace }}/build --build=missing
+        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
 
       - name: Configure CMake
-        run: cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
 
       - name: Build
-        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build-type }} -j 3
+        run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
 
       - name: Test
-        working-directory: ${{ github.workspace }}/build
+        working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
 
   macos-build:
@@ -58,38 +47,26 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: Select Python 3.10
-        # otherwise turtlebrowser/get-conan@v1.1 fails on macos-12
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Get Conan
-        uses: turtlebrowser/get-conan@v1.1
-
-      - name: Create default profile
-        # M1 is not supported by all dependencies
+      - name: Install Conan
         run: |
-          conan profile new default --detect
-          conan profile update settings.build_type=${{ matrix.build-type }} default
-          conan profile update settings.arch=x86_64 default
-          conan profile update settings.arch_build=x86_64 default
+          pip install conan
+          conan profile detect
 
       - name: Install Dependencies
-        run: conan install . -if ${{ github.workspace }}/build --build=missing
+        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
 
       - name: Configure CMake
-        run: cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
 
       - name: Build
-        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build-type }} -j 3
+        run: cmake --build build --config ${{ matrix.build-type }} -j $(sysctl -n hw.ncpu)
 
       - name: Test
-        working-directory: ${{ github.workspace }}/build
+        working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
 
   windows-build:
@@ -97,33 +74,28 @@ jobs:
       fail-fast: false
       matrix:
         build-type: [Debug, Release]
-        msvc-version: [16]
 
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: Get Conan
-        uses: turtlebrowser/get-conan@v1.1
-
-      - name: Create default profile
+      - name: Install Conan
         run: |
-          conan profile new default --detect
-          conan profile update settings.build_type=${{ matrix.build-type }} default
-          conan profile update settings.compiler.version=${{ matrix.msvc-version }} default
+          pip install conan
+          conan profile detect
 
       - name: Install Dependencies
-        run: conan install . -if ${{ github.workspace }}/build --build=missing
+        run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build-type }}
 
       - name: Configure CMake
-        run: cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCONAN_DISABLE_CHECK_COMPILER=ON
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
 
       - name: Build
-        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build-type }} -j 3
+        run: cmake --build build --config ${{ matrix.build-type }}
 
       - name: Test
-        working-directory: ${{ github.workspace }}/build
+        working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
