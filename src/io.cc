@@ -56,25 +56,32 @@ template <> std::vector<char> consume<std::vector<char>>(std::istream &src) {
 
 template <>
 std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream &src) {
-  // FIXME: This function needs to be made more efficient.
-  std::vector<char> data;
-  std::copy(std::istreambuf_iterator<char>(src),
-            std::istreambuf_iterator<char>(), std::back_inserter(data));
+  std::streampos pos = src.tellg();
+  src.seekg(0, std::ios::end);
+  std::streamsize size = src.tellg() - pos;
+  src.seekg(pos, std::ios::beg);
+
+  if (size < 0)
+    throw IoError("Read error.");
+
+  std::vector<uint8_t> data(static_cast<std::size_t>(size));
+  src.read(reinterpret_cast<char *>(data.data()), size);
   if (!src.good())
     throw IoError("Read error.");
 
-  std::vector<uint8_t> unsigned_data;
-  unsigned_data.resize(data.size());
-  for (std::size_t i = 0; i < data.size(); ++i)
-    unsigned_data[i] = static_cast<uint8_t>(data[i]);
-
-  return unsigned_data;
+  return data;
 }
 
 template <>
 void conserve<std::string>(std::ostream &dst, const std::string &val) {
-  dst.write(val.c_str(), static_cast<std::streamsize>(
-                             val.size() + 1)); // FIXME: Is this safe?
+  // KDB strings are NUL-terminated: consumers read up to (but not including)
+  // the first NUL, so embedded NUL bytes cannot round-trip. Reject them
+  // explicitly instead of silently corrupting the written stream.
+  if (val.find('\0') != std::string::npos)
+    throw IoError("String contains an embedded NUL character.");
+
+  // Writes the string contents plus its terminating NUL.
+  dst.write(val.c_str(), static_cast<std::streamsize>(val.size() + 1));
   if (!dst.good())
     throw IoError("Write error.");
 }

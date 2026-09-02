@@ -22,9 +22,13 @@
 namespace keepass {
 
 /**
- * @brief Tempalte class which encrypts the content bytes in memory.
+ * @brief Wrapper that marks a value as sensitive and tracks the protection
+ * flag of a KeePass field.
  *
- * FIXME: Implement protection.
+ * The wrapped value is stored in plaintext; protection here means that the
+ * value is flagged as sensitive (e.g. a password) and is written to the KDBX
+ * output obfuscated through the inner random stream (Salsa20/ChaCha20). The
+ * item is not encrypted in heap memory.
  */
 template <typename T> class protect {
 private:
