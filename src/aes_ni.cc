@@ -140,8 +140,9 @@ inline __m128i EncryptBlock(__m128i block, const Aes256RoundKeys &keys) {
 } // namespace
 
 bool aes_ni_supported() {
-  unsigned int eax, ebx, ecx, edx;
-  __get_cpuid(1, &eax, &ebx, &ecx, &edx);
+  unsigned int eax, ebx, ecx = 0, edx;
+  if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx))
+    return false;
   return (ecx & (1 << 25)) != 0;
 }
 
