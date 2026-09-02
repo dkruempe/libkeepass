@@ -51,7 +51,7 @@ template <typename T> inline T clamp(T min, T max, T val) {
 template <typename T>
 inline bool indirect_equal(const std::vector<T> &v0, const std::vector<T> &v1) {
   return std::equal(v0.begin(), v0.end(), v1.begin(),
-                    [](const T &v0, const T &v1) { return *v0 == *v1; });
+                    [](const T &a, const T &b) { return *a == *b; });
 }
 
 /**

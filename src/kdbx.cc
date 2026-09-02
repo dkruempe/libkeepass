@@ -198,7 +198,7 @@ int64_t KdbxFile::NeverSeconds() const {
   static const int64_t kNeverSeconds = []() {
     std::tm tm{};
     strptime("2999-12-28T22:59:59Z", "%Y-%m-%dT%H:%M:%S", &tm);
-    return static_cast<int64_t>(timegm(&tm)) + kKdbxEpochBias;
+    return timegm(&tm) + kKdbxEpochBias;
   }();
 
   return kNeverSeconds;
@@ -225,8 +225,7 @@ std::time_t KdbxFile::ParseDateTime(const char *text) {
     if (static_cast<int64_t>(secs) == NeverSeconds())
       return 0;
 
-    return static_cast<std::time_t>(static_cast<int64_t>(secs) -
-                                    kKdbxEpochBias);
+    return static_cast<int64_t>(secs) - kKdbxEpochBias;
   }
 
   std::tm tm{};
