@@ -21,6 +21,8 @@
 #include <cassert>
 
 #include <openssl/sha.h>
+#include <openssl/hmac.h>
+#include <openssl/evp.h>
 
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
@@ -50,8 +52,10 @@ int hashed_istreambuf::underflow() {
     block_index_++;
 
     block_.clear();
-    std::generate_n(std::back_inserter(block_), header.block_size,
-                    [&]() { return src_.get(); });
+    block_.resize(header.block_size);
+    src_.read(block_.data(), static_cast<std::streamsize>(header.block_size));
+    if (src_.gcount() != static_cast<std::streamsize>(header.block_size))
+      throw IoError("Block read error.");
 
     if (header.block_size == 0) {
       if (header.block_hash != kEmptyHash)
@@ -109,6 +113,164 @@ int hashed_ostreambuf::overflow(int c) {
 }
 
 int hashed_ostreambuf::sync() {
+  if (!block_.empty()) {
+    if (!FlushBlock())
+      return -1;
+  }
+
+  // Write the trailing empty block.
+  return FlushBlock() ? 0 : -1;
+}
+
+std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
+  std::array<uint8_t, 64> hmac_key{};
+
+  SHA512_CTX ctx;
+  SHA512_Init(&ctx);
+  uint8_t index_bytes[8];
+  uint64_t block_index = block_index_;
+  for (std::size_t i = 0; i < 8; ++i) {
+    index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
+    block_index >>= 8;
+  }
+  SHA512_Update(&ctx, index_bytes, 8);
+  SHA512_Update(&ctx, hmac_key_.data(), hmac_key_.size());
+  SHA512_Final(hmac_key.data(), &ctx);
+
+  return hmac_key;
+}
+
+int hmac_istreambuf::underflow() {
+  if (gptr() == egptr()) {
+    std::array<uint8_t, 32> block_hmac{};
+    src_.read(reinterpret_cast<char *>(block_hmac.data()), block_hmac.size());
+    if (src_.gcount() != static_cast<std::streamsize>(block_hmac.size()))
+      throw IoError("Block read error.");
+
+    uint32_t block_size = 0;
+    src_.read(reinterpret_cast<char *>(&block_size), sizeof(block_size));
+    if (src_.gcount() != static_cast<std::streamsize>(sizeof(block_size)))
+      throw IoError("Block read error.");
+
+    // The HMAC is computed over index ‖ block size ‖ block data.
+    std::array<uint8_t, 64> key_64 = GetCurrentHmacKey();
+
+    uint8_t index_bytes[8];
+    uint64_t index = block_index_;
+    for (std::size_t i = 0; i < 8; ++i) {
+      index_bytes[i] = static_cast<uint8_t>(index & 0xff);
+      index >>= 8;
+    }
+
+    std::vector<uint8_t> mac_input;
+    mac_input.reserve(12 + block_size);
+    mac_input.insert(mac_input.end(), index_bytes, index_bytes + 8);
+    mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t *>(&block_size),
+                     reinterpret_cast<uint8_t *>(&block_size) + 4);
+    if (block_size > 0) {
+      block_.clear();
+      block_.resize(block_size);
+      src_.read(block_.data(), static_cast<std::streamsize>(block_size));
+      if (src_.gcount() != static_cast<std::streamsize>(block_size))
+        throw IoError("Block read error.");
+      mac_input.insert(mac_input.end(), block_.begin(), block_.end());
+    }
+
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_len = 0;
+    HMAC(EVP_sha256(), key_64.data(), key_64.size(), mac_input.data(),
+         mac_input.size(), digest, &digest_len);
+
+    std::array<uint8_t, 32> computed{};
+    std::copy(digest, digest + 32, computed.begin());
+    if (block_hmac != computed)
+      throw IoError("Block checksum error.");
+
+    ++block_index_;
+
+    if (block_size == 0)
+      return std::char_traits<char>::eof();
+
+    setg(block_.data(), block_.data(), block_.data() + block_.size());
+  }
+
+  return gptr() == egptr() ? std::char_traits<char>::eof()
+                           : std::char_traits<char>::to_int_type(*gptr());
+}
+
+std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
+  std::array<uint8_t, 64> hmac_key{};
+
+  SHA512_CTX ctx;
+  SHA512_Init(&ctx);
+  uint8_t index_bytes[8];
+  uint64_t block_index = block_index_;
+  for (std::size_t i = 0; i < 8; ++i) {
+    index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
+    block_index >>= 8;
+  }
+  SHA512_Update(&ctx, index_bytes, 8);
+  SHA512_Update(&ctx, hmac_key_.data(), hmac_key_.size());
+  SHA512_Final(hmac_key.data(), &ctx);
+
+  return hmac_key;
+}
+
+bool hmac_ostreambuf::FlushBlock() {
+  std::array<uint8_t, 64> key_64 = GetCurrentHmacKey();
+
+  uint32_t block_size = static_cast<uint32_t>(block_.size());
+  uint64_t index = block_index_;
+  uint8_t index_bytes[8];
+  for (std::size_t i = 0; i < 8; ++i) {
+    index_bytes[i] = static_cast<uint8_t>(index & 0xff);
+    index >>= 8;
+  }
+
+  std::vector<uint8_t> mac_input;
+  mac_input.reserve(12 + block_.size());
+  mac_input.insert(mac_input.end(), index_bytes, index_bytes + 8);
+  mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t *>(&block_size),
+                   reinterpret_cast<uint8_t *>(&block_size) + 4);
+  mac_input.insert(mac_input.end(), block_.begin(), block_.end());
+
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digest_len = 0;
+  HMAC(EVP_sha256(), key_64.data(), key_64.size(), mac_input.data(),
+       mac_input.size(), digest, &digest_len);
+
+  dst_.write(reinterpret_cast<const char *>(digest), 32);
+  dst_.write(reinterpret_cast<const char *>(&block_size), 4);
+  if (!block_.empty())
+    dst_.write(block_.data(), static_cast<std::streamsize>(block_.size()));
+  if (!dst_.good())
+    return false;
+
+  ++block_index_;
+  block_.clear();
+  return true;
+}
+
+int hmac_ostreambuf::overflow(int c) {
+  if (c == std::char_traits<char>::eof())
+    return c;
+
+  if (c > 0xff) {
+    assert(false);
+    throw InternalError("Trying to write multiple bytes to stream.");
+  }
+
+  block_.push_back(static_cast<char>(c));
+
+  if (block_.size() == block_size_) {
+    if (!FlushBlock())
+      return std::char_traits<char>::eof();
+  }
+
+  return std::char_traits<char>::to_int_type(static_cast<char>(c));
+}
+
+int hmac_ostreambuf::sync() {
   if (!block_.empty()) {
     if (!FlushBlock())
       return -1;

@@ -146,6 +146,53 @@ public:
   int sync() override;
 };
 
+class hmac_istreambuf final
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
+  std::istream &src_;
+  const std::array<uint8_t, 64> hmac_key_;
+
+  uint64_t block_index_ = 0;
+  std::vector<char> block_;
+
+  std::array<uint8_t, 64> GetCurrentHmacKey() const;
+
+public:
+  hmac_istreambuf(std::istream &src,
+                  const std::array<uint8_t, 64> &hmac_key)
+      : src_(src), hmac_key_(hmac_key) {}
+
+  int underflow() override;
+};
+
+class hmac_ostreambuf final
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
+  static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
+
+  std::ostream &dst_;
+  const std::array<uint8_t, 64> hmac_key_;
+  const uint32_t block_size_;
+
+  uint64_t block_index_ = 0;
+  std::vector<char> block_;
+
+  std::array<uint8_t, 64> GetCurrentHmacKey() const;
+  bool FlushBlock();
+
+public:
+  hmac_ostreambuf(std::ostream &dst,
+                  const std::array<uint8_t, 64> &hmac_key)
+      : dst_(dst), hmac_key_(hmac_key), block_size_(kDefaultBlockSize) {}
+  hmac_ostreambuf(std::ostream &dst,
+                  const std::array<uint8_t, 64> &hmac_key,
+                  uint32_t block_size)
+      : dst_(dst), hmac_key_(hmac_key), block_size_(block_size) {}
+
+  int overflow(int c) override;
+  int sync() override;
+};
+
 class gzip_istreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:

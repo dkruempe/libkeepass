@@ -41,6 +41,20 @@ public:
     kHashSubKeysOnlyIfCompositeKey
   };
 
+  /**
+   * Key derivation functions supported for KDBX 4 databases.
+   */
+  enum class Kdf {
+    /** AES-KDF (repeated AES-ECB, used by KDBX 3). */
+    kAes,
+
+    /** Argon2d. */
+    kArgon2d,
+
+    /** Argon2id. */
+    kArgon2id
+  };
+
 private:
   struct CompositeKey {
     std::array<uint8_t, 32> password_key_ = {{0}};
@@ -59,6 +73,11 @@ public:
   std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32> &seed,
                                     uint64_t rounds,
                                     SubKeyResolution resolution) const;
+
+  std::array<uint8_t, 32> TransformArgon2(
+      Kdf kdf, const std::vector<uint8_t> &salt, uint64_t iterations,
+      uint64_t memory_bytes, uint32_t parallelism, uint32_t argon2_version,
+      SubKeyResolution resolution) const;
 };
 
 } // namespace keepass

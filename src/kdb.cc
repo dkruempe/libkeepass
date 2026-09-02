@@ -86,7 +86,7 @@ struct KdbTime {
       auto minute = static_cast<uint32_t>(time_ptr->tm_min);
       auto second = static_cast<uint32_t>(time_ptr->tm_sec);
 
-      packed[0] = static_cast<uint8_t>(year) >> 6;
+      packed[0] = static_cast<uint8_t>(year >> 6);
       packed[1] = static_cast<uint8_t>(((year & 0x3f) << 2) | (month >> 2));
       packed[2] =
           static_cast<uint8_t>(((month & 0x3) << 6) | (day << 1) | (hour >> 4));

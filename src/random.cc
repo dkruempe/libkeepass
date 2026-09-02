@@ -18,17 +18,65 @@
 
 #include "libkeepass/random.hh"
 
+#include <openssl/sha.h>
+
 namespace keepass {
+
+namespace {
+constexpr std::array<uint8_t, 8> kSalsa20Iv = {
+    0xe8, 0x30, 0x09, 0x4b, 0x97, 0x20, 0x5d, 0x2a};
+} // namespace
 
 RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32> &key,
                                    const std::array<uint8_t, 8> &init_vec)
-    : cipher_(key, init_vec) {}
+    : salsa_cipher_(key, init_vec), chacha_cipher_({0}, {0}) {}
+
+RandomObfuscator::RandomObfuscator(
+    Type type, const std::array<uint8_t, 32> &stream_key)
+    : RandomObfuscator(type,
+                       std::vector<uint8_t>(stream_key.begin(),
+                                            stream_key.end())) {}
+
+RandomObfuscator::RandomObfuscator(Type type,
+                                   const std::vector<uint8_t> &stream_key)
+    : type_(type), salsa_cipher_({0}, {0}), chacha_cipher_({0}, {0}) {
+  if (type_ == Type::kChaCha20) {
+    std::array<uint8_t, 64> key_iv{};
+
+    SHA512_CTX sha512;
+    SHA512_Init(&sha512);
+    SHA512_Update(&sha512, stream_key.data(), stream_key.size());
+    SHA512_Final(key_iv.data(), &sha512);
+
+    std::array<uint8_t, 32> key{};
+    std::copy(key_iv.begin(), key_iv.begin() + 32, key.begin());
+
+    std::array<uint8_t, 12> iv{};
+    std::copy(key_iv.begin() + 32, key_iv.begin() + 44, iv.begin());
+
+    chacha_cipher_ = ChaCha20Cipher(key, iv);
+  } else {
+    std::array<uint8_t, 32> key{};
+
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, stream_key.data(), stream_key.size());
+    SHA256_Final(key.data(), &sha256);
+
+    salsa_cipher_ = Salsa20Cipher(key, kSalsa20Iv);
+  }
+}
 
 void RandomObfuscator::FillBuffer() {
   static constexpr std::array<uint8_t, 64> kZeroBlock = {0};
 
   assert(buffer_pos_ == buffer_.size());
-  cipher_.Process(kZeroBlock, buffer_);
+
+  if (type_ == Type::kChaCha20)
+    chacha_cipher_.Process(kZeroBlock, buffer_);
+  else
+    salsa_cipher_.Process(kZeroBlock, buffer_);
+
   buffer_pos_ = 0;
 }
 

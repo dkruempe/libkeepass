@@ -138,4 +138,26 @@ public:
                std::array<uint8_t, 64> &dst);
 };
 
+/**
+ * @brief ChaCha20 stream cipher implementation (RFC 8439, 32-bit counter).
+ */
+class ChaCha20Cipher final {
+private:
+  std::array<uint32_t, 16> state_ = {{0}};
+
+  static inline uint32_t RotateLeft(uint32_t v, uint32_t n) {
+    return (v << (n & 0x1f)) | (v >> (32 - (n & 0x1f)));
+  }
+
+  static std::array<uint8_t, 64>
+  BlockFunction(const std::array<uint32_t, 16> &state);
+
+public:
+  ChaCha20Cipher(const std::array<uint8_t, 32> &key,
+                 const std::array<uint8_t, 12> &init_vec);
+
+  void Process(const std::array<uint8_t, 64> &src,
+               std::array<uint8_t, 64> &dst);
+};
+
 } // namespace keepass

@@ -29,16 +29,24 @@ class Metadata;
 
 class Database final {
 public:
-  enum class Cipher { kAes, kTwofish };
+  enum class Cipher { kAes, kTwofish, kChaCha20 };
+
+  enum class Kdf { kAes, kArgon2d, kArgon2id };
 
 private:
   std::shared_ptr<Group> root_;
   Cipher cipher_ = Cipher::kAes;
+  Kdf kdf_ = Kdf::kAes;
   std::vector<uint8_t> master_seed_;
   std::array<uint8_t, 16> init_vector_ = {{0}};
   std::array<uint8_t, 32> transform_seed_{{0}};
   std::array<uint8_t, 32> inner_random_stream_key_ = {{0}};
   uint64_t transform_rounds_ = 8192;
+  uint64_t argon2_memory_ = 0;
+  uint32_t argon2_parallelism_ = 0;
+  uint32_t argon2_version_ = 0;
+  std::vector<uint8_t> argon2_salt_;
+  uint64_t argon2_iterations_ = 0;
   bool compress_ = false;
   std::shared_ptr<Metadata> meta_;
 
@@ -48,6 +56,9 @@ public:
 
   Cipher cipher() const { return cipher_; }
   void set_cipher(Cipher cipher) { cipher_ = cipher; }
+
+  Kdf kdf() const { return kdf_; }
+  void set_kdf(Kdf kdf) { kdf_ = kdf; }
 
   const std::vector<uint8_t> &master_seed() const { return master_seed_; }
   void set_master_seed(const std::array<uint8_t, 16> &master_seed) {
@@ -80,6 +91,31 @@ public:
   uint64_t transform_rounds() const { return transform_rounds_; }
   void set_transform_rounds(uint64_t transform_rounds) {
     transform_rounds_ = transform_rounds;
+  }
+
+  uint64_t argon2_memory() const { return argon2_memory_; }
+  void set_argon2_memory(uint64_t argon2_memory) {
+    argon2_memory_ = argon2_memory;
+  }
+
+  uint32_t argon2_parallelism() const { return argon2_parallelism_; }
+  void set_argon2_parallelism(uint32_t argon2_parallelism) {
+    argon2_parallelism_ = argon2_parallelism;
+  }
+
+  uint32_t argon2_version() const { return argon2_version_; }
+  void set_argon2_version(uint32_t argon2_version) {
+    argon2_version_ = argon2_version;
+  }
+
+  const std::vector<uint8_t> &argon2_salt() const { return argon2_salt_; }
+  void set_argon2_salt(const std::vector<uint8_t> &salt) {
+    argon2_salt_ = salt;
+  }
+
+  uint64_t argon2_iterations() const { return argon2_iterations_; }
+  void set_argon2_iterations(uint64_t iterations) {
+    argon2_iterations_ = iterations;
   }
 
   bool compress() const { return compress_; }

@@ -58,12 +58,25 @@ private:
   GroupPool group_pool_;
   std::array<uint8_t, 32> header_hash_ = {{0}};
 
+  /** True while reading or writing a KDBX 4 database. */
+  bool kdbx4_ = false;
+
+  /** Force KDBX 4 output even if the database could be written as KDBX 3. */
+  bool write_kdbx4_ = false;
+
   void Reset();
 
   std::shared_ptr<Group> GetGroup(const std::string &uuid_str);
 
-  static std::time_t ParseDateTime(const char *text);
-  static std::string WriteDateTime(std::time_t time);
+  std::time_t ParseDateTime(const char *text);
+  std::string WriteDateTime(std::time_t time);
+  /** Seconds since 0001-01-01 UTC representing the KDBX "never" date. */
+  int64_t NeverSeconds() const;
+
+  std::unique_ptr<Database> Import3(std::istream &src, const Key &key);
+  std::unique_ptr<Database> Import4(std::istream &src, const Key &key);
+  void Export3(std::ostream &dst, const Database &db, const Key &key);
+  void Export4(std::ostream &dst, const Database &db, const Key &key);
 
   static protect<std::string> ParseProtectedString(const pugi::xml_node &node,
                                             const char *name,
@@ -105,6 +118,9 @@ private:
 public:
   std::unique_ptr<Database> Import(const std::string &path, const Key &key);
   void Export(const std::string &path, const Database &db, const Key &key);
+
+  /** Forces the exporter to produce a KDBX 4 format database. */
+  void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }
 };
 
 } // namespace keepass

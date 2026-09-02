@@ -47,6 +47,11 @@ target_compile_features(kdbx PUBLIC cxx_std_11)
 target_link_libraries(kdbx PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.kdbx COMMAND kdbx)
 
+add_executable(kdbx4 kdbx4.cc)
+target_compile_features(kdbx4 PUBLIC cxx_std_11)
+target_link_libraries(kdbx4 PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.kdbx4 COMMAND kdbx4)
+
 add_executable(stream stream.cc)
 target_compile_features(stream PUBLIC cxx_std_11)
 target_link_libraries(stream PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)

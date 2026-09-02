@@ -100,30 +100,33 @@ void decrypt_ecb(std::istream &src, std::ostream &dst,
 
 std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32> &src,
                                     const Cipher<16> &cipher) {
-  std::array<uint8_t, 32> arr = src;
-  std::array<uint8_t, 32> dst = src;
+  std::array<uint8_t, 32> dst{};
 
-  array_iostreambuf<32> src_buf(arr);
-  array_iostreambuf<32> dst_buf(dst);
+  std::array<uint8_t, 16> src_block{}, dst_block{};
+  std::copy_n(src.begin(), 16, src_block.begin());
+  cipher.Encrypt(src_block, dst_block);
+  std::copy(dst_block.begin(), dst_block.end(), dst.begin());
 
-  std::istream src_stream(&src_buf);
-  std::ostream dst_stream(&dst_buf);
-  encrypt_ecb(src_stream, dst_stream, cipher);
+  std::copy_n(src.begin() + 16, 16, src_block.begin());
+  cipher.Encrypt(src_block, dst_block);
+  std::copy(dst_block.begin(), dst_block.end(), dst.begin() + 16);
+
   return dst;
 }
 
 std::array<uint8_t, 32> decrypt_ecb(const std::array<uint8_t, 32> &src,
                                     const Cipher<16> &cipher) {
-  std::array<uint8_t, 32> arr = src;
-  std::array<uint8_t, 32> dst = src;
+  std::array<uint8_t, 32> dst{};
 
-  array_iostreambuf<32> src_buf(arr);
-  array_iostreambuf<32> dst_buf(dst);
+  std::array<uint8_t, 16> src_block{}, dst_block{};
+  std::copy_n(src.begin(), 16, src_block.begin());
+  cipher.Decrypt(src_block, dst_block);
+  std::copy(dst_block.begin(), dst_block.end(), dst.begin());
 
-  std::istream src_stream(&src_buf);
-  std::ostream dst_stream(&dst_buf);
+  std::copy_n(src.begin() + 16, 16, src_block.begin());
+  cipher.Decrypt(src_block, dst_block);
+  std::copy(dst_block.begin(), dst_block.end(), dst.begin() + 16);
 
-  decrypt_ecb(src_stream, dst_stream, cipher);
   return dst;
 }
 
@@ -538,6 +541,160 @@ void Salsa20Cipher::Process(const std::array<uint8_t, 64> &src,
   input_[8]++;
   if (!input_[8])
     input_[9]++;
+
+  for (std::size_t i = 0; i < src.size(); ++i)
+    dst[i] = src[i] ^ output[i];
+}
+
+ChaCha20Cipher::ChaCha20Cipher(const std::array<uint8_t, 32> &key,
+                               const std::array<uint8_t, 12> &init_vec) {
+  static const char *kSigma = "expand 32-byte k";
+
+  state_[0] = *reinterpret_cast<const uint32_t *>(kSigma + 0);
+  state_[1] = *reinterpret_cast<const uint32_t *>(kSigma + 4);
+  state_[2] = *reinterpret_cast<const uint32_t *>(kSigma + 8);
+  state_[3] = *reinterpret_cast<const uint32_t *>(kSigma + 12);
+
+  const uint8_t *key_ptr = key.data();
+  for (std::size_t i = 0; i < 8; ++i)
+    state_[4 + i] = *reinterpret_cast<const uint32_t *>(key_ptr + 4 * i);
+
+  state_[12] = 0;
+
+  const uint8_t *nounce_ptr = init_vec.data();
+  for (std::size_t i = 0; i < 3; ++i)
+    state_[13 + i] = *reinterpret_cast<const uint32_t *>(nounce_ptr + 4 * i);
+}
+
+std::array<uint8_t, 64>
+ChaCha20Cipher::BlockFunction(const std::array<uint32_t, 16> &state) {
+  uint32_t x[16];
+  for (std::size_t i = 0; i < 16; ++i)
+    x[i] = state[i];
+
+  for (std::size_t i = 0; i < 10; ++i) {
+    x[0] += x[4];
+    x[12] ^= x[0];
+    x[12] = RotateLeft(x[12], 16);
+    x[8] += x[12];
+    x[4] ^= x[8];
+    x[4] = RotateLeft(x[4], 12);
+    x[0] += x[4];
+    x[12] ^= x[0];
+    x[12] = RotateLeft(x[12], 8);
+    x[8] += x[12];
+    x[4] ^= x[8];
+    x[4] = RotateLeft(x[4], 7);
+
+    x[1] += x[5];
+    x[13] ^= x[1];
+    x[13] = RotateLeft(x[13], 16);
+    x[9] += x[13];
+    x[5] ^= x[9];
+    x[5] = RotateLeft(x[5], 12);
+    x[1] += x[5];
+    x[13] ^= x[1];
+    x[13] = RotateLeft(x[13], 8);
+    x[9] += x[13];
+    x[5] ^= x[9];
+    x[5] = RotateLeft(x[5], 7);
+
+    x[2] += x[6];
+    x[14] ^= x[2];
+    x[14] = RotateLeft(x[14], 16);
+    x[10] += x[14];
+    x[6] ^= x[10];
+    x[6] = RotateLeft(x[6], 12);
+    x[2] += x[6];
+    x[14] ^= x[2];
+    x[14] = RotateLeft(x[14], 8);
+    x[10] += x[14];
+    x[6] ^= x[10];
+    x[6] = RotateLeft(x[6], 7);
+
+    x[3] += x[7];
+    x[15] ^= x[3];
+    x[15] = RotateLeft(x[15], 16);
+    x[11] += x[15];
+    x[7] ^= x[11];
+    x[7] = RotateLeft(x[7], 12);
+    x[3] += x[7];
+    x[15] ^= x[3];
+    x[15] = RotateLeft(x[15], 8);
+    x[11] += x[15];
+    x[7] ^= x[11];
+    x[7] = RotateLeft(x[7], 7);
+
+    x[0] += x[5];
+    x[15] ^= x[0];
+    x[15] = RotateLeft(x[15], 16);
+    x[10] += x[15];
+    x[5] ^= x[10];
+    x[5] = RotateLeft(x[5], 12);
+    x[0] += x[5];
+    x[15] ^= x[0];
+    x[15] = RotateLeft(x[15], 8);
+    x[10] += x[15];
+    x[5] ^= x[10];
+    x[5] = RotateLeft(x[5], 7);
+
+    x[1] += x[6];
+    x[12] ^= x[1];
+    x[12] = RotateLeft(x[12], 16);
+    x[11] += x[12];
+    x[6] ^= x[11];
+    x[6] = RotateLeft(x[6], 12);
+    x[1] += x[6];
+    x[12] ^= x[1];
+    x[12] = RotateLeft(x[12], 8);
+    x[11] += x[12];
+    x[6] ^= x[11];
+    x[6] = RotateLeft(x[6], 7);
+
+    x[2] += x[7];
+    x[13] ^= x[2];
+    x[13] = RotateLeft(x[13], 16);
+    x[8] += x[13];
+    x[7] ^= x[8];
+    x[7] = RotateLeft(x[7], 12);
+    x[2] += x[7];
+    x[13] ^= x[2];
+    x[13] = RotateLeft(x[13], 8);
+    x[8] += x[13];
+    x[7] ^= x[8];
+    x[7] = RotateLeft(x[7], 7);
+
+    x[3] += x[4];
+    x[14] ^= x[3];
+    x[14] = RotateLeft(x[14], 16);
+    x[9] += x[14];
+    x[4] ^= x[9];
+    x[4] = RotateLeft(x[4], 12);
+    x[3] += x[4];
+    x[14] ^= x[3];
+    x[14] = RotateLeft(x[14], 8);
+    x[9] += x[14];
+    x[4] ^= x[9];
+    x[4] = RotateLeft(x[4], 7);
+  }
+
+  for (std::size_t i = 0; i < 16; ++i)
+    x[i] += state[i];
+
+  std::array<uint8_t, 64> output{};
+  for (std::size_t i = 0; i < 16; ++i)
+    *reinterpret_cast<uint32_t *>(output.data() + 4 * i) = x[i];
+
+  return output;
+}
+
+void ChaCha20Cipher::Process(const std::array<uint8_t, 64> &src,
+                             std::array<uint8_t, 64> &dst) {
+  std::array<uint8_t, 64> output = BlockFunction(state_);
+
+  state_[12]++;
+  if (!state_[12])
+    state_[13]++;
 
   for (std::size_t i = 0; i < src.size(); ++i)
     dst[i] = src[i] ^ output[i];

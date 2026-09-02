@@ -22,6 +22,8 @@
 #include <fstream>
 #include <memory>
 
+#include <argon2.h>
+#include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <pugixml.hpp>
 
@@ -118,16 +120,61 @@ void Key::SetKeyFile(const std::string &path) {
 std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
                                        uint64_t rounds,
                                        SubKeyResolution resolution) const {
-  AesCipher cipher(seed);
-
   std::array<uint8_t, 32> transformed_key = key_.Resolve(resolution);
-  for (uint32_t i = 0; i < rounds; ++i)
-    transformed_key = encrypt_ecb(transformed_key, cipher);
+
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  if (ctx == nullptr ||
+      EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
+                         nullptr) != 1) {
+    if (ctx != nullptr)
+      EVP_CIPHER_CTX_free(ctx);
+    throw InternalError("Failed to initialize AES-KDF.");
+  }
+  EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+  std::array<uint8_t, 32> encrypted{};
+  for (uint64_t i = 0; i < rounds; ++i) {
+    int outl = 0;
+    if (EVP_EncryptUpdate(ctx, encrypted.data(), &outl, transformed_key.data(),
+                          transformed_key.size()) != 1 ||
+        outl != static_cast<int>(transformed_key.size())) {
+      EVP_CIPHER_CTX_free(ctx);
+      throw InternalError("AES-KDF transform failed.");
+    }
+    transformed_key = encrypted;
+  }
+  EVP_CIPHER_CTX_free(ctx);
 
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, transformed_key.data(), transformed_key.size());
   SHA256_Final(transformed_key.data(), &sha256);
+  return transformed_key;
+}
+
+std::array<uint8_t, 32> Key::TransformArgon2(
+    Kdf kdf, const std::vector<uint8_t> &salt, uint64_t iterations,
+    uint64_t memory_bytes, uint32_t parallelism, uint32_t argon2_version,
+    SubKeyResolution resolution) const {
+  std::array<uint8_t, 32> transformed_key{};
+  std::array<uint8_t, 32> composite_key = key_.Resolve(resolution);
+
+  uint32_t memory_kib =
+      static_cast<uint32_t>(memory_bytes / 1024ULL);
+
+  uint32_t version = argon2_version == 0x10 ? ARGON2_VERSION_10
+                                            : ARGON2_VERSION_13;
+
+  argon2_type type = kdf == Kdf::kArgon2d ? Argon2_d : Argon2_id;
+
+  int rc = argon2_hash(static_cast<uint32_t>(iterations), memory_kib,
+                       parallelism, composite_key.data(),
+                       composite_key.size(), salt.data(), salt.size(),
+                       transformed_key.data(), transformed_key.size(), nullptr,
+                       0, type, version);
+
+  if (rc != ARGON2_OK)
+    throw InternalError(std::string("Argon2 error: ") + argon2_error_message(rc));
 
   return transformed_key;
 }
