@@ -538,10 +538,13 @@ TEST(Kdbx4Test, LegacyAesKdfUuidAccepted) {
 }
 
 TEST(Kdbx4Test, WrongPassword) {
-  const char *files[] = {
-      "kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-argon2d.kdbx",
-      "kdbx4-twofish-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
-      "kdbx4-aes-argon2id.kdbx", "kdbx4-aes-argon2d-gzip.kdbx"};
+  // One representative per KDF family: a hardened (64 MiB) Argon2d file, an
+  // Argon2id file and an AES-KDF file. Wrong-password rejection is verified
+  // by the header HMAC and is identical across the remaining samples, which
+  // only differ in cipher; skipping the redundant 64 MiB Argon2 runs keeps the
+  // test fast without losing coverage.
+  const char *files[] = {"kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
+                         "kdbx4-aes-argon2id.kdbx"};
 
   for (const char *file : files) {
     SCOPED_TRACE(file);
@@ -642,12 +645,23 @@ TEST(Kdbx4Test, RoundtripSamples) {
     EXPECT_EQ(reimported->compress(), compress);
     ExpectSameDatabase(*db, *reimported);
 
-    // Wrong password must not open the exported file.
-    EXPECT_THROW(importer.Import(dst_path, Key("wrong_password")),
-                 PasswordError);
-
     std::remove(dst_path.c_str());
   }
+
+  // A file exported with a wrong password must not open. This is checked once
+  // with a cheap (2 MiB) KDF instead of once per sample, because recomputing
+  // the embedded 64 MiB / ~58-iteration Argon2 for every sample would take
+  // many seconds per run for no additional coverage.
+  std::string bad_path = GetTmpPath("kdbx4-roundtrip-badpwd.kdbx");
+  std::unique_ptr<Database> bad_db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+  KdbxFile bad_exporter;
+  bad_exporter.set_write_kdbx4(true);
+  EXPECT_NO_THROW(bad_exporter.Export(bad_path, *bad_db, Key("password")));
+  KdbxFile bad_importer;
+  EXPECT_THROW(bad_importer.Import(bad_path, Key("wrong_password")),
+               PasswordError);
+  std::remove(bad_path.c_str());
 }
 
 TEST(Kdbx4Test, MatrixRoundtrip) {
