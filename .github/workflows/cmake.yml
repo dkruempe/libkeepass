@@ -37,6 +37,10 @@ jobs:
             conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
 
+      - name: Install lcov
+        if: matrix.build-type == 'Debug'
+        run: sudo apt-get install -y lcov
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
 
@@ -53,14 +57,24 @@ jobs:
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
 
       - name: Test
+        if: matrix.build-type != 'Debug'
         working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
+
+      - name: Test with coverage
+        if: matrix.build-type == 'Debug'
+        working-directory: build
+        run: |
+          lcov --zerocounters --directory .
+          ctest -C Debug --output-on-failure
+          lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/sample/*' '*/CMakeFiles/*' --output-file coverage.info
 
       - name: Upload coverage to Codecov
         if: matrix.build-type == 'Debug'
         uses: codecov/codecov-action@v4
         with:
-          directory: build
+          files: build/coverage.info
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
