@@ -24,6 +24,7 @@
 #include <memory>
 
 #include <argon2.h>
+#include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <pugixml.hpp>
 
@@ -138,28 +139,19 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32> &seed,
   } else
 #endif
   {
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    if (ctx == nullptr ||
-        EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
-                           nullptr) != 1) {
-      if (ctx != nullptr)
-        EVP_CIPHER_CTX_free(ctx);
+    AES_KEY aes_key;
+    if (AES_set_encrypt_key(seed.data(), 256, &aes_key) != 0)
       throw InternalError("Failed to initialize AES-KDF.");
-    }
-    EVP_CIPHER_CTX_set_padding(ctx, 0);
 
+    // The transform encrypts the 32-byte composite key in two independent
+    // 16-byte blocks with AES-256-ECB and feeds the result back into the
+    // loop, matching the low-level loop in aes_ni_transform_aes_kdf.
     for (uint64_t i = 0; i < rounds; ++i) {
-      int outl = 0;
-      if (EVP_EncryptUpdate(ctx, encrypted.data(), &outl,
-                            transformed_key.data(),
-                            static_cast<int>(transformed_key.size())) != 1 ||
-          outl != static_cast<int>(transformed_key.size())) {
-        EVP_CIPHER_CTX_free(ctx);
-        throw InternalError("AES-KDF transform failed.");
-      }
+      AES_encrypt(transformed_key.data(), encrypted.data(), &aes_key);
+      AES_encrypt(transformed_key.data() + 16, encrypted.data() + 16,
+                  &aes_key);
       transformed_key = encrypted;
     }
-    EVP_CIPHER_CTX_free(ctx);
   }
 
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
