@@ -68,7 +68,7 @@ jobs:
           lcov --zerocounters --directory .
           ctest -C Debug --output-on-failure
           lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch
-          lcov --remove coverage.info '/usr/*' '*/test/*' '*/CMakeFiles/*' --output-file coverage.info --ignore-errors unused
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/sample/*' '*/CMakeFiles/*' --output-file coverage.info --ignore-errors unused
 
       - name: Upload coverage to Codecov
         if: matrix.build-type == 'Debug'
