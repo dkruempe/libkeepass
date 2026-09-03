@@ -43,8 +43,8 @@
 namespace {
 char *portable_strptime(const char *buf, const char * /*format*/, std::tm *tm) {
   int year, month, day, hour, min, sec;
-  if (std::sscanf(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min,
-                  &sec) == 6) {
+  if (std::sscanf_s(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min,
+                    &sec) == 6) {
     tm->tm_year = year - 1900;
     tm->tm_mon = month - 1;
     tm->tm_mday = day;
@@ -1128,7 +1128,7 @@ std::unique_ptr<Database> KdbxFile::Import(const std::string &path,
   KdbxHeader header{};
   try {
     header = consume<KdbxHeader>(src);
-  } catch (std::exception &e) {
+  } catch (std::exception &) {
     throw FormatError("Not a KDBX database.");
   }
   if (header.signature0 != kKdbxSignature0 ||
@@ -1163,7 +1163,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
     // read the complete field regardless of how much of it that we parse.
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
-                    [&src]() { return src.get(); });
+                    [&src]() { return static_cast<char>(src.get()); });
     if (!src.good())
       throw IoError("Read error.");
 
@@ -1273,7 +1273,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream &src, const Key &key) {
 
   try {
     decrypt_cbc(src, content, *cipher);
-  } catch (std::exception &e) {
+  } catch (std::exception &) {
     throw PasswordError();
   }
 
@@ -1328,7 +1328,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
     // Read the header field into a separate buffer before parsing.
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
-                    [&src]() { return src.get(); });
+                    [&src]() { return static_cast<char>(src.get()); });
     if (!src.good())
       throw IoError("Read error.");
 
@@ -1555,7 +1555,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
     } else {
       throw FormatError("Unknown cipher in KDBX 4 database.");
     }
-  } catch (std::exception &e) {
+  } catch (std::exception &) {
     throw PasswordError();
   }
 
@@ -1605,7 +1605,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream &src, const Key &key) {
     case kKdbxInnerHeader::kBinaries: {
       std::stringstream raw_stream;
       std::generate_n(std::ostreambuf_iterator<char>(raw_stream), inner_size,
-                      [&xml_source]() { return xml_source.get(); });
+                      [&xml_source]() {
+                        return static_cast<char>(xml_source.get());
+                      });
 
       // The first byte holds the flags, the remaining bytes are the data.
       uint8_t flags = static_cast<uint8_t>(raw_stream.get());

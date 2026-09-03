@@ -206,7 +206,7 @@ std::shared_ptr<Group> KdbFile::ReadGroup(std::istream &src, uint32_t &id,
     // parse.
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), field_size,
-                    [&src]() { return src.get(); });
+                    [&src]() { return static_cast<char>(src.get()); });
     if (!src.good())
       throw IoError("Read error.");
 
@@ -320,7 +320,7 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream &src,
     // parse.
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), field_size,
-                    [&src]() { return src.get(); });
+                    [&src]() { return static_cast<char>(src.get()); });
     if (!src.good())
       throw IoError("Read error.");
 
@@ -505,7 +505,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string &path,
   KdbHeader header{};
   try {
     header = consume<KdbHeader>(src);
-  } catch (std::exception &e) {
+  } catch (std::exception &) {
     throw FormatError("Not a KDB database.");
   }
   if (header.signature0 != kKdbSignature0 ||
@@ -568,7 +568,7 @@ std::unique_ptr<Database> KdbFile::Import(const std::string &path,
 
   try {
     decrypt_cbc(src, content, *cipher);
-  } catch (std::exception &e) {
+  } catch (std::exception &) {
     throw PasswordError();
   }
 
