@@ -25,6 +25,7 @@
 #include <unordered_map>
 
 #include "database.hh"
+#include "libkeepass/export.hh"
 #include "security.hh"
 
 namespace pugi {
@@ -45,7 +46,7 @@ class RandomObfuscator;
 /**
  * @brief Keepass2 database file representation.
  */
-class KdbxFile final {
+class LIBKEEPASS_API KdbxFile final {
 private:
   typedef std::unordered_map<std::string, std::shared_ptr<Binary>> BinaryPool;
 

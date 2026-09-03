@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "binary.hh"
+#include "libkeepass/export.hh"
 #include "security.hh"
 #include "util.hh"
 
@@ -31,9 +32,9 @@ namespace keepass {
 
 class Icon;
 
-class Entry final {
+class LIBKEEPASS_API Entry final {
 public:
-  class Attachment final {
+  class LIBKEEPASS_API Attachment final {
   private:
     std::string name_;
     std::shared_ptr<Binary> binary_;

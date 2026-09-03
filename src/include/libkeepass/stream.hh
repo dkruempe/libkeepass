@@ -28,6 +28,7 @@
 
 #include <zlib.h>
 
+#include "libkeepass/export.hh"
 #include "util.hh"
 
 namespace keepass {
@@ -114,7 +115,7 @@ public:
   virtual ~hashed_basic_streambuf() = default;
 };
 
-class hashed_istreambuf final
+class LIBKEEPASS_API hashed_istreambuf final
     : private hashed_basic_streambuf,
       public std::basic_streambuf<char, std::char_traits<char>> {
 private:
@@ -126,7 +127,7 @@ public:
   int underflow() override;
 };
 
-class hashed_ostreambuf final
+class LIBKEEPASS_API hashed_ostreambuf final
     : private hashed_basic_streambuf,
       public std::basic_streambuf<char, std::char_traits<char>> {
 private:
@@ -147,7 +148,7 @@ public:
   int sync() override;
 };
 
-class hmac_istreambuf final
+class LIBKEEPASS_API hmac_istreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   std::istream &src_;
@@ -166,7 +167,7 @@ public:
   int underflow() override;
 };
 
-class hmac_ostreambuf final
+class LIBKEEPASS_API hmac_ostreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
@@ -194,7 +195,7 @@ public:
   int sync() override;
 };
 
-class gzip_istreambuf final
+class LIBKEEPASS_API gzip_istreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   static const std::size_t kBufferSize = 16384;
@@ -214,7 +215,7 @@ public:
   int underflow() override;
 };
 
-class gzip_ostreambuf final
+class LIBKEEPASS_API gzip_ostreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   static const std::size_t kBufferSize = 16384;

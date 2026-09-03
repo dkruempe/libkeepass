@@ -23,12 +23,13 @@
 #include <vector>
 
 #include "group.hh"
+#include "libkeepass/export.hh"
 
 namespace keepass {
 
 class Metadata;
 
-class Database final {
+class LIBKEEPASS_API Database final {
 public:
   enum class Cipher { kAes, kTwofish, kChaCha20 };
 

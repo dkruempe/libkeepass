@@ -25,13 +25,14 @@
 
 #include "binary.hh"
 #include "icon.hh"
+#include "libkeepass/export.hh"
 #include "temporal.hh"
 
 namespace keepass {
 
 class Group;
 
-class Metadata final {
+class LIBKEEPASS_API Metadata final {
 public:
   class MemoryProtection final {
   private:

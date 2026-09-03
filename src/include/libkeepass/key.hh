@@ -23,9 +23,11 @@
 #include <string>
 #include <vector>
 
+#include "libkeepass/export.hh"
+
 namespace keepass {
 
-class Key final {
+class LIBKEEPASS_API Key final {
 public:
   /**
    * Strategies for how to resolve sub keys before applying the

@@ -21,6 +21,8 @@
 
 #include <cstdint>
 
+#include "libkeepass/export.hh"
+
 // AES-NI is an x86/x86-64 instruction-set extension. It is only compiled (and
 // declared) on architectures that support it; elsewhere the portable EVP-based
 // AES-KDF fallback in Key::Transform is used instead.
@@ -41,7 +43,7 @@ namespace keepass {
 #if LIBKEEPASS_AES_NI
 
 // Returns true if this CPU supports AES-NI hardware instructions.
-bool aes_ni_supported();
+LIBKEEPASS_API bool aes_ni_supported();
 
 // AES-KDF core loop using AES-NI intrinsics. This is the hardware-accelerated
 // equivalent of the EVP loop in Key::Transform. The caller is responsible for
@@ -51,8 +53,10 @@ bool aes_ni_supported();
 // in:    32-byte composite key to encrypt
 // rounds: iteration count (KDBX transform rounds)
 // out:   32-byte buffer receiving the encrypted result
-void aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32],
-                              uint64_t rounds, uint8_t out[32]);
+void LIBKEEPASS_API aes_ni_transform_aes_kdf(const uint8_t seed[32],
+                                             const uint8_t in[32],
+                                             uint64_t rounds,
+                                             uint8_t out[32]);
 
 #endif // LIBKEEPASS_AES_NI
 

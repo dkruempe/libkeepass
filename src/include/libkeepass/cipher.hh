@@ -26,18 +26,20 @@
 
 #include <openssl/evp.h>
 
+#include "libkeepass/export.hh"
+
 namespace keepass {
 
 template <std::size_t N> class Cipher;
 
-std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32> &src,
-                                    const Cipher<16> &cipher);
-std::array<uint8_t, 32> decrypt_ecb(const std::array<uint8_t, 32> &src,
-                                    const Cipher<16> &cipher);
-void encrypt_cbc(std::istream &src, std::ostream &dst,
-                 const Cipher<16> &cipher);
-void decrypt_cbc(std::istream &src, std::ostream &dst,
-                 const Cipher<16> &cipher);
+LIBKEEPASS_API std::array<uint8_t, 32> encrypt_ecb(
+    const std::array<uint8_t, 32> &src, const Cipher<16> &cipher);
+LIBKEEPASS_API std::array<uint8_t, 32> decrypt_ecb(
+    const std::array<uint8_t, 32> &src, const Cipher<16> &cipher);
+LIBKEEPASS_API void encrypt_cbc(std::istream &src, std::ostream &dst,
+                                const Cipher<16> &cipher);
+LIBKEEPASS_API void decrypt_cbc(std::istream &src, std::ostream &dst,
+                                const Cipher<16> &cipher);
 
 template <std::size_t N> class Cipher {
 public:
@@ -51,7 +53,7 @@ public:
                        std::array<uint8_t, N> &dst) const = 0;
 };
 
-class AesCipher final : public Cipher<16> {
+class LIBKEEPASS_API AesCipher final : public Cipher<16> {
 private:
   const std::array<uint8_t, 16> init_vec_;
   EVP_CIPHER_CTX *ctx_dec_ = nullptr;
@@ -74,7 +76,7 @@ public:
                std::array<uint8_t, 16> &dst) const override;
 };
 
-class TwofishCipher final : public Cipher<16> {
+class LIBKEEPASS_API TwofishCipher final : public Cipher<16> {
 private:
   static const uint8_t kNumRounds = 16;
 
@@ -119,7 +121,7 @@ public:
 /**
  * @brief Salsa20 stream cipher implementation.
  */
-class Salsa20Cipher final {
+class LIBKEEPASS_API Salsa20Cipher final {
 private:
   std::array<uint32_t, 16> input_ = {{0}};
 
@@ -143,7 +145,7 @@ public:
 /**
  * @brief ChaCha20 stream cipher implementation (RFC 8439, 32-bit counter).
  */
-class ChaCha20Cipher final {
+class LIBKEEPASS_API ChaCha20Cipher final {
 private:
   std::array<uint32_t, 16> state_ = {{0}};
 

@@ -23,6 +23,7 @@
 #include <string>
 
 #include "database.hh"
+#include "libkeepass/export.hh"
 
 namespace keepass {
 
@@ -33,7 +34,7 @@ class Key;
 /**
  * @brief Keepass database file representation.
  */
-class KdbFile final {
+class LIBKEEPASS_API KdbFile final {
 private:
   static std::shared_ptr<Group> ReadGroup(std::istream &src, uint32_t &id,
                                    uint16_t &level);

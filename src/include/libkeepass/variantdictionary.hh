@@ -25,6 +25,8 @@
 #include <string>
 #include <vector>
 
+#include "libkeepass/export.hh"
+
 namespace keepass {
 
 /**
@@ -32,7 +34,7 @@ namespace keepass {
  *
  * Format reference: https://sseemayer.github.io/kdbx-compendium/
  */
-class VariantDictionary final {
+class LIBKEEPASS_API VariantDictionary final {
 public:
   enum class Type : uint8_t {
     kEnd = 0x00,

@@ -19,16 +19,18 @@
 
 #pragma once
 
+#include "libkeepass/export.hh"
+
 namespace keepass {
 
-class PasswordError final : public std::exception {
+class LIBKEEPASS_API PasswordError final : public std::exception {
 public:
   explicit PasswordError() = default;
 
   const char *what() const noexcept override { return "Invalid password."; }
 };
 
-class FormatError final : public std::exception {
+class LIBKEEPASS_API FormatError final : public std::exception {
 private:
   const std::string msg_{};
 
@@ -41,7 +43,7 @@ public:
 /**
  * @brief Used for the same class of errors as asserts but for release builds.
  */
-class InternalError : public std::exception {
+class LIBKEEPASS_API InternalError : public std::exception {
 private:
   const std::string msg_{};
 
@@ -51,7 +53,7 @@ public:
   const char *what() const noexcept override { return msg_.c_str(); }
 };
 
-class IoError : public std::exception {
+class LIBKEEPASS_API IoError : public std::exception {
 private:
   const std::string msg_{};
 
@@ -61,7 +63,7 @@ public:
   const char *what() const noexcept override { return msg_.c_str(); }
 };
 
-class FileNotFoundError final : public IoError {
+class LIBKEEPASS_API FileNotFoundError final : public IoError {
 public:
   FileNotFoundError() : IoError("File not found.") {}
 };

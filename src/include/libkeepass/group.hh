@@ -23,12 +23,13 @@
 #include <vector>
 
 #include "entry.hh"
+#include "libkeepass/export.hh"
 
 namespace keepass {
 
 class Icon;
 
-class Group final {
+class LIBKEEPASS_API Group final {
 private:
   std::array<uint8_t, 16> uuid_;
   uint32_t icon_ = 0;

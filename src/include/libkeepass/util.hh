@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include "libkeepass/export.hh"
+
 namespace keepass {
 
 /**
@@ -98,8 +100,8 @@ dfs(const std::shared_ptr<T> &current,
  * @param [in] time Date and time in UTC.
  * @return @a time as a human readable string in UTC.
  */
-std::string time_to_str(const std::time_t &time);
+LIBKEEPASS_API std::string time_to_str(const std::time_t &time);
 
-std::array<uint8_t, 16> generate_uuid();
+LIBKEEPASS_API std::array<uint8_t, 16> generate_uuid();
 
 } // namespace keepass
