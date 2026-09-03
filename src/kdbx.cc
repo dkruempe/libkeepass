@@ -43,8 +43,8 @@
 namespace {
 char *portable_strptime(const char *buf, const char * /*format*/, std::tm *tm) {
   int year, month, day, hour, min, sec;
-  if (std::sscanf_s(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min,
-                    &sec) == 6) {
+  if (sscanf_s(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min,
+               &sec) == 6) {
     tm->tm_year = year - 1900;
     tm->tm_mon = month - 1;
     tm->tm_mday = day;
