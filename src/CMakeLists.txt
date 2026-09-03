@@ -16,6 +16,14 @@ FILE(GLOB_RECURSE sources *.cc)
 
 add_library(libkeepass SHARED ${headers} ${sources})
 
+# The public headers do not use __declspec(dllexport/dllimport) export macros, so
+# on Windows the DLL would export no symbols and MSVC would generate no import
+# library for consumers to link against. Let CMake auto-generate a .def file that
+# exports all global symbols, producing a proper import .lib (no-op on other OSes).
+if (WIN32)
+    set_target_properties(libkeepass PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif ()
+
 # aes_ni.cc uses AES-NI intrinsics, which are an x86/x86-64 extension. Detect
 # the target architecture by asking the compiler directly (this mirrors the
 # LIBKEEPASS_AES_NI preprocessor guard in aes_ni.hh), so the -maes ISA flag is
