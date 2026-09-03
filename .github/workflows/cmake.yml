@@ -38,7 +38,7 @@ jobs:
             conan-${{ runner.os }}-
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
 
       # Save the cache immediately after dependency provisioning but before
       # building the project, so that a later build failure does not lose the
@@ -55,6 +55,15 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -C ${{ matrix.build-type }} --output-on-failure
+
+      - name: Upload coverage to Codecov
+        if: matrix.build-type == 'Debug'
+        uses: codecov/codecov-action@v4
+        with:
+          directory: build
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   macos-build:
     strategy:
