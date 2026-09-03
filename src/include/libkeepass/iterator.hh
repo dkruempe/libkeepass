@@ -24,13 +24,18 @@
 namespace keepass {
 
 template <typename C>
-class bounds_checked_iterator
-    : public std::iterator<std::output_iterator_tag, void, void, void, void> {
+class bounds_checked_iterator {
 protected:
   typename C::iterator first_;
   typename C::iterator last_;
 
 public:
+  using iterator_category = std::output_iterator_tag;
+  using value_type = void;
+  using difference_type = void;
+  using pointer = void;
+  using reference = void;
+
   explicit bounds_checked_iterator(C &container)
       : first_(container.begin()), last_(container.end()) {}
 

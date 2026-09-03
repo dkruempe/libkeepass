@@ -32,12 +32,12 @@ std::array<uint8_t, N> GetRandomBlock() {
   std::random_device rd;
   std::mt19937 engine(rd());
 
-  std::uniform_int_distribution<uint8_t> uniform_dist(0, 255);
+  std::uniform_int_distribution<unsigned int> uniform_dist(0, 255);
 
   // Fill block with random values.
   std::array<uint8_t, N> block{};
   for (std::size_t i = 0; i < N; ++i)
-    block[i] = uniform_dist(engine);
+    block[i] = static_cast<uint8_t>(uniform_dist(engine));
 
   return block;
 }
@@ -60,13 +60,14 @@ void GetRandomStream(std::ostream& dst, std::size_t min_len,
   std::random_device rd;
   std::mt19937 engine(rd());
 
-  std::uniform_int_distribution<uint8_t> uniform_dist(0, 255);
+  std::uniform_int_distribution<unsigned int> uniform_dist(0, 255);
 
-  std::size_t len =
-      std::uniform_int_distribution<uint8_t>(min_len, max_len)(engine);
+  std::size_t len = std::uniform_int_distribution<unsigned int>(
+      static_cast<unsigned int>(min_len),
+      static_cast<unsigned int>(max_len))(engine);
 
   for (std::size_t i = 0; i < len; ++i) {
-    uint8_t val = uniform_dist(engine);
+    uint8_t val = static_cast<uint8_t>(uniform_dist(engine));
     dst.write(reinterpret_cast<const char*>(&val), sizeof(val));
   }
 }
