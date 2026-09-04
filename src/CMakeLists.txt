@@ -37,7 +37,7 @@ target_compile_features(libkeepass PUBLIC cxx_std_11)
 target_include_directories(libkeepass
         SYSTEM PUBLIC
         "$<BUILD_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/include>"
-        "$<INSTALL_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};include>"
+        "$<INSTALL_INTERFACE:include>"
         )
 target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml argon2::argon2 PRIVATE project_warnings)
 add_library(kruempelmann::libkeepass ALIAS libkeepass)
@@ -45,20 +45,24 @@ INSTALL(TARGETS libkeepass
         EXPORT libkeepass_targets
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION lib
-        INCLUDES DESTINATION include)
+        RUNTIME DESTINATION lib)
 INSTALL(EXPORT libkeepass_targets
         DESTINATION lib/cmake/libkeepass
         FILE libkeepass_targets.cmake
         NAMESPACE kruempelmann::)
-INSTALL(DIRECTORY include
+INSTALL(DIRECTORY include/
         DESTINATION include)
 
-# library package version file
+# library package config and version file
 include(CMakePackageConfigHelpers)
-write_basic_package_version_file(libkeepass_config_version.cmake
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/libkeepassConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/libkeepassConfig.cmake
+        INSTALL_DESTINATION lib/cmake/libkeepass)
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/libkeepassConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libkeepass_config_version.cmake ${CMAKE_CURRENT_BINARY_DIR}/libkeepass_config_version.cmake
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/libkeepassConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/libkeepassConfigVersion.cmake
         DESTINATION lib/cmake/libkeepass)
 
 # Doxygen API documentation

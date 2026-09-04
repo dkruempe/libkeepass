@@ -74,6 +74,52 @@ doxygen Doxyfile        # output goes to docs/html
 
 A hosted version of the documentation is auto-generated and published to GitHub Pages on every push to `main`.
 
+## Integration
+
+### Installing the library
+
+After building (see [Build](#build)), install the library and its CMake package to a prefix:
+
+```sh
+cmake --install build --prefix /usr/local
+```
+
+This installs the shared library, the public headers and a CMake package configuration, so consumers can use `find_package(libkeepass)`.
+
+### Using it from CMake
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(my_app LANGUAGES CXX)
+
+# Point CMake at the install prefix (only needed for non-standard prefixes)
+list(APPEND CMAKE_PREFIX_PATH "/usr/local")
+
+find_package(libkeepass REQUIRED)
+
+add_executable(my_app main.cc)
+target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
+```
+
+The imported target `kruempelmann::libkeepass` provides all required include paths and link dependencies (OpenSSL, zlib, pugixml, Argon2) transitively, so most consumers only need the `find_package` call.
+
+### Using it as a Git submodule
+
+Alternatively, add this repository as a submodule and include it directly in your build tree. The target `kruempelmann::libkeepass` is available for both `find_package` and `add_subdirectory` style integration:
+
+```sh
+git submodule add https://github.com/dkruempe/libkeepass.git third_party/libkeepass
+```
+
+```cmake
+add_subdirectory(third_party/libkeepass/src)
+
+add_executable(my_app main.cc)
+target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
+```
+
+> **Note:** `add_subdirectory` requires the same dependencies (OpenSSL, zlib, pugixml, Argon2) to be resolvable in your build tree, e.g. via [Conan](https://conan.io/), as described under [Prerequisites](#prerequisites).
+
 ## Usage
 
 ### KDBX (KeePass2)
