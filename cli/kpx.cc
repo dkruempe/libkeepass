@@ -37,7 +37,7 @@
 
 namespace {
 
-const char *kVersion = "0.1.0";
+const char *kVersion = "0.2.0";
 
 struct Options {
   std::string input;

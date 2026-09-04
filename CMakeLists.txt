@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
-project(libkeepass VERSION 0.1.0)
+project(libkeepass VERSION 0.2.0)
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-04
+
+### Added
+
+- `kpx` command line tool (`cli/`) built on top of the library:
+  - Text, JSON and CSV output formats
+  - `--export` to write a new KDB/KDBX file, `--output` to redirect output
+  - Keyfile support and key passphrase from option, `KEEPASS_PASSWORD`
+    environment variable or interactive prompt
+  - Portable argument parser (no `getopt` dependency, works on Windows)
+- CPack packaging: TGZ/ZIP archives on all platforms, DEB/RPM packages on
+  Linux, exposed via a `package` build target
+- Complete CMake package configuration so consumers can integrate the
+  library with `find_package(libkeepass)` and link the imported target
+  `kruempelmann::libkeepass`
+
+### Changed
+
+- Replaced the sample application with the `kpx` CLI, moving `sample/` to `cli/`
+- Enabled macOS rpaths so the installed `kpx` binary can locate the shared library
+- Updated Doxygen excludes and the CI coverage paths for the `cli/` directory
+
 ## [0.1.0] - 2026-09-04
 
 First public release with semantic versioning.
@@ -38,5 +60,6 @@ First public release with semantic versioning.
 - Unit and integration tests covering KDB/KDBX roundtrips and key derivation
 - GitHub Pages deployment of the generated API documentation
 
-[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.1.0

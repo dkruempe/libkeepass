@@ -4,7 +4,7 @@
 # Project related configuration
 #---------------------------------------------------------------------------
 PROJECT_NAME           = "libkeepass"
-PROJECT_NUMBER         = 0.1.0
+PROJECT_NUMBER         = 0.2.0
 PROJECT_BRIEF          = "KeePass key database importer/exporter library"
 OUTPUT_DIRECTORY       = docs
 CREATE_SUBDIRS         = NO
