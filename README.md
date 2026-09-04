@@ -120,6 +120,29 @@ target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
 
 > **Note:** `add_subdirectory` requires the same dependencies (OpenSSL, zlib, pugixml, Argon2) to be resolvable in your build tree, e.g. via [Conan](https://conan.io/), as described under [Prerequisites](#prerequisites).
 
+## Packaging
+
+CPack generates installable packages from the [install rules](#integration). After building the project, run:
+
+```sh
+cmake --build build --target package
+```
+
+The generated packages are written to the build directory:
+
+- `TGZ` and `ZIP` archives on all platforms
+- `DEB` and `RPM` packages on Linux
+
+To produce Linux packages for a specific target distribution, set the base install prefix accordingly:
+
+```sh
+cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+cmake --build build --target package
+```
+
+> **Note:** The DEB/RPM dependency lists (`libssl3`, `zlib1g`, `libpugixml1.12`, `libargon2-1` / `openssl-libs`, `zlib`, `libpugixml`, `argon2-libs`) are defaults and may need adjusting for your target distribution. Override them as needed, e.g. `-DCPACK_DEBIAN_PACKAGE_DEPENDS="..."`.
+
 ## Usage
 
 ### KDBX (KeePass2)
