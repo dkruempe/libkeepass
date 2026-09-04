@@ -143,6 +143,27 @@ cmake --build build --target package
 
 > **Note:** The DEB/RPM dependency lists (`libssl3`, `zlib1g`, `libpugixml1.12`, `libargon2-1` / `openssl-libs`, `zlib`, `libpugixml`, `argon2-libs`) are defaults and may need adjusting for your target distribution. Override them as needed, e.g. `-DCPACK_DEBIAN_PACKAGE_DEPENDS="..."`.
 
+## Command Line Interface
+
+The `kpx` binary (in `cli/`) is a full command line tool built on top of the library and serves as a complete usage example:
+
+```sh
+kpx --help
+
+# Print all entries as text (default), JSON or CSV
+kpx -p password database.kdbx
+kpx -p password -f json database.kdbx
+kpx -p password -f csv --with-passwords database.kdbx
+
+# Export to a new KeePass file (.kdb / .kdbx)
+kpx -p password -e output.kdbx database.kdb
+
+# Passwords can also come from an environment variable or an interactive prompt
+KEEPASS_PASSWORD=secret kpx database.kdbx
+```
+
+The password is read from `--password`, otherwise from the `KEEPASS_PASSWORD` environment variable, otherwise interactively (POSIX terminals only). Keyfiles are supported via `--keyfile <path>`.
+
 ## Usage
 
 ### KDBX (KeePass2)
@@ -161,7 +182,7 @@ std::unique_ptr<keepass::Database> db = file.Import("database.kdbx", key);
 // Manipulate database...
 auto root = db->root();
 for (const auto& entry : root->Entries()) {
-    std::cout << entry->title().get() << std::endl;
+    std::cout << *entry->title() << std::endl;
 }
 
 // Export
@@ -222,7 +243,7 @@ libkeepass/
 │   ├── cipher.cc           # Encryption
 │   └── ...
 ├── test/                   # Unit tests
-├── sample/                 # Example application
+├── cli/                    # kpx command line tool
 ├── cmake/                  # CMake configuration
 └── .github/workflows/      # CI/CD
 ```
