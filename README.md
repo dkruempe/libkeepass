@@ -11,6 +11,10 @@ C++11 library for importing and exporting [KeePass](http://keepass.info) passwor
 
 This project is a fork of [libkeepass](https://github.com/nickvdyck/libkeepass) by Christian Kindahl.
 
+## Documentation
+
+The API documentation is available at [https://dkruempe.github.io/libkeepass/](https://dkruempe.github.io/libkeepass/).
+
 ## Features
 
 - **Formats:** KDB (Legacy) and KDBX (KeePass2)
