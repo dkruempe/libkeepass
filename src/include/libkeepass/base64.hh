@@ -17,6 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @file base64.hh
+ * @brief Base64 encoding and decoding helpers.
+ */
+
 #pragma once
 #include <algorithm>
 #include <locale>
@@ -27,6 +32,14 @@
 
 namespace keepass {
 
+/**
+ * @brief Encodes a range of bytes into a base64 string.
+ *
+ * @tparam InputIterator the iterator type over the input bytes.
+ * @param first begin iterator of the byte range.
+ * @param last end iterator of the byte range.
+ * @return the base64-encoded string.
+ */
 template <typename InputIterator>
 std::string base64_encode(InputIterator first, InputIterator last) {
   static const std::string kBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -67,6 +80,15 @@ std::string base64_encode(InputIterator first, InputIterator last) {
   return dst;
 }
 
+/**
+ * @brief Decodes a base64 string into an output sequence.
+ *
+ * @tparam OutputIterator the output iterator type receiving the decoded bytes.
+ * @tparam Type the value type written to the output iterator.
+ * @param src the base64 string to decode.
+ * @param result output iterator receiving the decoded bytes.
+ * @throws FormatError if the input is not valid base64.
+ */
 template <typename OutputIterator, typename Type>
 void base64_decode(const std::string &src, OutputIterator result) {
   static const std::string kBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -118,10 +140,12 @@ void base64_decode(const std::string &src, OutputIterator result) {
   }
 }
 
+/// Convenience overload that encodes an entire @c std::string.
 inline std::string base64_encode(const std::string &src) {
   return base64_encode(src.begin(), src.end());
 }
 
+/// Convenience overload that decodes a base64 string into a @c std::string.
 inline std::string base64_decode(const std::string &src) {
   std::string dst;
   base64_decode<std::back_insert_iterator<std::string>, char>(

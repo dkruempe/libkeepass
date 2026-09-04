@@ -60,3 +60,18 @@ write_basic_package_version_file(libkeepass_config_version.cmake
         COMPATIBILITY SameMajorVersion)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libkeepass_config_version.cmake ${CMAKE_CURRENT_BINARY_DIR}/libkeepass_config_version.cmake
         DESTINATION lib/cmake/libkeepass)
+
+# Doxygen API documentation
+find_package(Doxygen)
+if (DOXYGEN_FOUND)
+    set(DOXYGEN_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/include/libkeepass)
+    set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../docs)
+    set(DOXYGEN_GENERATE_HTML YES)
+    set(DOXYGEN_GENERATE_LATEX NO)
+    set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+    set(DOXYGEN_PROJECT_NAME "libkeepass")
+    set(DOXYGEN_PROJECT_NUMBER ${PROJECT_VERSION})
+    set(DOXYGEN_PREDEFINED "LIBKEEPASS_API=")
+    set(DOXYGEN_EXCLUDE_PATTERNS ${CMAKE_CURRENT_SOURCE_DIR}/test/* ${CMAKE_CURRENT_SOURCE_DIR}/sample/*)
+    doxygen_add_docs(doc ALL ${headers} USE_STAMP_FILE)
+endif()

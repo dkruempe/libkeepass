@@ -1,6 +1,7 @@
 # libkeepass
 
 [![Build](https://github.com/dkruempe/libkeepass/actions/workflows/cmake.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/cmake.yml)
+[![Docs](https://github.com/dkruempe/libkeepass/actions/workflows/docs.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/docs.yml)
 [![codecov](https://codecov.io/gh/dkruempe/libkeepass/graph/badge.svg)](https://codecov.io/gh/dkruempe/libkeepass)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-11-blue.svg)](https://isocpp.org/)
@@ -51,6 +52,23 @@ cmake --build build --config Release
 cd build
 ctest --output-on-failure
 ```
+
+### Generating the API Documentation
+
+The public API is documented with [Doxygen](https://www.doxygen.nl/). To generate the HTML documentation locally:
+
+```sh
+# If Doxygen is installed, the 'doc' CMake target builds it
+cmake --build build --target doc
+```
+
+Alternatively, run Doxygen directly:
+
+```sh
+doxygen Doxyfile        # output goes to docs/html
+```
+
+A hosted version of the documentation is auto-generated and published to GitHub Pages on every push to `main`.
 
 ## Usage
 

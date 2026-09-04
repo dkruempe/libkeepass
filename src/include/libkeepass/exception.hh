@@ -17,12 +17,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/** @file exception.hh @brief Exception types thrown by the library. */
+
 #pragma once
 
 #include "libkeepass/export.hh"
 
 namespace keepass {
 
+/**
+ * @brief Thrown when an invalid password is supplied while opening a database.
+ */
 class LIBKEEPASS_API PasswordError final : public std::exception {
 public:
   explicit PasswordError() = default;
@@ -30,6 +35,9 @@ public:
   const char *what() const noexcept override { return "Invalid password."; }
 };
 
+/**
+ * @brief Thrown when a database or stream has an invalid format.
+ */
 class LIBKEEPASS_API FormatError final : public std::exception {
 private:
   const std::string msg_{};
@@ -41,7 +49,7 @@ public:
 };
 
 /**
- * @brief Used for the same class of errors as asserts but for release builds.
+ * @brief Thrown for the same class of errors as asserts, but in release builds.
  */
 class LIBKEEPASS_API InternalError : public std::exception {
 private:
@@ -53,6 +61,9 @@ public:
   const char *what() const noexcept override { return msg_.c_str(); }
 };
 
+/**
+ * @brief Thrown for input/output errors while reading or writing databases.
+ */
 class LIBKEEPASS_API IoError : public std::exception {
 private:
   const std::string msg_{};
@@ -63,6 +74,9 @@ public:
   const char *what() const noexcept override { return msg_.c_str(); }
 };
 
+/**
+ * @brief Thrown when a requested file does not exist.
+ */
 class LIBKEEPASS_API FileNotFoundError final : public IoError {
 public:
   FileNotFoundError() : IoError("File not found.") {}

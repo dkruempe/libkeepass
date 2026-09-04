@@ -17,6 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @file random.hh
+ * @brief Random data generation and obfuscation for KDBX inner streams.
+ */
+
 #pragma once
 #include "cipher.hh"
 #include "libkeepass/export.hh"
@@ -34,7 +39,10 @@ namespace keepass {
 class LIBKEEPASS_API RandomObfuscator {
 public:
   /** Inner random stream ciphers supported by KDBX 4. */
-  enum class Type { kSalsa20, kChaCha20 };
+  enum class Type {
+    kSalsa20,  ///< Salsa20 stream cipher (KDBX 3 and 4).
+    kChaCha20  ///< ChaCha20 stream cipher (KDBX 4).
+  };
 
 private:
   Type type_ = Type::kSalsa20;
@@ -47,6 +55,11 @@ private:
   void FillBuffer();
 
 public:
+  /**
+   * @brief Constructs a random stream cipher from a raw key and initialization vector.
+   * @param key The 32-byte key for the stream cipher.
+   * @param init_vec The 8-byte initialization vector.
+   */
   RandomObfuscator(const std::array<uint8_t, 32> &key,
                    const std::array<uint8_t, 8> &init_vec);
 
@@ -64,10 +77,26 @@ public:
    */
   RandomObfuscator(Type type, const std::vector<uint8_t> &stream_key);
 
+  /// Obfuscates or deobfuscates a byte vector using the random stream.
+  /**
+   * @param data The data to process (xor with the random stream).
+   * @return The processed data.
+   */
   std::vector<uint8_t> Process(const std::vector<uint8_t> &data);
+
+  /// Obfuscates or deobfuscates a string using the random stream.
+  /**
+   * @param data The string data to process.
+   * @return The processed string.
+   */
   std::string Process(const std::string &data);
 };
 
+/// Generates an array of N cryptographically random bytes.
+/**
+ * @tparam N The number of random bytes to generate.
+ * @return An array filled with uniformly distributed random bytes in [0, 255].
+ */
 template <std::size_t N> std::array<uint8_t, N> random_array() {
   std::random_device rd;
   std::mt19937 engine(rd());

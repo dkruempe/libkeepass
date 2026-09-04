@@ -17,6 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/** @file aes_ni.hh @brief Hardware-accelerated AES-KDF helpers using AES-NI. */
+
 #pragma once
 
 #include <cstdint>
@@ -42,17 +44,24 @@ namespace keepass {
 
 #if LIBKEEPASS_AES_NI
 
-// Returns true if this CPU supports AES-NI hardware instructions.
+/**
+ * @brief Returns whether the current CPU supports AES-NI hardware instructions.
+ * @return @c true if AES-NI is available, else @c false.
+ */
 LIBKEEPASS_API bool aes_ni_supported();
 
-// AES-KDF core loop using AES-NI intrinsics. This is the hardware-accelerated
-// equivalent of the EVP loop in Key::Transform. The caller is responsible for
-// the final SHA-256 hash of the result.
-//
-// seed:  32-byte AES-256 key (KDBX transform seed)
-// in:    32-byte composite key to encrypt
-// rounds: iteration count (KDBX transform rounds)
-// out:   32-byte buffer receiving the encrypted result
+/**
+ * @brief AES-KDF core loop using AES-NI intrinsics.
+ *
+ * This is the hardware-accelerated equivalent of the EVP loop in
+ * Key::Transform. The caller is responsible for performing the final SHA-256
+ * hash of the result.
+ *
+ * @param seed 32-byte AES-256 key (KDBX transform seed).
+ * @param in   32-byte composite key to encrypt.
+ * @param rounds iteration count (KDBX transform rounds).
+ * @param out  32-byte buffer receiving the encrypted result.
+ */
 void LIBKEEPASS_API aes_ni_transform_aes_kdf(const uint8_t seed[32],
                                              const uint8_t in[32],
                                              uint64_t rounds,

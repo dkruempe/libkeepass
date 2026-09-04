@@ -17,6 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @file util.hh
+ * @brief Utility functions for clamp, comparison, traversal, and time formatting.
+ */
+
 #pragma once
 #include <algorithm>
 #include <array>
@@ -102,6 +107,10 @@ dfs(const std::shared_ptr<T> &current,
  */
 LIBKEEPASS_API std::string time_to_str(const std::time_t &time);
 
+/**
+ * @brief Generates a cryptographically random 128-bit UUID.
+ * @return std::array of 16 bytes containing a UUID v4 value.
+ */
 LIBKEEPASS_API std::array<uint8_t, 16> generate_uuid();
 
 } // namespace keepass

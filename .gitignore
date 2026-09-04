@@ -6,3 +6,6 @@ bin
 *.pyc
 *.swp
 TODO.md
+docs
+
+CMakeUserPresets.json

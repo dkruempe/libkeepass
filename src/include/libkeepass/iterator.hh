@@ -17,12 +17,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/** @file iterator.hh @brief Bounds-checked output iterator helper. */
+
 #pragma once
 #include <iterator>
 #include <exception>
 
 namespace keepass {
 
+/**
+ * @brief An output iterator that throws on writing past the end of a container.
+ *
+ * The iterator wraps a range of a container and throws @c std::out_of_range
+ * whenever an assignment would exceed the container's bounds.
+ *
+ * @tparam C the underlying container type.
+ */
 template <typename C>
 class bounds_checked_iterator {
 protected:
@@ -36,9 +46,14 @@ public:
   using pointer = void;
   using reference = void;
 
+  /**
+   * Creates a bounds-checked iterator over the given container.
+   * @param container the container to iterate over.
+   */
   explicit bounds_checked_iterator(C &container)
       : first_(container.begin()), last_(container.end()) {}
 
+  /// Assigns a value through the iterator, throwing if the end is exceeded.
   bounds_checked_iterator &operator=(const typename C::value_type &value) {
     if (first_ == last_)
       throw std::out_of_range("assigning outside container limits.");
@@ -47,6 +62,7 @@ public:
     return *this;
   }
 
+  /// Move-assigns a value through the iterator, throwing if the end is exceeded.
   bounds_checked_iterator &operator=(typename C::value_type &&value) {
     if (first_ == last_)
       throw std::out_of_range("assigning outside container limits.");
@@ -68,6 +84,12 @@ public:
   }
 };
 
+/**
+ * @brief Convenience factory that creates a bounds-checked iterator.
+ * @tparam C the container type.
+ * @param container the container to iterate over.
+ * @return a bounds-checked iterator over the container.
+ */
 template <typename C>
 inline bounds_checked_iterator<C> bounds_checked(C &container) {
   return bounds_checked_iterator<C>(container);

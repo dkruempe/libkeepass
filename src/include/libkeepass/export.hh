@@ -17,6 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/** @file export.hh @brief Visibility/export macro for the shared library. */
+
 #pragma once
 
 // On Windows the public classes and functions of this shared library are
@@ -24,6 +26,15 @@
 // LIBKEEPASS_EXPORTS macro is defined automatically by CMake while building the
 // libkeepass target itself (via the libkeepass_EXPORTS define). On other
 // platforms visibility is default and the macro expands to nothing.
+
+/**
+ * @def LIBKEEPASS_API
+ * @brief Marks a class, function or variable as part of the public ABI.
+ *
+ * Expands to @c __declspec(dllexport) when building the library on Windows, to
+ * @c __declspec(dllimport) when consuming it on Windows, and to nothing on all
+ * other platforms.
+ */
 #if defined(_WIN32) && (defined(LIBKEEPASS_EXPORTS) || defined(libkeepass_EXPORTS))
 #define LIBKEEPASS_API __declspec(dllexport)
 #elif defined(_WIN32)
