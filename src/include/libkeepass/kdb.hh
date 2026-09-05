@@ -48,8 +48,7 @@ private:
    * @param level Output parameter receiving the group's hierarchy level.
    * @return A shared pointer to the read Group object.
    */
-  static std::shared_ptr<Group> ReadGroup(std::istream &src, uint32_t &id,
-                                   uint16_t &level);
+  static std::shared_ptr<Group> ReadGroup(std::istream& src, uint32_t& id, uint16_t& level);
 
   /// Writes a group (and its subgroups) to a KDB stream.
   /**
@@ -58,8 +57,8 @@ private:
    * @param group_id The id to assign to the group.
    * @param level The hierarchy level of the group.
    */
-  static void WriteGroup(std::ostream &dst, const std::shared_ptr<Group> &group,
-                  uint32_t group_id, uint16_t level);
+  static void WriteGroup(std::ostream& dst, const std::shared_ptr<Group>& group, uint32_t group_id,
+                         uint16_t level);
 
   /// Reads an entry from a KDB stream.
   /**
@@ -67,7 +66,7 @@ private:
    * @param group_id Output parameter receiving the id of the entry's group.
    * @return A shared pointer to the read Entry object.
    */
-  static std::shared_ptr<Entry> ReadEntry(std::istream &src, uint32_t &group_id);
+  static std::shared_ptr<Entry> ReadEntry(std::istream& src, uint32_t& group_id);
 
   /// Writes an entry to a KDB stream.
   /**
@@ -75,8 +74,7 @@ private:
    * @param entry The entry object to serialize.
    * @param group_id The id of the group containing the entry.
    */
-  static void WriteEntry(std::ostream &dst, const std::shared_ptr<Entry> &entry,
-                  uint32_t group_id);
+  static void WriteEntry(std::ostream& dst, const std::shared_ptr<Entry>& entry, uint32_t group_id);
 
 public:
   /// Imports a KDB database from a file path.
@@ -85,7 +83,7 @@ public:
    * @param key The key used to decrypt the database.
    * @return A unique pointer to the imported Database object.
    */
-  static std::unique_ptr<Database> Import(const std::string &path, const Key &key);
+  static std::unique_ptr<Database> Import(const std::string& path, const Key& key);
 
   /// Exports a database to a KDB file.
   /**
@@ -93,7 +91,7 @@ public:
    * @param db The database to export.
    * @param key The key used to encrypt the database.
    */
-  static void Export(const std::string &path, const Database &db, const Key &key);
+  static void Export(const std::string& path, const Database& db, const Key& key);
 };
 
 } // namespace keepass

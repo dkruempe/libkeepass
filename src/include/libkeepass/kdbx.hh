@@ -79,14 +79,14 @@ private:
    * @param uuid_str The UUID string of the group to look up.
    * @return Shared pointer to the group.
    */
-  std::shared_ptr<Group> GetGroup(const std::string &uuid_str);
+  std::shared_ptr<Group> GetGroup(const std::string& uuid_str);
 
   /// Parses a KDBX datetime string into a std::time_t value.
   /**
    * @param text The datetime string in KDBX format.
    * @return The parsed time value.
    */
-  std::time_t ParseDateTime(const char *text);
+  std::time_t ParseDateTime(const char* text);
 
   /// Converts a std::time_t value to a KDBX datetime string.
   /**
@@ -103,7 +103,7 @@ private:
    * @param key The key used to decrypt the database.
    * @return A unique pointer to the imported Database object.
    */
-  std::unique_ptr<Database> Import3(std::istream &src, const Key &key);
+  std::unique_ptr<Database> Import3(std::istream& src, const Key& key);
 
   /// Imports a KDBX 4 format database from a stream.
   /**
@@ -111,7 +111,7 @@ private:
    * @param key The key used to decrypt the database.
    * @return A unique pointer to the imported Database object.
    */
-  std::unique_ptr<Database> Import4(std::istream &src, const Key &key);
+  std::unique_ptr<Database> Import4(std::istream& src, const Key& key);
 
   /// Exports a database in KDBX 3 format to a stream.
   /**
@@ -119,7 +119,7 @@ private:
    * @param db The database to export.
    * @param key The key used to encrypt the database.
    */
-  void Export3(std::ostream &dst, const Database &db, const Key &key);
+  void Export3(std::ostream& dst, const Database& db, const Key& key);
 
   /// Exports a database in KDBX 4 format to a stream.
   /**
@@ -127,7 +127,7 @@ private:
    * @param db The database to export.
    * @param key The key used to encrypt the database.
    */
-  void Export4(std::ostream &dst, const Database &db, const Key &key);
+  void Export4(std::ostream& dst, const Database& db, const Key& key);
 
   /// Parses a protected string value from an XML node.
   /**
@@ -136,9 +136,8 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @return The decrypted protected string.
    */
-  static protect<std::string> ParseProtectedString(const pugi::xml_node &node,
-                                             const char *name,
-                                             RandomObfuscator &obfuscator);
+  static protect<std::string> ParseProtectedString(const pugi::xml_node& node, const char* name,
+                                                   RandomObfuscator& obfuscator);
 
   /// Writes a protected string value to an XML node.
   /**
@@ -146,9 +145,8 @@ private:
    * @param str The protected string to encrypt and write.
    * @param obfuscator The random stream obfuscator for encryption.
    */
-  static void WriteProtectedString(pugi::xml_node &node,
-                            const protect<std::string> &str,
-                            RandomObfuscator &obfuscator);
+  static void WriteProtectedString(pugi::xml_node& node, const protect<std::string>& str,
+                                   RandomObfuscator& obfuscator);
 
   /// Parses the metadata section from the KDBX XML tree.
   /**
@@ -156,8 +154,8 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @return A shared pointer to the parsed Metadata object.
    */
-  std::shared_ptr<Metadata> ParseMeta(const pugi::xml_node &meta_node,
-                                      RandomObfuscator &obfuscator);
+  std::shared_ptr<Metadata> ParseMeta(const pugi::xml_node& meta_node,
+                                      RandomObfuscator& obfuscator);
 
   /// Writes the metadata section to the KDBX XML tree.
   /**
@@ -165,7 +163,7 @@ private:
    * @param obfuscator The random stream obfuscator for encryption.
    * @param meta The metadata object to serialize.
    */
-  void WriteMeta(pugi::xml_node &meta_node, RandomObfuscator &obfuscator,
+  void WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
                  const std::shared_ptr<Metadata>& meta);
 
   /**
@@ -175,17 +173,17 @@ private:
    * @param [in] obfuscator Random stream obfuscator.
    * @return Pointer to entry object.
    */
-  std::shared_ptr<Entry> ParseEntry(const pugi::xml_node &entry_node,
-                                    std::array<uint8_t, 16> &entry_uuid,
-                                    RandomObfuscator &obfuscator);
+  std::shared_ptr<Entry> ParseEntry(const pugi::xml_node& entry_node,
+                                    std::array<uint8_t, 16>& entry_uuid,
+                                    RandomObfuscator& obfuscator);
   /// Writes an entry to an XML node.
   /**
    * @param entry_node The XML node to write the entry into.
    * @param obfuscator The random stream obfuscator for encryption.
    * @param entry The entry object to serialize.
    */
-  void WriteEntry(pugi::xml_node &entry_node, RandomObfuscator &obfuscator,
-                  const std::shared_ptr<Entry> &entry);
+  void WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscator,
+                  const std::shared_ptr<Entry>& entry);
 
   /// Parses a group from the XML tree.
   /**
@@ -193,8 +191,7 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @return A shared pointer to the parsed Group object.
    */
-  std::shared_ptr<Group> ParseGroup(const pugi::xml_node &group_node,
-                                    RandomObfuscator &obfuscator);
+  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node, RandomObfuscator& obfuscator);
 
   /// Writes a group to an XML node.
   /**
@@ -202,8 +199,8 @@ private:
    * @param obfuscator The random stream obfuscator for encryption.
    * @param group The group object to serialize.
    */
-  void WriteGroup(pugi::xml_node &group_node, RandomObfuscator &obfuscator,
-                  const std::shared_ptr<Group> &group);
+  void WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscator,
+                  const std::shared_ptr<Group>& group);
 
   /// Parses the full KDBX XML body from a stream.
   /**
@@ -211,9 +208,9 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @param db The database to populate with parsed data.
    */
-  void ParseXml(std::istream &src, RandomObfuscator &obfuscator, Database &db);
+  void ParseXml(std::istream& src, RandomObfuscator& obfuscator, Database& db);
 #ifdef DEBUG
-  void PrintXml(pugi::xml_document &doc);
+  void PrintXml(pugi::xml_document& doc);
 #endif
   /// Writes the full KDBX XML body to a stream.
   /**
@@ -221,8 +218,7 @@ private:
    * @param obfuscator The random stream obfuscator for encryption.
    * @param db The database to serialize.
    */
-  void WriteXml(std::ostream &dst, RandomObfuscator &obfuscator,
-                const Database &db);
+  void WriteXml(std::ostream& dst, RandomObfuscator& obfuscator, const Database& db);
 
 public:
   /// Imports a KDBX database from a file path.
@@ -231,7 +227,7 @@ public:
    * @param key The key used to decrypt the database.
    * @return A unique pointer to the imported Database object.
    */
-  std::unique_ptr<Database> Import(const std::string &path, const Key &key);
+  std::unique_ptr<Database> Import(const std::string& path, const Key& key);
 
   /// Exports a database to a KDBX file.
   /**
@@ -239,7 +235,7 @@ public:
    * @param db The database to export.
    * @param key The key used to encrypt the database.
    */
-  void Export(const std::string &path, const Database &db, const Key &key);
+  void Export(const std::string& path, const Database& db, const Key& key);
 
   /** Forces the exporter to produce a KDBX 4 format database. */
   void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }

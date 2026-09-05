@@ -52,26 +52,21 @@ std::string base64_encode(InputIterator first, InputIterator last) {
     auto c0 = static_cast<uint8_t>(*first++);
     if (first == last) {
       dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
-      dst.push_back(
-          kBase64[static_cast<std::string::size_type>(((c0 & 0x3) << 4))]);
+      dst.push_back(kBase64[static_cast<std::string::size_type>(((c0 & 0x3) << 4))]);
       dst.push_back('=');
       dst.push_back('=');
     } else {
       auto c1 = static_cast<uint8_t>(*first++);
       if (first == last) {
         dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
-        dst.push_back(kBase64[static_cast<std::string::size_type>(
-            ((c0 & 0x3) << 4) | (c1 >> 4))]);
-        dst.push_back(
-            kBase64[static_cast<std::string::size_type>(((c1 & 0xf) << 2))]);
+        dst.push_back(kBase64[static_cast<std::string::size_type>(((c0 & 0x3) << 4) | (c1 >> 4))]);
+        dst.push_back(kBase64[static_cast<std::string::size_type>(((c1 & 0xf) << 2))]);
         dst.push_back('=');
       } else {
         auto c2 = static_cast<uint8_t>(*first++);
         dst.push_back(kBase64[static_cast<std::string::size_type>(c0 >> 2)]);
-        dst.push_back(kBase64[static_cast<std::string::size_type>(
-            ((c0 & 0x3) << 4) | (c1 >> 4))]);
-        dst.push_back(kBase64[static_cast<std::string::size_type>(
-            ((c1 & 0xf) << 2) | (c2 >> 6))]);
+        dst.push_back(kBase64[static_cast<std::string::size_type>(((c0 & 0x3) << 4) | (c1 >> 4))]);
+        dst.push_back(kBase64[static_cast<std::string::size_type>(((c1 & 0xf) << 2) | (c2 >> 6))]);
         dst.push_back(kBase64[static_cast<std::string::size_type>(c2 & 0x3f)]);
       }
     }
@@ -90,14 +85,13 @@ std::string base64_encode(InputIterator first, InputIterator last) {
  * @throws FormatError if the input is not valid base64.
  */
 template <typename OutputIterator, typename Type>
-void base64_decode(const std::string &src, OutputIterator result) {
+void base64_decode(const std::string& src, OutputIterator result) {
   static const std::string kBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                      "abcdefghijklmnopqrstuvwxyz"
                                      "0123456789+/";
 
   std::string src_trimmed;
-  std::copy_if(src.begin(), src.end(),
-               std::back_inserter<std::string>(src_trimmed),
+  std::copy_if(src.begin(), src.end(), std::back_inserter<std::string>(src_trimmed),
                [](char c) { return !std::isspace(c, std::locale::classic()); });
 
   if (src_trimmed.size() % 4 != 0)
@@ -141,15 +135,14 @@ void base64_decode(const std::string &src, OutputIterator result) {
 }
 
 /// Convenience overload that encodes an entire @c std::string.
-inline std::string base64_encode(const std::string &src) {
+inline std::string base64_encode(const std::string& src) {
   return base64_encode(src.begin(), src.end());
 }
 
 /// Convenience overload that decodes a base64 string into a @c std::string.
-inline std::string base64_decode(const std::string &src) {
+inline std::string base64_decode(const std::string& src) {
   std::string dst;
-  base64_decode<std::back_insert_iterator<std::string>, char>(
-      src, std::back_inserter(dst));
+  base64_decode<std::back_insert_iterator<std::string>, char>(src, std::back_inserter(dst));
   return dst;
 }
 

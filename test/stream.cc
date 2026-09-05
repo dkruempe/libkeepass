@@ -22,9 +22,9 @@
 
 #include <gtest/gtest.h>
 
+#include "config.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/stream.hh"
-#include "config.hh"
 
 using namespace keepass;
 
@@ -45,11 +45,9 @@ bool FilesEqual(const std::string& path0, const std::string& path1) {
     return false;
 
   std::vector<char> data0, data1;
-  std::copy(std::istreambuf_iterator<char>(file0), 
-            std::istreambuf_iterator<char>(), 
+  std::copy(std::istreambuf_iterator<char>(file0), std::istreambuf_iterator<char>(),
             std::back_inserter(data0));
-  std::copy(std::istreambuf_iterator<char>(file1), 
-            std::istreambuf_iterator<char>(), 
+  std::copy(std::istreambuf_iterator<char>(file1), std::istreambuf_iterator<char>(),
             std::back_inserter(data1));
 
   return data0 == data1;
@@ -59,94 +57,89 @@ std::string GetFileAsText(const std::string& path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
-  return {std::istreambuf_iterator<char>(file),
-                     std::istreambuf_iterator<char>()};
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
-}   // namespace
+} // namespace
 
 TEST(StreamTest, ReadEmptyHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-0"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-0"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 0);
 }
 
 TEST(StreamTest, Read26BytesHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-26"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-26"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 26);
 }
 
 TEST(StreamTest, Read128BytesHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-128"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-128"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 128);
 }
 
 TEST(StreamTest, Read130BytesHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-130"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-130"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 130);
 }
 
 TEST(StreamTest, Read260BytesHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-260"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-260"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 260);
 }
 
 TEST(StreamTest, ReadBadHashedStream) {
-  std::ifstream file(GetTestPath("hashed_stream-260-bad"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("hashed_stream-260-bad"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   hashed_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  EXPECT_THROW({
-    std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                  std::istreambuf_iterator<char>());
-  }, IoError);
+  EXPECT_THROW(
+      {
+        std::string str =
+            std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+      },
+      IoError);
 }
 
 TEST(StreamTest, WriteEmptyHashedStream) {
@@ -193,9 +186,9 @@ TEST(StreamTest, Write128BytesHashedStream) {
 
   hashed_ostreambuf streambuf(file, 128);
   std::ostream stream(&streambuf);
-  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwx";
+  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwx";
   stream.flush();
   EXPECT_EQ(stream.good(), true);
   file.close();
@@ -213,9 +206,9 @@ TEST(StreamTest, Write130BytesHashedStream) {
 
   hashed_ostreambuf streambuf(file, 128);
   std::ostream stream(&streambuf);
-  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz";
+  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz";
   stream.flush();
   EXPECT_EQ(stream.good(), true);
   file.close();
@@ -233,11 +226,11 @@ TEST(StreamTest, Write260BytesHashedStream) {
 
   hashed_ostreambuf streambuf(file, 128);
   std::ostream stream(&streambuf);
-  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz" <<
-      "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz";
+  stream << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz"
+         << "abcdefghijklmnopqrstuvwxyz" << "abcdefghijklmnopqrstuvwxyz";
   stream.flush();
   EXPECT_EQ(stream.good(), true);
   file.close();
@@ -247,59 +240,55 @@ TEST(StreamTest, Write260BytesHashedStream) {
 }
 
 TEST(StreamTest, ReadEmptyGzipStream) {
-  std::ifstream file(GetTestPath("gzip_stream-0.gzip"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("gzip_stream-0.gzip"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   gzip_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 0);
 }
 
 TEST(StreamTest, Read127BytesGzipStream) {
-  std::ifstream file(GetTestPath("gzip_stream-127.gzip"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("gzip_stream-127.gzip"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   gzip_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 127);
   EXPECT_EQ(str, GetFileAsText(GetTestPath("gzip_stream-127")));
 }
 
 TEST(StreamTest, Read16384BytesGzipStream) {
-  std::ifstream file(GetTestPath("gzip_stream-16384.gzip"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("gzip_stream-16384.gzip"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   gzip_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 16384);
   EXPECT_EQ(str, GetFileAsText(GetTestPath("gzip_stream-16384")));
 }
 
 TEST(StreamTest, Read16511BytesGzipStream) {
-  std::ifstream file(GetTestPath("gzip_stream-16511.gzip"),
-                     std::ios::in | std::ios::binary);
+  std::ifstream file(GetTestPath("gzip_stream-16511.gzip"), std::ios::in | std::ios::binary);
   EXPECT_EQ(file.is_open(), true);
 
   gzip_istreambuf streambuf(file);
   std::istream stream(&streambuf);
 
-  std::string str = std::string(std::istreambuf_iterator<char>(stream),
-                                std::istreambuf_iterator<char>());
+  std::string str =
+      std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   EXPECT_EQ(stream.good(), true);
   EXPECT_EQ(str.size(), 16511);
   EXPECT_EQ(str, GetFileAsText(GetTestPath("gzip_stream-16511")));
@@ -320,8 +309,7 @@ TEST(StreamTest, WriteEmptyGzipStream) {
 
     gzip_ostreambuf ostreambuf(arc);
     std::ostream ostream(&ostreambuf);
-    std::copy(std::istreambuf_iterator<char>(src),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(ostream));
     ostream.flush();
     EXPECT_EQ(ostream.good(), true);
@@ -339,8 +327,7 @@ TEST(StreamTest, WriteEmptyGzipStream) {
 
     gzip_istreambuf istreambuf(arc);
     std::istream istream(&istreambuf);
-    std::copy(std::istreambuf_iterator<char>(istream),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(tst));
     tst.flush();
     EXPECT_EQ(istream.good(), true);
@@ -368,8 +355,7 @@ TEST(StreamTest, Write127BytesGzipStream) {
 
     gzip_ostreambuf ostreambuf(arc);
     std::ostream ostream(&ostreambuf);
-    std::copy(std::istreambuf_iterator<char>(src),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(ostream));
     ostream.flush();
     EXPECT_EQ(ostream.good(), true);
@@ -387,8 +373,7 @@ TEST(StreamTest, Write127BytesGzipStream) {
 
     gzip_istreambuf istreambuf(arc);
     std::istream istream(&istreambuf);
-    std::copy(std::istreambuf_iterator<char>(istream),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(tst));
     tst.flush();
     EXPECT_EQ(istream.good(), true);
@@ -416,8 +401,7 @@ TEST(StreamTest, Write16384BytesGzipStream) {
 
     gzip_ostreambuf ostreambuf(arc);
     std::ostream ostream(&ostreambuf);
-    std::copy(std::istreambuf_iterator<char>(src),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(ostream));
     ostream.flush();
     EXPECT_EQ(ostream.good(), true);
@@ -435,8 +419,7 @@ TEST(StreamTest, Write16384BytesGzipStream) {
 
     gzip_istreambuf istreambuf(arc);
     std::istream istream(&istreambuf);
-    std::copy(std::istreambuf_iterator<char>(istream),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(tst));
     tst.flush();
     EXPECT_EQ(istream.good(), true);
@@ -464,8 +447,7 @@ TEST(StreamTest, Write16511BytesGzipStream) {
 
     gzip_ostreambuf ostreambuf(arc);
     std::ostream ostream(&ostreambuf);
-    std::copy(std::istreambuf_iterator<char>(src),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(ostream));
     ostream.flush();
     EXPECT_EQ(ostream.good(), true);
@@ -483,8 +465,7 @@ TEST(StreamTest, Write16511BytesGzipStream) {
 
     gzip_istreambuf istreambuf(arc);
     std::istream istream(&istreambuf);
-    std::copy(std::istreambuf_iterator<char>(istream),
-              std::istreambuf_iterator<char>(),
+    std::copy(std::istreambuf_iterator<char>(istream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(tst));
     tst.flush();
     EXPECT_EQ(istream.good(), true);

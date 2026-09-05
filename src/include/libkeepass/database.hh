@@ -95,45 +95,39 @@ public:
   }
 
   /// Returns the master seed.
-  const std::vector<uint8_t> &master_seed() const { return master_seed_; }
+  const std::vector<uint8_t>& master_seed() const { return master_seed_; }
 
   /// Sets the master seed from a fixed 16-byte array.
-  void set_master_seed(const std::array<uint8_t, 16> &master_seed) {
+  void set_master_seed(const std::array<uint8_t, 16>& master_seed) {
     master_seed_.resize(16);
     std::copy(master_seed.begin(), master_seed.end(), master_seed_.begin());
   }
 
   /// Sets the master seed from an arbitrary byte vector.
-  void set_master_seed(const std::vector<uint8_t> &master_seed) {
-    master_seed_ = master_seed;
-  }
+  void set_master_seed(const std::vector<uint8_t>& master_seed) { master_seed_ = master_seed; }
 
   /// Returns the initialization vector.
-  const std::array<uint8_t, 16> &init_vector() const { return init_vector_; }
+  const std::array<uint8_t, 16>& init_vector() const { return init_vector_; }
 
   /// Sets the initialization vector.
-  void set_init_vector(const std::array<uint8_t, 16> &init_vector) {
-    init_vector_ = init_vector;
-  }
+  void set_init_vector(const std::array<uint8_t, 16>& init_vector) { init_vector_ = init_vector; }
 
   /// Returns the transform seed used for key derivation.
-  const std::array<uint8_t, 32> &transform_seed() const {
-    return transform_seed_;
-  }
+  const std::array<uint8_t, 32>& transform_seed() const { return transform_seed_; }
 
   /// Sets the transform seed, invalidating any cached transformed key.
-  void set_transform_seed(const std::array<uint8_t, 32> &transform_seed) {
+  void set_transform_seed(const std::array<uint8_t, 32>& transform_seed) {
     transform_seed_ = transform_seed;
     clear_transformed_key();
   }
 
   /// Returns the inner random stream key.
-  const std::array<uint8_t, 32> &inner_random_stream_key() const {
+  const std::array<uint8_t, 32>& inner_random_stream_key() const {
     return inner_random_stream_key_;
   }
 
   /// Sets the inner random stream key.
-  void set_inner_random_stream_key(const std::array<uint8_t, 32> &key) {
+  void set_inner_random_stream_key(const std::array<uint8_t, 32>& key) {
     inner_random_stream_key_ = key;
   }
 
@@ -174,10 +168,10 @@ public:
   }
 
   /// Returns the Argon2 salt.
-  const std::vector<uint8_t> &argon2_salt() const { return argon2_salt_; }
+  const std::vector<uint8_t>& argon2_salt() const { return argon2_salt_; }
 
   /// Sets the Argon2 salt, invalidating the cached key.
-  void set_argon2_salt(const std::vector<uint8_t> &salt) {
+  void set_argon2_salt(const std::vector<uint8_t>& salt) {
     argon2_salt_ = salt;
     clear_transformed_key();
   }
@@ -198,15 +192,13 @@ public:
   void set_compress(bool compress) { compress_ = compress; }
 
   /// Returns the transformed master key (if present).
-  const std::array<uint8_t, 32> &transformed_key() const {
-    return transformed_key_;
-  }
+  const std::array<uint8_t, 32>& transformed_key() const { return transformed_key_; }
 
   /// Returns whether a transformed key has been computed.
   bool has_transformed_key() const { return has_transformed_key_; }
 
   /// Sets the transformed master key and marks it as present.
-  void set_transformed_key(const std::array<uint8_t, 32> &key) {
+  void set_transformed_key(const std::array<uint8_t, 32>& key) {
     transformed_key_ = key;
     has_transformed_key_ = true;
   }

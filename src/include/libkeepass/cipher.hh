@@ -41,8 +41,8 @@ template <std::size_t N> class Cipher;
  * @param cipher The block cipher to use for encryption.
  * @return The 32-byte ciphertext block.
  */
-LIBKEEPASS_API std::array<uint8_t, 32> encrypt_ecb(
-    const std::array<uint8_t, 32> &src, const Cipher<16> &cipher);
+LIBKEEPASS_API std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32>& src,
+                                                   const Cipher<16>& cipher);
 
 /**
  * @brief Decrypts a 32-byte block using ECB mode with the given cipher.
@@ -51,8 +51,8 @@ LIBKEEPASS_API std::array<uint8_t, 32> encrypt_ecb(
  * @param cipher The block cipher to use for decryption.
  * @return The 32-byte plaintext block.
  */
-LIBKEEPASS_API std::array<uint8_t, 32> decrypt_ecb(
-    const std::array<uint8_t, 32> &src, const Cipher<16> &cipher);
+LIBKEEPASS_API std::array<uint8_t, 32> decrypt_ecb(const std::array<uint8_t, 32>& src,
+                                                   const Cipher<16>& cipher);
 
 /**
  * @brief Encrypts a stream using CBC mode with PKCS #7 padding.
@@ -67,8 +67,7 @@ LIBKEEPASS_API std::array<uint8_t, 32> decrypt_ecb(
  * @throws IoError If an I/O error occurs.
  * @throws InternalError If an internal error occurs.
  */
-LIBKEEPASS_API void encrypt_cbc(std::istream &src, std::ostream &dst,
-                                const Cipher<16> &cipher);
+LIBKEEPASS_API void encrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher);
 
 /**
  * @brief Decrypts a stream using CBC mode with PKCS #7 padding removal.
@@ -82,8 +81,7 @@ LIBKEEPASS_API void encrypt_cbc(std::istream &src, std::ostream &dst,
  * @param cipher The block cipher used for each block decryption.
  * @throws IoError If decryption fails, padding is invalid, or an I/O error occurs.
  */
-LIBKEEPASS_API void decrypt_cbc(std::istream &src, std::ostream &dst,
-                                const Cipher<16> &cipher);
+LIBKEEPASS_API void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher);
 
 /**
  * @brief Abstract base class for 16-byte block ciphers.
@@ -98,7 +96,7 @@ public:
    * @brief Returns the initialization vector used by this cipher instance.
    * @return A reference to the 16-byte initialization vector.
    */
-  virtual const std::array<uint8_t, N> &InitializationVector() const = 0;
+  virtual const std::array<uint8_t, N>& InitializationVector() const = 0;
 
   /**
    * @brief Decrypts a single block.
@@ -106,8 +104,7 @@ public:
    * @param src The ciphertext block to decrypt.
    * @param dst The resulting plaintext block.
    */
-  virtual void Decrypt(const std::array<uint8_t, N> &src,
-                       std::array<uint8_t, N> &dst) const = 0;
+  virtual void Decrypt(const std::array<uint8_t, N>& src, std::array<uint8_t, N>& dst) const = 0;
 
   /**
    * @brief Encrypts a single block.
@@ -115,8 +112,7 @@ public:
    * @param src The plaintext block to encrypt.
    * @param dst The resulting ciphertext block.
    */
-  virtual void Encrypt(const std::array<uint8_t, N> &src,
-                       std::array<uint8_t, N> &dst) const = 0;
+  virtual void Encrypt(const std::array<uint8_t, N>& src, std::array<uint8_t, N>& dst) const = 0;
 };
 
 /**
@@ -125,8 +121,8 @@ public:
 class LIBKEEPASS_API AesCipher final : public Cipher<16> {
 private:
   const std::array<uint8_t, 16> init_vec_;
-  EVP_CIPHER_CTX *ctx_dec_ = nullptr;
-  EVP_CIPHER_CTX *ctx_enc_ = nullptr;
+  EVP_CIPHER_CTX* ctx_dec_ = nullptr;
+  EVP_CIPHER_CTX* ctx_enc_ = nullptr;
 
 public:
   /**
@@ -134,8 +130,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit AesCipher(const std::array<uint8_t, 32> &key)
-      : AesCipher(key, {0}) {}
+  explicit AesCipher(const std::array<uint8_t, 32>& key) : AesCipher(key, {0}) {}
 
   /**
    * @brief Constructs an AES cipher with a given initialization vector.
@@ -144,16 +139,13 @@ public:
    * @param init_vec The 16-byte initialization vector.
    * @throws InternalError If the OpenSSL cipher context cannot be created or initialized.
    */
-  AesCipher(const std::array<uint8_t, 32> &key,
-            const std::array<uint8_t, 16> &init_vec);
+  AesCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 16>& init_vec);
 
   /// Destroys the cipher and frees the OpenSSL contexts.
   ~AesCipher();
 
   /// @brief Returns the initialization vector.
-  const std::array<uint8_t, 16> &InitializationVector() const override {
-    return init_vec_;
-  }
+  const std::array<uint8_t, 16>& InitializationVector() const override { return init_vec_; }
 
   /**
    * @brief Decrypts a single 16-byte block using AES-256-ECB.
@@ -161,8 +153,7 @@ public:
    * @param src The ciphertext block to decrypt.
    * @param dst The resulting plaintext block.
    */
-  void Decrypt(const std::array<uint8_t, 16> &src,
-               std::array<uint8_t, 16> &dst) const override;
+  void Decrypt(const std::array<uint8_t, 16>& src, std::array<uint8_t, 16>& dst) const override;
 
   /**
    * @brief Encrypts a single 16-byte block using AES-256-ECB.
@@ -170,8 +161,7 @@ public:
    * @param src The plaintext block to encrypt.
    * @param dst The resulting ciphertext block.
    */
-  void Encrypt(const std::array<uint8_t, 16> &src,
-               std::array<uint8_t, 16> &dst) const override;
+  void Encrypt(const std::array<uint8_t, 16>& src, std::array<uint8_t, 16>& dst) const override;
 };
 
 /**
@@ -214,10 +204,10 @@ private:
    * @param k32 Pointer to four 32-bit key words.
    * @return The 32-bit output of the F function.
    */
-  static uint32_t F32(uint32_t x, const uint32_t *k32);
+  static uint32_t F32(uint32_t x, const uint32_t* k32);
 
   /// Initializes the Twofish key schedule from the given 256-bit key.
-  void InitializeKey(const std::array<uint8_t, 32> &key);
+  void InitializeKey(const std::array<uint8_t, 32>& key);
 
 public:
   /**
@@ -225,8 +215,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit TwofishCipher(const std::array<uint8_t, 32> &key)
-      : TwofishCipher(key, {0}) {}
+  explicit TwofishCipher(const std::array<uint8_t, 32>& key) : TwofishCipher(key, {0}) {}
 
   /**
    * @brief Constructs a Twofish cipher with a given initialization vector.
@@ -234,13 +223,10 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 16-byte initialization vector.
    */
-  TwofishCipher(const std::array<uint8_t, 32> &key,
-                const std::array<uint8_t, 16> &init_vec);
+  TwofishCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 16>& init_vec);
 
   /// @brief Returns the initialization vector.
-  const std::array<uint8_t, 16> &InitializationVector() const override {
-    return init_vec_;
-  }
+  const std::array<uint8_t, 16>& InitializationVector() const override { return init_vec_; }
 
   /**
    * @brief Decrypts a single 16-byte block using Twofish-256.
@@ -248,8 +234,7 @@ public:
    * @param src The ciphertext block to decrypt.
    * @param dst The resulting plaintext block.
    */
-  void Decrypt(const std::array<uint8_t, 16> &src,
-               std::array<uint8_t, 16> &dst) const override;
+  void Decrypt(const std::array<uint8_t, 16>& src, std::array<uint8_t, 16>& dst) const override;
 
   /**
    * @brief Encrypts a single 16-byte block using Twofish-256.
@@ -257,8 +242,7 @@ public:
    * @param src The plaintext block to encrypt.
    * @param dst The resulting ciphertext block.
    */
-  void Encrypt(const std::array<uint8_t, 16> &src,
-               std::array<uint8_t, 16> &dst) const override;
+  void Encrypt(const std::array<uint8_t, 16>& src, std::array<uint8_t, 16>& dst) const override;
 };
 
 /**
@@ -278,8 +262,7 @@ private:
    * @param input The 16-word cipher state.
    * @return A 64-byte array of keystream bytes.
    */
-  static std::array<uint8_t, 64>
-  WordToByte(const std::array<uint32_t, 16> &input);
+  static std::array<uint8_t, 64> WordToByte(const std::array<uint32_t, 16>& input);
 
 public:
   /**
@@ -287,8 +270,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit Salsa20Cipher(const std::array<uint8_t, 32> &key)
-      : Salsa20Cipher(key, {0}) {}
+  explicit Salsa20Cipher(const std::array<uint8_t, 32>& key) : Salsa20Cipher(key, {0}) {}
 
   /**
    * @brief Constructs a Salsa20 cipher with a given 64-bit nonce.
@@ -296,8 +278,7 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 8-byte nonce (initialization vector).
    */
-  Salsa20Cipher(const std::array<uint8_t, 32> &key,
-                const std::array<uint8_t, 8> &init_vec);
+  Salsa20Cipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 8>& init_vec);
 
   /**
    * @brief Encrypts or decrypts a single 64-byte block.
@@ -308,8 +289,7 @@ public:
    * @param src The 64-byte input block (plaintext or ciphertext).
    * @param dst The 64-byte output block (ciphertext or plaintext).
    */
-  void Process(const std::array<uint8_t, 64> &src,
-               std::array<uint8_t, 64> &dst);
+  void Process(const std::array<uint8_t, 64>& src, std::array<uint8_t, 64>& dst);
 };
 
 /**
@@ -329,8 +309,7 @@ private:
    * @param state The 16-word cipher state.
    * @return A 64-byte array of keystream bytes.
    */
-  static std::array<uint8_t, 64>
-  BlockFunction(const std::array<uint32_t, 16> &state);
+  static std::array<uint8_t, 64> BlockFunction(const std::array<uint32_t, 16>& state);
 
 public:
   /**
@@ -339,8 +318,7 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 12-byte nonce (initialization vector).
    */
-  ChaCha20Cipher(const std::array<uint8_t, 32> &key,
-                 const std::array<uint8_t, 12> &init_vec);
+  ChaCha20Cipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 12>& init_vec);
 
   /**
    * @brief Encrypts or decrypts a single 64-byte block.
@@ -351,8 +329,7 @@ public:
    * @param src The 64-byte input block (plaintext or ciphertext).
    * @param dst The 64-byte output block (ciphertext or plaintext).
    */
-  void Process(const std::array<uint8_t, 64> &src,
-               std::array<uint8_t, 64> &dst);
+  void Process(const std::array<uint8_t, 64>& src, std::array<uint8_t, 64>& dst);
 };
 
 } // namespace keepass

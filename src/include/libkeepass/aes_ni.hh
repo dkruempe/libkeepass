@@ -32,8 +32,7 @@
 // MSVC is excluded: aes_ni.cc relies on GCC/Clang-only helpers (<cpuid.h>,
 // __get_cpuid) and the -maes ISA flag, so on MSVC the portable EVP path is
 // used. OpenSSL uses AES-NI internally, so the fallback is still fast.
-#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
-     defined(_M_IX86)) &&                                                \
+#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)) &&           \
     !defined(_MSC_VER)
 #define LIBKEEPASS_AES_NI 1
 #else
@@ -62,10 +61,8 @@ LIBKEEPASS_API bool aes_ni_supported();
  * @param rounds iteration count (KDBX transform rounds).
  * @param out  32-byte buffer receiving the encrypted result.
  */
-void LIBKEEPASS_API aes_ni_transform_aes_kdf(const uint8_t seed[32],
-                                             const uint8_t in[32],
-                                             uint64_t rounds,
-                                             uint8_t out[32]);
+void LIBKEEPASS_API aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32],
+                                             uint64_t rounds, uint8_t out[32]);
 
 #endif // LIBKEEPASS_AES_NI
 

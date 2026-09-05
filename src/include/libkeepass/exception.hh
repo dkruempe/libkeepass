@@ -32,7 +32,7 @@ class LIBKEEPASS_API PasswordError final : public std::exception {
 public:
   explicit PasswordError() = default;
 
-  const char *what() const noexcept override { return "Invalid password."; }
+  const char* what() const noexcept override { return "Invalid password."; }
 };
 
 /**
@@ -45,7 +45,7 @@ private:
 public:
   explicit FormatError(std::string msg) : msg_(std::move(msg)) {}
 
-  const char *what() const noexcept override { return msg_.c_str(); }
+  const char* what() const noexcept override { return msg_.c_str(); }
 };
 
 /**
@@ -58,7 +58,7 @@ private:
 public:
   explicit InternalError(std::string msg) : msg_(std::move(msg)) {}
 
-  const char *what() const noexcept override { return msg_.c_str(); }
+  const char* what() const noexcept override { return msg_.c_str(); }
 };
 
 /**
@@ -71,7 +71,7 @@ private:
 public:
   explicit IoError(std::string msg) : msg_(std::move(msg)) {}
 
-  const char *what() const noexcept override { return msg_.c_str(); }
+  const char* what() const noexcept override { return msg_.c_str(); }
 };
 
 /**

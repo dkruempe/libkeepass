@@ -44,24 +44,21 @@ TEST(Base64Test, TwoCharacters) {
 
 TEST(Base64Test, NoPadding) {
   std::string txt = "Lorem ipsum dolor sit amet, consectetur adipi";
-  std::string b64 =
-      "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBp";
+  std::string b64 = "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBp";
   EXPECT_EQ(base64_encode(txt), b64);
   EXPECT_EQ(base64_decode(b64), txt);
 }
 
 TEST(Base64Test, SinglePadding) {
   std::string txt = "Lorem ipsum dolor sit amet, consectetur adip";
-  std::string b64 =
-      "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXA=";
+  std::string b64 = "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXA=";
   EXPECT_EQ(base64_encode(txt), b64);
   EXPECT_EQ(base64_decode(b64), txt);
 }
 
 TEST(Base64Test, DoublePadding) {
   std::string txt = "Lorem ipsum dolor sit amet, consectetur adipis";
-  std::string b64 =
-      "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpcw==";
+  std::string b64 = "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpcw==";
   EXPECT_EQ(base64_encode(txt), b64);
   EXPECT_EQ(base64_decode(b64), txt);
 }

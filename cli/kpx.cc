@@ -37,7 +37,7 @@
 
 namespace {
 
-const char *kVersion = "0.2.0";
+const char* kVersion = "0.2.0";
 
 struct Options {
   std::string input;
@@ -52,7 +52,7 @@ struct Options {
   bool show_version = false;
 };
 
-void PrintUsage(const char *prog, std::ostream &os) {
+void PrintUsage(const char* prog, std::ostream& os) {
   os << "Usage: " << prog << " [options] <database>\n"
      << "\n"
      << "Reads a KeePass database (KDB or KDBX) and either prints its entries\n"
@@ -71,8 +71,8 @@ void PrintUsage(const char *prog, std::ostream &os) {
      << "      --version         print version and exit\n";
 }
 
-bool NextValue(int argc, const char *argv[], int &i, const std::string &name,
-               bool has_value, const std::string &value, std::string &out) {
+bool NextValue(int argc, const char* argv[], int& i, const std::string& name, bool has_value,
+               const std::string& value, std::string& out) {
   if (has_value) {
     out = value;
     return true;
@@ -85,7 +85,7 @@ bool NextValue(int argc, const char *argv[], int &i, const std::string &name,
   return true;
 }
 
-std::string Lower(const std::string &s) {
+std::string Lower(const std::string& s) {
   std::string lower;
   lower.reserve(s.size());
   for (std::size_t i = 0; i < s.size(); ++i)
@@ -93,12 +93,12 @@ std::string Lower(const std::string &s) {
   return lower;
 }
 
-bool IsKdbPath(const std::string &path) {
+bool IsKdbPath(const std::string& path) {
   const std::string ext = Lower(path.substr(path.rfind('.') + 1));
   return ext == "kdb";
 }
 
-bool ParseArgs(int argc, const char *argv[], Options &opt) {
+bool ParseArgs(int argc, const char* argv[], Options& opt) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
 
@@ -236,11 +236,11 @@ bool ParseArgs(int argc, const char *argv[], Options &opt) {
   return true;
 }
 
-std::string ResolvePassword(const Options &opt) {
+std::string ResolvePassword(const Options& opt) {
   if (!opt.password.empty())
     return opt.password;
 
-  const char *env = std::getenv("KEEPASS_PASSWORD");
+  const char* env = std::getenv("KEEPASS_PASSWORD");
   if (env != nullptr && *env != '\0')
     return env;
 
@@ -252,8 +252,8 @@ std::string ResolvePassword(const Options &opt) {
   return std::string();
 }
 
-std::unique_ptr<keepass::Database> ImportDatabase(const std::string &path,
-                                                  const keepass::Key &key) {
+std::unique_ptr<keepass::Database> ImportDatabase(const std::string& path,
+                                                  const keepass::Key& key) {
   if (IsKdbPath(path))
     return keepass::KdbFile::Import(path, key);
 
@@ -261,8 +261,7 @@ std::unique_ptr<keepass::Database> ImportDatabase(const std::string &path,
   return file.Import(path, key);
 }
 
-void ExportDatabase(const std::string &path, const keepass::Database &db,
-                    const keepass::Key &key) {
+void ExportDatabase(const std::string& path, const keepass::Database& db, const keepass::Key& key) {
   if (IsKdbPath(path)) {
     keepass::KdbFile::Export(path, db, key);
     return;
@@ -272,8 +271,8 @@ void ExportDatabase(const std::string &path, const keepass::Database &db,
   file.Export(path, db, key);
 }
 
-void PrintTextEntry(std::ostream &os, const std::shared_ptr<keepass::Entry> &entry,
-                    const std::string &indent, bool with_passwords) {
+void PrintTextEntry(std::ostream& os, const std::shared_ptr<keepass::Entry>& entry,
+                    const std::string& indent, bool with_passwords) {
   os << indent << "- " << *entry->title();
   if (!entry->username()->empty())
     os << " (" << *entry->username() << ")";
@@ -289,37 +288,35 @@ void PrintTextEntry(std::ostream &os, const std::shared_ptr<keepass::Entry> &ent
   }
 }
 
-void PrintTextGroup(std::ostream &os, const std::shared_ptr<keepass::Group> &group,
-                    const std::string &indent, bool with_passwords) {
+void PrintTextGroup(std::ostream& os, const std::shared_ptr<keepass::Group>& group,
+                    const std::string& indent, bool with_passwords) {
   os << indent << group->name() << "/\n";
 
   const std::string child_indent = indent + "    ";
-  for (const auto &entry : group->Entries()) {
+  for (const auto& entry : group->Entries()) {
     if (entry->IsMetaEntry())
       continue;
     PrintTextEntry(os, entry, child_indent, with_passwords);
   }
-  for (const auto &child : group->Groups())
+  for (const auto& child : group->Groups())
     PrintTextGroup(os, child, child_indent, with_passwords);
 }
 
-void PrintText(std::ostream &os, const std::shared_ptr<keepass::Group> &root,
-               bool with_passwords) {
+void PrintText(std::ostream& os, const std::shared_ptr<keepass::Group>& root, bool with_passwords) {
   if (!root->name().empty())
     os << root->name() << "/\n";
 
-  for (const auto &entry : root->Entries()) {
+  for (const auto& entry : root->Entries()) {
     if (entry->IsMetaEntry())
       continue;
     PrintTextEntry(os, entry, root->name().empty() ? "" : "    ", with_passwords);
   }
-  for (const auto &group : root->Groups())
+  for (const auto& group : root->Groups())
     PrintTextGroup(os, group, root->name().empty() ? "" : "    ", with_passwords);
 }
 
-std::string CsvField(const std::string &value) {
-  if (value.find(',') == std::string::npos &&
-      value.find('"') == std::string::npos &&
+std::string CsvField(const std::string& value) {
+  if (value.find(',') == std::string::npos && value.find('"') == std::string::npos &&
       value.find('\n') == std::string::npos)
     return value;
 
@@ -335,8 +332,8 @@ std::string CsvField(const std::string &value) {
   return escaped;
 }
 
-void PrintCsvGroup(std::ostream &os, const std::shared_ptr<keepass::Group> &group,
-                   const std::string &path, bool with_passwords) {
+void PrintCsvGroup(std::ostream& os, const std::shared_ptr<keepass::Group>& group,
+                   const std::string& path, bool with_passwords) {
   std::string group_path = path;
   if (!group->name().empty()) {
     if (!group_path.empty())
@@ -344,28 +341,25 @@ void PrintCsvGroup(std::ostream &os, const std::shared_ptr<keepass::Group> &grou
     group_path += group->name();
   }
 
-  for (const auto &entry : group->Entries()) {
+  for (const auto& entry : group->Entries()) {
     if (entry->IsMetaEntry())
       continue;
 
-    os << CsvField(group_path) << ","
-       << CsvField(*entry->title()) << ","
+    os << CsvField(group_path) << "," << CsvField(*entry->title()) << ","
        << CsvField(*entry->username()) << ","
        << (with_passwords ? CsvField(*entry->password()) : std::string()) << ","
-       << CsvField(*entry->url()) << ","
-       << CsvField(*entry->notes()) << "\n";
+       << CsvField(*entry->url()) << "," << CsvField(*entry->notes()) << "\n";
   }
-  for (const auto &child : group->Groups())
+  for (const auto& child : group->Groups())
     PrintCsvGroup(os, child, group_path, with_passwords);
 }
 
-void PrintCsv(std::ostream &os, const std::shared_ptr<keepass::Group> &root,
-              bool with_passwords) {
+void PrintCsv(std::ostream& os, const std::shared_ptr<keepass::Group>& root, bool with_passwords) {
   os << "Group,Title,Username,Password,Url,Notes\n";
   PrintCsvGroup(os, root, std::string(), with_passwords);
 }
 
-bool OpenOutput(const Options &opt, std::ofstream &file, std::ostream *&out) {
+bool OpenOutput(const Options& opt, std::ofstream& file, std::ostream*& out) {
   if (opt.output.empty()) {
     out = &std::cout;
     return true;
@@ -382,7 +376,7 @@ bool OpenOutput(const Options &opt, std::ofstream &file, std::ostream *&out) {
 
 } // namespace
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
   Options opt;
   if (!ParseArgs(argc, argv, opt))
     return 1;
@@ -403,8 +397,7 @@ int main(int argc, const char *argv[]) {
   }
 
   if (opt.format != "text" && opt.format != "json" && opt.format != "csv") {
-    std::cerr << "error: unknown format '" << opt.format
-              << "' (expected text, json or csv)\n";
+    std::cerr << "error: unknown format '" << opt.format << "' (expected text, json or csv)\n";
     return 1;
   }
 
@@ -433,7 +426,7 @@ int main(int argc, const char *argv[]) {
     }
 
     std::ofstream file;
-    std::ostream *out = nullptr;
+    std::ostream* out = nullptr;
     if (!OpenOutput(opt, file, out))
       return 1;
 
@@ -444,7 +437,7 @@ int main(int argc, const char *argv[]) {
     } else {
       PrintText(*out, db->root(), opt.with_passwords);
     }
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << "\n";
     return 1;
   }

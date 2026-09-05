@@ -24,27 +24,22 @@
 namespace keepass {
 
 namespace {
-constexpr std::array<uint8_t, 8> kSalsa20Iv = {
-    0xe8, 0x30, 0x09, 0x4b, 0x97, 0x20, 0x5d, 0x2a};
+constexpr std::array<uint8_t, 8> kSalsa20Iv = {0xe8, 0x30, 0x09, 0x4b, 0x97, 0x20, 0x5d, 0x2a};
 } // namespace
 
-RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32> &key,
-                                   const std::array<uint8_t, 8> &init_vec)
+RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32>& key,
+                                   const std::array<uint8_t, 8>& init_vec)
     : salsa_cipher_(key, init_vec), chacha_cipher_({0}, {0}) {}
 
-RandomObfuscator::RandomObfuscator(
-    Type type, const std::array<uint8_t, 32> &stream_key)
-    : RandomObfuscator(type,
-                       std::vector<uint8_t>(stream_key.begin(),
-                                            stream_key.end())) {}
+RandomObfuscator::RandomObfuscator(Type type, const std::array<uint8_t, 32>& stream_key)
+    : RandomObfuscator(type, std::vector<uint8_t>(stream_key.begin(), stream_key.end())) {}
 
-RandomObfuscator::RandomObfuscator(Type type,
-                                   const std::vector<uint8_t> &stream_key)
+RandomObfuscator::RandomObfuscator(Type type, const std::vector<uint8_t>& stream_key)
     : type_(type), salsa_cipher_({0}, {0}), chacha_cipher_({0}, {0}) {
   if (type_ == Type::kChaCha20) {
     std::array<uint8_t, 64> key_iv{};
 
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
     EVP_DigestUpdate(mdctx, stream_key.data(), stream_key.size());
     unsigned int out_len = 0;
@@ -61,7 +56,7 @@ RandomObfuscator::RandomObfuscator(Type type,
   } else {
     std::array<uint8_t, 32> key{};
 
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
     EVP_DigestUpdate(mdctx, stream_key.data(), stream_key.size());
     unsigned int out_len = 0;
@@ -85,8 +80,7 @@ void RandomObfuscator::FillBuffer() {
   buffer_pos_ = 0;
 }
 
-std::vector<uint8_t>
-RandomObfuscator::Process(const std::vector<uint8_t> &data) {
+std::vector<uint8_t> RandomObfuscator::Process(const std::vector<uint8_t>& data) {
   std::vector<uint8_t> obfuscated_data;
   obfuscated_data.resize(data.size());
 
@@ -100,7 +94,7 @@ RandomObfuscator::Process(const std::vector<uint8_t> &data) {
   return obfuscated_data;
 }
 
-std::string RandomObfuscator::Process(const std::string &data) {
+std::string RandomObfuscator::Process(const std::string& data) {
   std::string obfuscated_data;
   obfuscated_data.resize(data.size());
 

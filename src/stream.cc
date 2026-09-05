@@ -39,7 +39,7 @@ namespace keepass {
 std::array<uint8_t, 32> hashed_basic_streambuf::GetBlockHash() const {
   std::array<uint8_t, 32> block_hash{};
 
-  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx, block_.data(), block_.size());
   unsigned int out_len = 0;
@@ -54,7 +54,7 @@ int hashed_istreambuf::underflow() {
 
   if (gptr() == egptr()) {
     BlockHeader header;
-    src_.read(reinterpret_cast<char *>(&header), sizeof(BlockHeader));
+    src_.read(reinterpret_cast<char*>(&header), sizeof(BlockHeader));
 
     if (header.block_index != block_index_)
       throw IoError("Block index mismatch.");
@@ -93,7 +93,7 @@ bool hashed_ostreambuf::FlushBlock() {
   header.block_hash = block_.empty() ? kEmptyHash : GetBlockHash();
   header.block_size = static_cast<uint32_t>(block_.size());
 
-  dst_.write(reinterpret_cast<const char *>(&header), sizeof(BlockHeader));
+  dst_.write(reinterpret_cast<const char*>(&header), sizeof(BlockHeader));
   dst_.write(block_.data(), static_cast<std::streamsize>(block_.size()));
   if (!dst_.good())
     return false;
@@ -134,7 +134,7 @@ int hashed_ostreambuf::sync() {
 std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
   std::array<uint8_t, 64> hmac_key{};
 
-  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
@@ -154,12 +154,12 @@ std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
 int hmac_istreambuf::underflow() {
   if (gptr() == egptr()) {
     std::array<uint8_t, 32> block_hmac{};
-    src_.read(reinterpret_cast<char *>(block_hmac.data()), block_hmac.size());
+    src_.read(reinterpret_cast<char*>(block_hmac.data()), block_hmac.size());
     if (src_.gcount() != static_cast<std::streamsize>(block_hmac.size()))
       throw IoError("Block read error.");
 
     uint32_t block_size = 0;
-    src_.read(reinterpret_cast<char *>(&block_size), sizeof(block_size));
+    src_.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
     if (src_.gcount() != static_cast<std::streamsize>(sizeof(block_size)))
       throw IoError("Block read error.");
 
@@ -176,8 +176,8 @@ int hmac_istreambuf::underflow() {
     std::vector<uint8_t> mac_input;
     mac_input.reserve(12 + block_size);
     mac_input.insert(mac_input.end(), index_bytes, index_bytes + 8);
-    mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t *>(&block_size),
-                     reinterpret_cast<uint8_t *>(&block_size) + 4);
+    mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t*>(&block_size),
+                     reinterpret_cast<uint8_t*>(&block_size) + 4);
     if (block_size > 0) {
       block_.clear();
       block_.resize(block_size);
@@ -212,7 +212,7 @@ int hmac_istreambuf::underflow() {
 std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
   std::array<uint8_t, 64> hmac_key{};
 
-  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
@@ -243,8 +243,8 @@ bool hmac_ostreambuf::FlushBlock() {
   std::vector<uint8_t> mac_input;
   mac_input.reserve(12 + block_.size());
   mac_input.insert(mac_input.end(), index_bytes, index_bytes + 8);
-  mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t *>(&block_size),
-                   reinterpret_cast<uint8_t *>(&block_size) + 4);
+  mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t*>(&block_size),
+                   reinterpret_cast<uint8_t*>(&block_size) + 4);
   mac_input.insert(mac_input.end(), block_.begin(), block_.end());
 
   unsigned char digest[EVP_MAX_MD_SIZE];
@@ -252,8 +252,8 @@ bool hmac_ostreambuf::FlushBlock() {
   HMAC(EVP_sha256(), key_64.data(), static_cast<int>(key_64.size()), mac_input.data(),
        KEEPASS_HMAC_DATA_LEN(mac_input.size()), digest, &digest_len);
 
-  dst_.write(reinterpret_cast<const char *>(digest), 32);
-  dst_.write(reinterpret_cast<const char *>(&block_size), 4);
+  dst_.write(reinterpret_cast<const char*>(digest), 32);
+  dst_.write(reinterpret_cast<const char*>(&block_size), 4);
   if (!block_.empty())
     dst_.write(block_.data(), static_cast<std::streamsize>(block_.size()));
   if (!dst_.good())
@@ -293,14 +293,14 @@ int hmac_ostreambuf::sync() {
   return FlushBlock() ? 0 : -1;
 }
 
-gzip_istreambuf::gzip_istreambuf(std::istream &src) : src_(src) {
+gzip_istreambuf::gzip_istreambuf(std::istream& src) : src_(src) {
   z_stream_.zalloc = Z_NULL;
   z_stream_.zfree = Z_NULL;
   z_stream_.opaque = Z_NULL;
   z_stream_.avail_in = 0;
-  z_stream_.next_in = reinterpret_cast<uint8_t *>(input_.data());
+  z_stream_.next_in = reinterpret_cast<uint8_t*>(input_.data());
   z_stream_.avail_out = static_cast<uInt>(output_.size());
-  z_stream_.next_out = reinterpret_cast<uint8_t *>(output_.data());
+  z_stream_.next_out = reinterpret_cast<uint8_t*>(output_.data());
 
   if (inflateInit2(&z_stream_, 16 + MAX_WBITS) != Z_OK) {
     assert(false);
@@ -320,14 +320,14 @@ int gzip_istreambuf::underflow() {
       src_.read(input_.data(), static_cast<std::streamsize>(input_.size()));
 
       z_stream_.avail_in = static_cast<uInt>(src_.gcount());
-      z_stream_.next_in = reinterpret_cast<uint8_t *>(input_.data());
+      z_stream_.next_in = reinterpret_cast<uint8_t*>(input_.data());
 
       if (z_stream_.avail_in < 1)
         return std::char_traits<char>::eof();
     }
 
     z_stream_.avail_out = static_cast<uInt>(output_.size());
-    z_stream_.next_out = reinterpret_cast<uint8_t *>(output_.data());
+    z_stream_.next_out = reinterpret_cast<uint8_t*>(output_.data());
 
     int res = inflate(&z_stream_, Z_NO_FLUSH);
     assert(res != Z_STREAM_ERROR);
@@ -343,7 +343,7 @@ int gzip_istreambuf::underflow() {
                            : std::char_traits<char>::to_int_type(*gptr());
 }
 
-gzip_ostreambuf::gzip_ostreambuf(std::ostream &dst) : dst_(dst) {
+gzip_ostreambuf::gzip_ostreambuf(std::ostream& dst) : dst_(dst) {
   z_stream_.zalloc = Z_NULL;
   z_stream_.zfree = Z_NULL;
   z_stream_.opaque = Z_NULL;
@@ -352,8 +352,8 @@ gzip_ostreambuf::gzip_ostreambuf(std::ostream &dst) : dst_(dst) {
   z_stream_.avail_out = 0;
   z_stream_.next_out = Z_NULL;
 
-  if (deflateInit2(&z_stream_, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-                   16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+  if (deflateInit2(&z_stream_, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8,
+                   Z_DEFAULT_STRATEGY) != Z_OK) {
     assert(false);
     throw InternalError("Failed to initialize the gzip compressor.");
   }
@@ -365,11 +365,11 @@ bool gzip_ostreambuf::WriteOutput(bool flush) {
   std::array<char, kBufferSize> out{};
 
   z_stream_.avail_in = static_cast<uInt>(buffer_.size());
-  z_stream_.next_in = reinterpret_cast<uint8_t *>(buffer_.data());
+  z_stream_.next_in = reinterpret_cast<uint8_t*>(buffer_.data());
 
   do {
     z_stream_.avail_out = static_cast<uInt>(out.size());
-    z_stream_.next_out = reinterpret_cast<uint8_t *>(out.data());
+    z_stream_.next_out = reinterpret_cast<uint8_t*>(out.data());
 
     int res = deflate(&z_stream_, flush ? Z_FINISH : Z_NO_FLUSH);
     assert(res != Z_STREAM_ERROR);

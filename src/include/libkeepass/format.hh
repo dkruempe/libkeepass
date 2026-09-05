@@ -35,16 +35,16 @@ private:
 
 public:
   /// Non-copyable.
-  Format(const Format &rhs) = delete;
+  Format(const Format& rhs) = delete;
 
   /// Non-copyable.
-  Format &operator=(const Format &rhs) = delete;
+  Format& operator=(const Format& rhs) = delete;
 
   /// Creates an empty builder.
   Format() = default;
 
   /// Appends a value to the builder.
-  template <typename T> Format &operator<<(const T &val) {
+  template <typename T> Format& operator<<(const T& val) {
     str_ << val;
     return *this;
   }
@@ -53,7 +53,7 @@ public:
   explicit operator std::string() const { return str_.str(); }
 
   /// Writes the builder's contents to an output stream.
-  friend std::ostream &operator<<(std::ostream &os, const Format &format) {
+  friend std::ostream& operator<<(std::ostream& os, const Format& format) {
     os << format.str_.str();
     return os;
   }

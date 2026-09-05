@@ -86,19 +86,19 @@ public:
   /**
    * @param password The password string used to derive the encryption key.
    */
-  explicit Key(const std::string &password);
+  explicit Key(const std::string& password);
 
   /// Sets the password used to derive the encryption key.
   /**
    * @param password The password string used to derive the encryption key.
    */
-  void SetPassword(const std::string &password);
+  void SetPassword(const std::string& password);
 
   /// Loads a key file and derives the key file component from it.
   /**
    * @param path Path to the key file on disk.
    */
-  void SetKeyFile(const std::string &path);
+  void SetKeyFile(const std::string& path);
 
   /// Derives the composite key using AES-KDF for KDBX 3 databases.
   /**
@@ -107,8 +107,7 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32> &seed,
-                                    uint64_t rounds,
+  std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
                                     SubKeyResolution resolution) const;
 
   /// Derives the composite key using Argon2 for KDBX 4 databases.
@@ -122,10 +121,10 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  std::array<uint8_t, 32> TransformArgon2(
-      Kdf kdf, const std::vector<uint8_t> &salt, uint64_t iterations,
-      uint64_t memory_bytes, uint32_t parallelism, uint32_t argon2_version,
-      SubKeyResolution resolution) const;
+  std::array<uint8_t, 32> TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt,
+                                          uint64_t iterations, uint64_t memory_bytes,
+                                          uint32_t parallelism, uint32_t argon2_version,
+                                          SubKeyResolution resolution) const;
 };
 
 } // namespace keepass

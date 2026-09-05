@@ -37,7 +37,7 @@ private:
 
 public:
   /// Creates a binary from the given protected data.
-  explicit Binary(const protect<std::string> &data) : data_(data) {}
+  explicit Binary(const protect<std::string>& data) : data_(data) {}
 
   /// Returns whether the binary data is empty.
   bool Empty() const { return data_->empty(); }
@@ -46,10 +46,10 @@ public:
   std::size_t Size() const { return data_->size(); }
 
   /// Returns the binary data.
-  const protect<std::string> &data() const { return data_; }
+  const protect<std::string>& data() const { return data_; }
 
   /// Sets the binary data.
-  void set_data(const protect<std::string> &data) { data_ = data; }
+  void set_data(const protect<std::string>& data) { data_ = data; }
 
   /// Returns whether the binary is stored compressed.
   bool compress() const { return compress_; }
@@ -58,10 +58,10 @@ public:
   void set_compress(bool compress) { compress_ = compress; }
 
   /// Equality comparison.
-  bool operator==(const Binary &other) const { return data_ == other.data_; }
+  bool operator==(const Binary& other) const { return data_ == other.data_; }
 
   /// Inequality comparison.
-  bool operator!=(const Binary &other) const { return !(*this == other); }
+  bool operator!=(const Binary& other) const { return !(*this == other); }
 };
 
 } // namespace keepass

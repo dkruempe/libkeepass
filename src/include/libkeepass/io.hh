@@ -41,9 +41,9 @@ namespace keepass {
  * @return the value read from the stream.
  * @throws IoError if the stream cannot be read.
  */
-template <typename T> inline T consume(std::istream &src) {
+template <typename T> inline T consume(std::istream& src) {
   T val;
-  src.read(reinterpret_cast<char *>(&val), sizeof(T));
+  src.read(reinterpret_cast<char*>(&val), sizeof(T));
   if (!src.good())
     throw IoError("Read error.");
 
@@ -51,15 +51,13 @@ template <typename T> inline T consume(std::istream &src) {
 }
 
 /// Reads a length-prefixed string from the stream.
-template <> LIBKEEPASS_API std::string consume<std::string>(std::istream &src);
+template <> LIBKEEPASS_API std::string consume<std::string>(std::istream& src);
 
 /// Reads a length-prefixed char vector from the stream.
-template <>
-LIBKEEPASS_API std::vector<char> consume<std::vector<char>>(std::istream &src);
+template <> LIBKEEPASS_API std::vector<char> consume<std::vector<char>>(std::istream& src);
 
 /// Reads a length-prefixed byte vector from the stream.
-template <>
-LIBKEEPASS_API std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream &src);
+template <> LIBKEEPASS_API std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream& src);
 
 /**
  * @brief Writes a value of type T to the stream.
@@ -69,23 +67,20 @@ LIBKEEPASS_API std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream &
  * @param dst the output stream to write to.
  * @param val the value to write.
  */
-template <typename T> void conserve(std::ostream &dst, const T &val) {
-  dst.write(reinterpret_cast<const char *>(&val), sizeof(T));
+template <typename T> void conserve(std::ostream& dst, const T& val) {
+  dst.write(reinterpret_cast<const char*>(&val), sizeof(T));
 }
 
 /// Writes a length-prefixed string to the stream.
-template <>
-LIBKEEPASS_API void conserve<std::string>(std::ostream &dst,
-                                          const std::string &val);
+template <> LIBKEEPASS_API void conserve<std::string>(std::ostream& dst, const std::string& val);
 
 /// Writes a length-prefixed char vector to the stream.
 template <>
-LIBKEEPASS_API void conserve<std::vector<char>>(std::ostream &dst,
-                                                const std::vector<char> &val);
+LIBKEEPASS_API void conserve<std::vector<char>>(std::ostream& dst, const std::vector<char>& val);
 
 /// Writes a length-prefixed byte vector to the stream.
 template <>
-LIBKEEPASS_API void conserve<std::vector<uint8_t>>(
-    std::ostream &dst, const std::vector<uint8_t> &val);
+LIBKEEPASS_API void conserve<std::vector<uint8_t>>(std::ostream& dst,
+                                                   const std::vector<uint8_t>& val);
 
 } // namespace keepass

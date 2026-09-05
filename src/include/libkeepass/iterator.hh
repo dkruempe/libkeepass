@@ -20,8 +20,8 @@
 /** @file iterator.hh @brief Bounds-checked output iterator helper. */
 
 #pragma once
-#include <iterator>
 #include <exception>
+#include <iterator>
 
 namespace keepass {
 
@@ -33,8 +33,7 @@ namespace keepass {
  *
  * @tparam C the underlying container type.
  */
-template <typename C>
-class bounds_checked_iterator {
+template <typename C> class bounds_checked_iterator {
 protected:
   typename C::iterator first_;
   typename C::iterator last_;
@@ -50,11 +49,11 @@ public:
    * Creates a bounds-checked iterator over the given container.
    * @param container the container to iterate over.
    */
-  explicit bounds_checked_iterator(C &container)
+  explicit bounds_checked_iterator(C& container)
       : first_(container.begin()), last_(container.end()) {}
 
   /// Assigns a value through the iterator, throwing if the end is exceeded.
-  bounds_checked_iterator &operator=(const typename C::value_type &value) {
+  bounds_checked_iterator& operator=(const typename C::value_type& value) {
     if (first_ == last_)
       throw std::out_of_range("assigning outside container limits.");
 
@@ -63,7 +62,7 @@ public:
   }
 
   /// Move-assigns a value through the iterator, throwing if the end is exceeded.
-  bounds_checked_iterator &operator=(typename C::value_type &&value) {
+  bounds_checked_iterator& operator=(typename C::value_type&& value) {
     if (first_ == last_)
       throw std::out_of_range("assigning outside container limits.");
 
@@ -71,9 +70,9 @@ public:
     return *this;
   }
 
-  bounds_checked_iterator &operator*() { return *this; }
+  bounds_checked_iterator& operator*() { return *this; }
 
-  bounds_checked_iterator &operator++() {
+  bounds_checked_iterator& operator++() {
     first_++;
     return *this;
   }
@@ -90,8 +89,7 @@ public:
  * @param container the container to iterate over.
  * @return a bounds-checked iterator over the container.
  */
-template <typename C>
-inline bounds_checked_iterator<C> bounds_checked(C &container) {
+template <typename C> inline bounds_checked_iterator<C> bounds_checked(C& container) {
   return bounds_checked_iterator<C>(container);
 }
 

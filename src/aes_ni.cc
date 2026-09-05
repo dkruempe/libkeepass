@@ -38,12 +38,12 @@
 #if LIBKEEPASS_AES_NI
 
 #include <array>
+#include <cpuid.h>
 #include <cstdint>
 #include <cstring>
-#include <cpuid.h>
 
-#include <wmmintrin.h>
 #include <emmintrin.h>
+#include <wmmintrin.h>
 
 namespace keepass {
 
@@ -60,8 +60,8 @@ struct Aes256RoundKeys {
 // Produces the next two AES-256 round keys using AESKEYGENASSIST. This is the
 // well-known lattice/Intel algorithm; the resulting round keys are in natural
 // byte order as expected by aesenc/aesenclast.
-inline void NextRoundKeys(__m128i state0, __m128i state1, __m128i xword,
-                          __m128i *rk0, __m128i *rk1) {
+inline void NextRoundKeys(__m128i state0, __m128i state1, __m128i xword, __m128i* rk0,
+                          __m128i* rk1) {
   xword = _mm_shuffle_epi32(xword, 0xff);
   xword = _mm_xor_si128(xword, state0);
   state0 = _mm_slli_si128(state0, 4);
@@ -90,18 +90,18 @@ inline void NextRoundKeys(__m128i state0, __m128i state1, __m128i xword,
 Aes256RoundKeys ExpandKey(const uint8_t key[32]) {
   Aes256RoundKeys out{};
 
-  out.rk[0] = _mm_loadu_si128(reinterpret_cast<const __m128i *>(key));
-  out.rk[1] = _mm_loadu_si128(reinterpret_cast<const __m128i *>(key + 16));
+  out.rk[0] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(key));
+  out.rk[1] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(key + 16));
 
   __m128i a = out.rk[0];
   __m128i b = out.rk[1];
 
-#define LIBKEEPASS_AES256_NEXT_RK(ID, RC)                                      \
-  do {                                                                         \
-    __m128i xw = _mm_aeskeygenassist_si128(b, (RC));                           \
-    NextRoundKeys(a, b, xw, &a, &b);                                           \
-    out.rk[ID] = a;                                                            \
-    out.rk[ID + 1] = b;                                                        \
+#define LIBKEEPASS_AES256_NEXT_RK(ID, RC)                                                          \
+  do {                                                                                             \
+    __m128i xw = _mm_aeskeygenassist_si128(b, (RC));                                               \
+    NextRoundKeys(a, b, xw, &a, &b);                                                               \
+    out.rk[ID] = a;                                                                                \
+    out.rk[ID + 1] = b;                                                                            \
   } while (0)
 
   // Round constants 01, 02, 04, 08, 10, 20, 40.
@@ -119,7 +119,7 @@ Aes256RoundKeys ExpandKey(const uint8_t key[32]) {
 }
 
 // Encrypt a single 128-bit block with AES-256-ECB using AES-NI intrinsics.
-inline __m128i EncryptBlock(__m128i block, const Aes256RoundKeys &keys) {
+inline __m128i EncryptBlock(__m128i block, const Aes256RoundKeys& keys) {
   block = _mm_xor_si128(block, keys.rk[0]);
   block = _mm_aesenc_si128(block, keys.rk[1]);
   block = _mm_aesenc_si128(block, keys.rk[2]);
@@ -151,20 +151,20 @@ bool aes_ni_supported() {
 // the data to encrypt; for `rounds` iterations both 16-byte halves of `in`
 // are encrypted with AES-256-ECB and the output feeds back as input. out
 // receives the result; the caller then SHA-256 hashes it.
-void aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32],
-                              uint64_t rounds, uint8_t out[32]) {
+void aes_ni_transform_aes_kdf(const uint8_t seed[32], const uint8_t in[32], uint64_t rounds,
+                              uint8_t out[32]) {
   const Aes256RoundKeys keys = ExpandKey(seed);
 
-  __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in));
-  __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in + 16));
+  __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(in));
+  __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i*>(in + 16));
 
   for (uint64_t i = 0; i < rounds; ++i) {
     a = EncryptBlock(a, keys);
     b = EncryptBlock(b, keys);
   }
 
-  _mm_storeu_si128(reinterpret_cast<__m128i *>(out), a);
-  _mm_storeu_si128(reinterpret_cast<__m128i *>(out + 16), b);
+  _mm_storeu_si128(reinterpret_cast<__m128i*>(out), a);
+  _mm_storeu_si128(reinterpret_cast<__m128i*>(out + 16), b);
 }
 
 } // namespace keepass

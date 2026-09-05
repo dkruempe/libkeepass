@@ -21,10 +21,10 @@
 
 #include <gtest/gtest.h>
 
+#include "config.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/kdb.hh"
 #include "libkeepass/key.hh"
-#include "config.hh"
 
 using namespace keepass;
 
@@ -40,8 +40,7 @@ std::string GetTmpPath(const std::string& name) {
 
 std::string GetTestJson(const std::string& name) {
   std::ifstream file(GetTestPath(name));
-  std::string file_str((std::istreambuf_iterator<char>(file)),
-                       std::istreambuf_iterator<char>());
+  std::string file_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
   // Compact the JSON by removing all white space not present in string
   // literals.
@@ -64,14 +63,13 @@ std::string GetTestJson(const std::string& name) {
   return json;
 }
 
-}   // namespace
+} // namespace
 
 TEST(KdbTest, NonExistingFile) {
   Key key("password");
 
   KdbFile file;
-  EXPECT_THROW(file.Import(GetTestPath("_.kdb"), key),
-               FileNotFoundError);
+  EXPECT_THROW(file.Import(GetTestPath("_.kdb"), key), FileNotFoundError);
 }
 
 TEST(KdbTest, NonKdbFile) {
@@ -79,9 +77,9 @@ TEST(KdbTest, NonKdbFile) {
 
   KdbFile file;
   EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-0", key),
-               FormatError);  // Too small to even contain header.
+               FormatError); // Too small to even contain header.
   EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-128", key),
-               FormatError);  // Fits header but doesn't have signature.
+               FormatError); // Fits header but doesn't have signature.
 }
 
 TEST(KdbTest, CorrectPassword) {
@@ -95,8 +93,7 @@ TEST(KdbTest, InvalidPassword) {
   Key key("wrong_password");
 
   KdbFile file;
-  EXPECT_THROW(file.Import(GetTestPath("groups-1-empty-pw-aes.kdb"), key),
-               PasswordError);
+  EXPECT_THROW(file.Import(GetTestPath("groups-1-empty-pw-aes.kdb"), key), PasswordError);
 }
 
 TEST(KdbTest, ImportGroups1) {
@@ -104,30 +101,22 @@ TEST(KdbTest, ImportGroups1) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-1-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-1-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-1-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-1-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-1-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-1-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-1-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-1-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-1-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-1-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-1-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-1-random_entry-3-pw-aes.json"));
@@ -138,37 +127,27 @@ TEST(KdbTest, ImportGroups2) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-2-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-2-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-2-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-2-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-2-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-2-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-2-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-2-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-2-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-2-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-2-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-2-random_entry-3-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-2-random_entry-4-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-2-random_entry-4-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-2-random_entry-4-pw-aes.json"));
@@ -179,16 +158,12 @@ TEST(KdbTest, ImportGroups3) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-3-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-3-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-3-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-3-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-3-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-3-random_entry-1-pw-aes.json"));
@@ -199,30 +174,22 @@ TEST(KdbTest, ImportGroups4) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-4-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-4-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-4-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-4-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-4-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-4-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-4-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-4-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-4-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-4-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-4-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-4-random_entry-3-pw-aes.json"));
@@ -233,30 +200,22 @@ TEST(KdbTest, ImportGroups5) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-5-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-5-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-5-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-5-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-5-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-5-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-5-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-5-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-5-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-5-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-5-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-5-random_entry-3-pw-aes.json"));
@@ -267,30 +226,22 @@ TEST(KdbTest, ImportGroups6) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-6-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-6-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-6-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-6-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-6-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-6-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-6-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-6-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-6-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-6-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-6-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-6-random_entry-3-pw-aes.json"));
@@ -301,30 +252,22 @@ TEST(KdbTest, ImportGroups7) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-7-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-7-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-7-empty-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-7-random_entry-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-7-random_entry-1-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-7-random_entry-1-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-7-random_entry-2-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-7-random_entry-2-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-7-random_entry-2-pw-aes.json"));
 
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-7-random_entry-3-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-7-random_entry-3-pw-aes.kdb"), key); });
   root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-7-random_entry-3-pw-aes.json"));
@@ -335,9 +278,7 @@ TEST(KdbTest, ImportGroups8) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-8-empty-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-8-empty-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-8-empty-pw-aes.json"));
@@ -348,9 +289,7 @@ TEST(KdbTest, ImportGroups9) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("groups-9-default-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("groups-9-default-pw-aes.kdb"), key); });
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), GetTestJson("groups-9-default-pw-aes.json"));
@@ -361,9 +300,7 @@ TEST(KdbTest, ImportComplex1) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("complex-1-pw-aes.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("complex-1-pw-aes.kdb"), key); });
 
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
@@ -376,9 +313,7 @@ TEST(KdbTest, ImportComplex1KeyFile) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("complex-1-key-tf.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("complex-1-key-tf.kdb"), key); });
 
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
@@ -391,9 +326,7 @@ TEST(KdbTest, ImportComplex1KeyFileAndPassword) {
 
   KdbFile file;
   std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({
-    db = file.Import(GetTestPath("complex-1-key_pw-tf.kdb"), key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(GetTestPath("complex-1-key_pw-tf.kdb"), key); });
 
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
@@ -411,29 +344,23 @@ TEST(KdbTest, ExportGroups1) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 4> test_files = {{
-    { GetTestPath("groups-1-empty-pw-aes.kdb"),
-      GetTmpPath("groups-1-empty-pw-aes.kdb"),
-      GetTestJson("groups-1-empty-pw-aes.json") },
-    { GetTestPath("groups-1-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-1-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-1-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-1-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-1-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-1-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-1-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-1-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-1-random_entry-3-pw-aes.json") }
-  }};
+  std::array<TestFiles, 4> test_files = {
+      {{GetTestPath("groups-1-empty-pw-aes.kdb"), GetTmpPath("groups-1-empty-pw-aes.kdb"),
+        GetTestJson("groups-1-empty-pw-aes.json")},
+       {GetTestPath("groups-1-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-1-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-1-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-1-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-1-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-1-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-1-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-1-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-1-random_entry-3-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -453,32 +380,26 @@ TEST(KdbTest, ExportGroups2) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 5> test_files = {{
-    { GetTestPath("groups-2-empty-pw-aes.kdb"),
-      GetTmpPath("groups-2-empty-pw-aes.kdb"),
-      GetTestJson("groups-2-empty-pw-aes.json") },
-    { GetTestPath("groups-2-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-2-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-2-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-2-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-2-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-2-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-2-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-2-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-2-random_entry-3-pw-aes.json") },
-    { GetTestPath("groups-2-random_entry-4-pw-aes.kdb"),
-      GetTmpPath("groups-2-random_entry-4-pw-aes.kdb"),
-      GetTestJson("groups-2-random_entry-4-pw-aes.json") }
-  }};
+  std::array<TestFiles, 5> test_files = {
+      {{GetTestPath("groups-2-empty-pw-aes.kdb"), GetTmpPath("groups-2-empty-pw-aes.kdb"),
+        GetTestJson("groups-2-empty-pw-aes.json")},
+       {GetTestPath("groups-2-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-2-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-2-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-2-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-2-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-2-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-2-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-2-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-2-random_entry-3-pw-aes.json")},
+       {GetTestPath("groups-2-random_entry-4-pw-aes.kdb"),
+        GetTmpPath("groups-2-random_entry-4-pw-aes.kdb"),
+        GetTestJson("groups-2-random_entry-4-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -498,23 +419,17 @@ TEST(KdbTest, ExportGroups3) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 2> test_files = {{
-    { GetTestPath("groups-3-empty-pw-aes.kdb"),
-      GetTmpPath("groups-3-empty-pw-aes.kdb"),
-      GetTestJson("groups-3-empty-pw-aes.json") },
-    { GetTestPath("groups-3-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-3-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-3-random_entry-1-pw-aes.json") }
-  }};
+  std::array<TestFiles, 2> test_files = {
+      {{GetTestPath("groups-3-empty-pw-aes.kdb"), GetTmpPath("groups-3-empty-pw-aes.kdb"),
+        GetTestJson("groups-3-empty-pw-aes.json")},
+       {GetTestPath("groups-3-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-3-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-3-random_entry-1-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -534,29 +449,23 @@ TEST(KdbTest, ExportGroups4) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 4> test_files = {{
-    { GetTestPath("groups-4-empty-pw-aes.kdb"),
-      GetTmpPath("groups-4-empty-pw-aes.kdb"),
-      GetTestJson("groups-4-empty-pw-aes.json") },
-    { GetTestPath("groups-4-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-4-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-4-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-4-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-4-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-4-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-4-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-4-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-4-random_entry-3-pw-aes.json") }
-  }};
+  std::array<TestFiles, 4> test_files = {
+      {{GetTestPath("groups-4-empty-pw-aes.kdb"), GetTmpPath("groups-4-empty-pw-aes.kdb"),
+        GetTestJson("groups-4-empty-pw-aes.json")},
+       {GetTestPath("groups-4-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-4-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-4-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-4-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-4-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-4-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-4-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-4-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-4-random_entry-3-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -576,29 +485,23 @@ TEST(KdbTest, ExportGroups5) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 4> test_files = {{
-    { GetTestPath("groups-5-empty-pw-aes.kdb"),
-      GetTmpPath("groups-5-empty-pw-aes.kdb"),
-      GetTestJson("groups-5-empty-pw-aes.json") },
-    { GetTestPath("groups-5-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-5-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-5-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-5-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-5-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-5-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-5-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-5-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-5-random_entry-3-pw-aes.json") }
-  }};
+  std::array<TestFiles, 4> test_files = {
+      {{GetTestPath("groups-5-empty-pw-aes.kdb"), GetTmpPath("groups-5-empty-pw-aes.kdb"),
+        GetTestJson("groups-5-empty-pw-aes.json")},
+       {GetTestPath("groups-5-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-5-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-5-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-5-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-5-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-5-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-5-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-5-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-5-random_entry-3-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -618,29 +521,23 @@ TEST(KdbTest, ExportGroups6) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 4> test_files = {{
-    { GetTestPath("groups-6-empty-pw-aes.kdb"),
-      GetTmpPath("groups-6-empty-pw-aes.kdb"),
-      GetTestJson("groups-6-empty-pw-aes.json") },
-    { GetTestPath("groups-6-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-6-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-6-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-6-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-6-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-6-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-6-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-6-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-6-random_entry-3-pw-aes.json") }
-  }};
+  std::array<TestFiles, 4> test_files = {
+      {{GetTestPath("groups-6-empty-pw-aes.kdb"), GetTmpPath("groups-6-empty-pw-aes.kdb"),
+        GetTestJson("groups-6-empty-pw-aes.json")},
+       {GetTestPath("groups-6-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-6-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-6-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-6-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-6-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-6-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-6-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-6-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-6-random_entry-3-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -660,29 +557,23 @@ TEST(KdbTest, ExportGroups7) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 4> test_files = {{
-    { GetTestPath("groups-7-empty-pw-aes.kdb"),
-      GetTmpPath("groups-7-empty-pw-aes.kdb"),
-      GetTestJson("groups-7-empty-pw-aes.json") },
-    { GetTestPath("groups-7-random_entry-1-pw-aes.kdb"),
-      GetTmpPath("groups-7-random_entry-1-pw-aes.kdb"),
-      GetTestJson("groups-7-random_entry-1-pw-aes.json") },
-    { GetTestPath("groups-7-random_entry-2-pw-aes.kdb"),
-      GetTmpPath("groups-7-random_entry-2-pw-aes.kdb"),
-      GetTestJson("groups-7-random_entry-2-pw-aes.json") },
-    { GetTestPath("groups-7-random_entry-3-pw-aes.kdb"),
-      GetTmpPath("groups-7-random_entry-3-pw-aes.kdb"),
-      GetTestJson("groups-7-random_entry-3-pw-aes.json") }
-  }};
+  std::array<TestFiles, 4> test_files = {
+      {{GetTestPath("groups-7-empty-pw-aes.kdb"), GetTmpPath("groups-7-empty-pw-aes.kdb"),
+        GetTestJson("groups-7-empty-pw-aes.json")},
+       {GetTestPath("groups-7-random_entry-1-pw-aes.kdb"),
+        GetTmpPath("groups-7-random_entry-1-pw-aes.kdb"),
+        GetTestJson("groups-7-random_entry-1-pw-aes.json")},
+       {GetTestPath("groups-7-random_entry-2-pw-aes.kdb"),
+        GetTmpPath("groups-7-random_entry-2-pw-aes.kdb"),
+        GetTestJson("groups-7-random_entry-2-pw-aes.json")},
+       {GetTestPath("groups-7-random_entry-3-pw-aes.kdb"),
+        GetTmpPath("groups-7-random_entry-3-pw-aes.kdb"),
+        GetTestJson("groups-7-random_entry-3-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -702,20 +593,14 @@ TEST(KdbTest, ExportGroups8) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 1> test_files = {{
-    { GetTestPath("groups-8-empty-pw-aes.kdb"),
-      GetTmpPath("groups-8-empty-pw-aes.kdb"),
-      GetTestJson("groups-8-empty-pw-aes.json") }
-  }};
+  std::array<TestFiles, 1> test_files = {
+      {{GetTestPath("groups-8-empty-pw-aes.kdb"), GetTmpPath("groups-8-empty-pw-aes.kdb"),
+        GetTestJson("groups-8-empty-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -735,20 +620,14 @@ TEST(KdbTest, ExportGroups9) {
     std::string dst_path;
     std::string json;
   };
-  std::array<TestFiles, 1> test_files = {{
-    { GetTestPath("groups-9-default-pw-aes.kdb"),
-      GetTmpPath("groups-9-default-pw-aes.kdb"),
-      GetTestJson("groups-9-default-pw-aes.json") }
-  }};
+  std::array<TestFiles, 1> test_files = {
+      {{GetTestPath("groups-9-default-pw-aes.kdb"), GetTmpPath("groups-9-default-pw-aes.kdb"),
+        GetTestJson("groups-9-default-pw-aes.json")}}};
 
   for (auto& t : test_files) {
-    EXPECT_NO_THROW({
-      db = file.Import(t.src_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.src_path, key); });
     keepass::KdbFile::Export(t.dst_path, *db, key);
-    EXPECT_NO_THROW({
-      db = file.Import(t.dst_path, key);
-    });
+    EXPECT_NO_THROW({ db = file.Import(t.dst_path, key); });
     std::remove(t.dst_path.c_str());
 
     std::shared_ptr<Group> root = db->root();
@@ -767,13 +646,9 @@ TEST(KdbTest, ExportComplex1) {
   KdbFile file;
   std::unique_ptr<Database> db;
 
-  EXPECT_NO_THROW({
-    db = file.Import(src_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(src_path, key); });
   keepass::KdbFile::Export(dst_path, *db, key);
-  EXPECT_NO_THROW({
-    db = file.Import(dst_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(dst_path, key); });
   std::remove(dst_path.c_str());
 
   std::shared_ptr<Group> root = db->root();
@@ -792,13 +667,9 @@ TEST(KdbTest, ExportComplex1KeyFile) {
   KdbFile file;
   std::unique_ptr<Database> db;
 
-  EXPECT_NO_THROW({
-    db = file.Import(src_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(src_path, key); });
   keepass::KdbFile::Export(dst_path, *db, key);
-  EXPECT_NO_THROW({
-    db = file.Import(dst_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(dst_path, key); });
   std::remove(dst_path.c_str());
 
   std::shared_ptr<Group> root = db->root();
@@ -817,13 +688,9 @@ TEST(KdbTest, ExportComplex1KeyFileAndPassword) {
   KdbFile file;
   std::unique_ptr<Database> db;
 
-  EXPECT_NO_THROW({
-    db = file.Import(src_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(src_path, key); });
   keepass::KdbFile::Export(dst_path, *db, key);
-  EXPECT_NO_THROW({
-    db = file.Import(dst_path, key);
-  });
+  EXPECT_NO_THROW({ db = file.Import(dst_path, key); });
   std::remove(dst_path.c_str());
 
   std::shared_ptr<Group> root = db->root();

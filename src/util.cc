@@ -24,15 +24,15 @@
 
 namespace keepass {
 
-std::string time_to_str(const std::time_t &time) {
+std::string time_to_str(const std::time_t& time) {
 #ifdef _MSC_VER
   std::tm utc_time_buf{};
   errno_t err = gmtime_s(&utc_time_buf, &time);
   assert(err == 0);
   (void)err;
-  const std::tm *utc_time = &utc_time_buf;
+  const std::tm* utc_time = &utc_time_buf;
 #else
-  const std::tm *utc_time = std::gmtime(&time);
+  const std::tm* utc_time = std::gmtime(&time);
   assert(utc_time != nullptr);
 #endif
 

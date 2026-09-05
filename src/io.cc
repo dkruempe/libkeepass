@@ -21,12 +21,12 @@
 
 namespace keepass {
 
-template <> std::string consume<std::string>(std::istream &src) {
+template <> std::string consume<std::string>(std::istream& src) {
   // Don't read the stream into a string directly. We want to make sure that we
   // get a clean string.
   std::vector<char> str_data;
-  std::copy(std::istreambuf_iterator<char>(src),
-            std::istreambuf_iterator<char>(), std::back_inserter(str_data));
+  std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
+            std::back_inserter(str_data));
   if (!src.good())
     throw IoError("Read error.");
 
@@ -44,18 +44,17 @@ template <> std::string consume<std::string>(std::istream &src) {
   return str;
 }
 
-template <> std::vector<char> consume<std::vector<char>>(std::istream &src) {
+template <> std::vector<char> consume<std::vector<char>>(std::istream& src) {
   std::vector<char> data;
-  std::copy(std::istreambuf_iterator<char>(src),
-            std::istreambuf_iterator<char>(), std::back_inserter(data));
+  std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
+            std::back_inserter(data));
   if (!src.good())
     throw IoError("Read error.");
 
   return data;
 }
 
-template <>
-std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream &src) {
+template <> std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream& src) {
   std::streampos pos = src.tellg();
   src.seekg(0, std::ios::end);
   std::streamsize size = src.tellg() - pos;
@@ -65,15 +64,14 @@ std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream &src) {
     throw IoError("Read error.");
 
   std::vector<uint8_t> data(static_cast<std::size_t>(size));
-  src.read(reinterpret_cast<char *>(data.data()), size);
+  src.read(reinterpret_cast<char*>(data.data()), size);
   if (!src.good())
     throw IoError("Read error.");
 
   return data;
 }
 
-template <>
-void conserve<std::string>(std::ostream &dst, const std::string &val) {
+template <> void conserve<std::string>(std::ostream& dst, const std::string& val) {
   // KDB strings are NUL-terminated: consumers read up to (but not including)
   // the first NUL, so embedded NUL bytes cannot round-trip. Reject them
   // explicitly instead of silently corrupting the written stream.
@@ -86,19 +84,15 @@ void conserve<std::string>(std::ostream &dst, const std::string &val) {
     throw IoError("Write error.");
 }
 
-template <>
-void conserve<std::vector<char>>(std::ostream &dst,
-                                 const std::vector<char> &val) {
+template <> void conserve<std::vector<char>>(std::ostream& dst, const std::vector<char>& val) {
   dst.write(val.data(), static_cast<std::streamsize>(val.size()));
   if (!dst.good())
     throw IoError("Write error.");
 }
 
 template <>
-void conserve<std::vector<uint8_t>>(std::ostream &dst,
-                                    const std::vector<uint8_t> &val) {
-  dst.write(reinterpret_cast<const char *>(val.data()),
-            static_cast<std::streamsize>(val.size()));
+void conserve<std::vector<uint8_t>>(std::ostream& dst, const std::vector<uint8_t>& val) {
+  dst.write(reinterpret_cast<const char*>(val.data()), static_cast<std::streamsize>(val.size()));
   if (!dst.good())
     throw IoError("Write error.");
 }

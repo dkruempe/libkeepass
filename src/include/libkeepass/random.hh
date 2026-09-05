@@ -40,8 +40,8 @@ class LIBKEEPASS_API RandomObfuscator {
 public:
   /** Inner random stream ciphers supported by KDBX 4. */
   enum class Type {
-    kSalsa20,  ///< Salsa20 stream cipher (KDBX 3 and 4).
-    kChaCha20  ///< ChaCha20 stream cipher (KDBX 4).
+    kSalsa20, ///< Salsa20 stream cipher (KDBX 3 and 4).
+    kChaCha20 ///< ChaCha20 stream cipher (KDBX 4).
   };
 
 private:
@@ -60,8 +60,7 @@ public:
    * @param key The 32-byte key for the stream cipher.
    * @param init_vec The 8-byte initialization vector.
    */
-  RandomObfuscator(const std::array<uint8_t, 32> &key,
-                   const std::array<uint8_t, 8> &init_vec);
+  RandomObfuscator(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 8>& init_vec);
 
   /**
    * Constructs a random stream cipher from the raw inner random stream key
@@ -69,27 +68,27 @@ public:
    * key is hashed with SHA-256 and used with a fixed IV. For ChaCha20 the key
    * is hashed with SHA-512 and split into a 32 byte key and 12 byte IV.
    */
-  RandomObfuscator(Type type, const std::array<uint8_t, 32> &stream_key);
+  RandomObfuscator(Type type, const std::array<uint8_t, 32>& stream_key);
 
   /**
    * Constructs a random stream cipher from the raw inner random stream key of
    * KDBX 4, which may be 32 or 64 bytes depending on the writer.
    */
-  RandomObfuscator(Type type, const std::vector<uint8_t> &stream_key);
+  RandomObfuscator(Type type, const std::vector<uint8_t>& stream_key);
 
   /// Obfuscates or deobfuscates a byte vector using the random stream.
   /**
    * @param data The data to process (xor with the random stream).
    * @return The processed data.
    */
-  std::vector<uint8_t> Process(const std::vector<uint8_t> &data);
+  std::vector<uint8_t> Process(const std::vector<uint8_t>& data);
 
   /// Obfuscates or deobfuscates a string using the random stream.
   /**
    * @param data The string data to process.
    * @return The processed string.
    */
-  std::string Process(const std::string &data);
+  std::string Process(const std::string& data);
 };
 
 /// Generates an array of N cryptographically random bytes.

@@ -46,13 +46,13 @@ public:
    * @param [in] value Initial value.
    * @param [in] time Timestamp of the value.
    */
-  temporal(const T &value, std::time_t time) : value_(value), time_(time) {}
+  temporal(const T& value, std::time_t time) : value_(value), time_(time) {}
 
   /**
    * @brief Copy-constructs from another temporal wrapper.
    * @param [in] other Source wrapper.
    */
-  temporal(const temporal<T> &other) {
+  temporal(const temporal<T>& other) {
     value_ = other.value_;
     time_ = other.time_;
   }
@@ -61,7 +61,7 @@ public:
    * @brief Move-constructs from another temporal wrapper.
    * @param [in,out] other Source wrapper (moved from).
    */
-  temporal(temporal<T> &&other) noexcept {
+  temporal(temporal<T>&& other) noexcept {
     value_ = std::move(other.value_);
     time_ = std::move(other.time_);
   }
@@ -70,7 +70,7 @@ public:
    * @brief Returns a const reference to the stored value.
    * @return Const reference to the value.
    */
-  const T &value() const { return value_; }
+  const T& value() const { return value_; }
 
   /**
    * @brief Returns the modification timestamp.
@@ -88,7 +88,7 @@ public:
    * @brief Replaces the stored value and updates the timestamp to now.
    * @param [in] val New value.
    */
-  void Set(const T &val) {
+  void Set(const T& val) {
     value_ = val;
     time_ = std::time(nullptr);
   }
@@ -98,7 +98,7 @@ public:
    * @param [in] value New value.
    * @return Reference to this object.
    */
-  temporal<T> &operator=(const T &value) {
+  temporal<T>& operator=(const T& value) {
     value_ = value;
     time_ = std::time(nullptr);
     return *this;
@@ -109,7 +109,7 @@ public:
    * @param [in] other Source wrapper.
    * @return Reference to this object.
    */
-  temporal<T> &operator=(const temporal<T> &other) {
+  temporal<T>& operator=(const temporal<T>& other) {
     value_ = other.value_;
     time_ = other.time_;
     return *this;
@@ -120,7 +120,7 @@ public:
    * @param [in,out] other Source wrapper (moved from).
    * @return Reference to this object.
    */
-  temporal<T> &operator=(temporal<T> &&other) noexcept {
+  temporal<T>& operator=(temporal<T>&& other) noexcept {
     value_ = std::move(other.value_);
     time_ = std::move(other.time_);
     return *this;
@@ -130,19 +130,19 @@ public:
    * @brief Explicit conversion operator to the wrapped type.
    * @return Const reference to the value.
    */
-  explicit operator const T &() const { return value_; }
+  explicit operator const T&() const { return value_; }
 
   /**
    * @brief Arrow operator forwarding to the stored value.
    * @return Pointer to the value.
    */
-  const T *operator->() const { return &value_; }
+  const T* operator->() const { return &value_; }
 
   /**
    * @brief Dereference operator forwarding to the stored value.
    * @return Const reference to the value.
    */
-  const T &operator*() const { return value_; }
+  const T& operator*() const { return value_; }
 };
 
 } // namespace keepass

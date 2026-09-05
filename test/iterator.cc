@@ -26,34 +26,24 @@ using namespace keepass;
 TEST(IteratorTest, CheckBounds) {
   std::string src = "abcdef";
   std::string dst;
-  EXPECT_THROW({
-    std::copy(src.begin(), src.end(), bounds_checked(dst));
-  }, std::out_of_range);
+  EXPECT_THROW({ std::copy(src.begin(), src.end(), bounds_checked(dst)); }, std::out_of_range);
   EXPECT_EQ(dst, "");
 
   dst.clear();
   dst.resize(5);
-  EXPECT_THROW({
-    std::copy(src.begin(), src.end(), bounds_checked(dst));
-  }, std::out_of_range);
+  EXPECT_THROW({ std::copy(src.begin(), src.end(), bounds_checked(dst)); }, std::out_of_range);
   EXPECT_EQ(dst, "abcde");
 
   dst.clear();
   dst.resize(6);
-  EXPECT_NO_THROW({
-    std::copy(src.begin(), src.end(), bounds_checked(dst));
-  });
+  EXPECT_NO_THROW({ std::copy(src.begin(), src.end(), bounds_checked(dst)); });
   EXPECT_EQ(dst, "abcdef");
 
   dst.clear();
   dst.resize(7);
-  EXPECT_NO_THROW({
-    std::copy(src.begin(), src.end(), bounds_checked(dst));
-  });
+  EXPECT_NO_THROW({ std::copy(src.begin(), src.end(), bounds_checked(dst)); });
 
   dst.clear();
   dst.resize(16);
-  EXPECT_NO_THROW({
-    std::copy(src.begin(), src.end(), bounds_checked(dst));
-  });
+  EXPECT_NO_THROW({ std::copy(src.begin(), src.end(), bounds_checked(dst)); });
 }

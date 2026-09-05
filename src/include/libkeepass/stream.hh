@@ -44,14 +44,13 @@ namespace keepass {
  * @tparam N The size of the backing array in bytes.
  */
 template <std::size_t N>
-class array_iostreambuf
-    : public std::basic_streambuf<char, std::char_traits<char>> {
+class array_iostreambuf : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
-  std::array<uint8_t, N> &buffer_;
+  std::array<uint8_t, N>& buffer_;
 
 protected:
   std::streampos seekoff(std::streamoff off, std::ios_base::seekdir way,
-                                 std::ios_base::openmode which) override {
+                         std::ios_base::openmode which) override {
     if (which == 0)
       return {std::streamoff(-1)};
 
@@ -60,17 +59,15 @@ protected:
     std::streamoff lin_off = 0;
     switch (way) {
     case std::ios_base::beg:
-      lin_off =
-          clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
+      lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()), off);
       break;
     case std::ios_base::cur:
       lin_off = clamp<std::streamoff>(0, static_cast<long long>(buffer_.size()),
                                       (gptr() - eback()) + off);
       break;
     case std::ios_base::end:
-      lin_off = clamp<std::streamoff>(
-          0, static_cast<std::streamoff>(buffer_.size()),
-          static_cast<std::streamoff>(buffer_.size()) - off);
+      lin_off = clamp<std::streamoff>(0, static_cast<std::streamoff>(buffer_.size()),
+                                      static_cast<std::streamoff>(buffer_.size()) - off);
       break;
     default:
       assert(false);
@@ -78,22 +75,21 @@ protected:
     };
 
     if (which & std::ios_base::in) {
-      char *buffer_ptr = reinterpret_cast<char *>(buffer_.data());
+      char* buffer_ptr = reinterpret_cast<char*>(buffer_.data());
       setg(buffer_ptr, buffer_ptr + lin_off, buffer_ptr + buffer_.size());
     }
 
     return lin_off;
   }
 
-  std::streampos seekpos(std::streampos sp,
-                                 std::ios_base::openmode which) override {
-    if (which == 0 || sp < 0 ||
-        sp >= static_cast<std::streamoff>(buffer_.size())) {
-     return {std::streamoff(-1)};;
+  std::streampos seekpos(std::streampos sp, std::ios_base::openmode which) override {
+    if (which == 0 || sp < 0 || sp >= static_cast<std::streamoff>(buffer_.size())) {
+      return {std::streamoff(-1)};
+      ;
     }
 
     if (which & std::ios_base::in) {
-      char *buffer_ptr = reinterpret_cast<char *>(buffer_.data());
+      char* buffer_ptr = reinterpret_cast<char*>(buffer_.data());
       setg(buffer_ptr, buffer_ptr + sp, buffer_ptr + buffer_.size());
     }
 
@@ -106,8 +102,8 @@ public:
    *
    * @param buffer The backing array to read from and write to.
    */
-  explicit array_iostreambuf(std::array<uint8_t, N> &buffer) : buffer_(buffer) {
-    char *buffer_ptr = reinterpret_cast<char *>(buffer.data());
+  explicit array_iostreambuf(std::array<uint8_t, N>& buffer) : buffer_(buffer) {
+    char* buffer_ptr = reinterpret_cast<char*>(buffer.data());
     setg(buffer_ptr, buffer_ptr, buffer_ptr + buffer.size());
     setp(buffer_ptr, buffer_ptr + buffer.size());
   }
@@ -151,7 +147,7 @@ class LIBKEEPASS_API hashed_istreambuf final
     : private hashed_basic_streambuf,
       public std::basic_streambuf<char, std::char_traits<char>> {
 private:
-  std::istream &src_;
+  std::istream& src_;
 
 public:
   /**
@@ -159,7 +155,7 @@ public:
    *
    * @param src The input stream to read hashed blocks from.
    */
-  explicit hashed_istreambuf(std::istream &src) : src_(src) {}
+  explicit hashed_istreambuf(std::istream& src) : src_(src) {}
 
   /// Reads and verifies the next block when the get area is exhausted.
   int underflow() override;
@@ -178,7 +174,7 @@ class LIBKEEPASS_API hashed_ostreambuf final
 private:
   static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
 
-  std::ostream &dst_;
+  std::ostream& dst_;
   const uint32_t block_size_;
 
   /// Writes the current block (header + data) to the output stream.
@@ -190,8 +186,7 @@ public:
    *
    * @param dst The output stream to write hashed blocks to.
    */
-  explicit hashed_ostreambuf(std::ostream &dst)
-      : dst_(dst), block_size_(kDefaultBlockSize) {}
+  explicit hashed_ostreambuf(std::ostream& dst) : dst_(dst), block_size_(kDefaultBlockSize) {}
 
   /**
    * @brief Constructs an output streambuf with a custom block size.
@@ -199,8 +194,7 @@ public:
    * @param dst The output stream to write hashed blocks to.
    * @param block_size The maximum number of data bytes per block.
    */
-  hashed_ostreambuf(std::ostream &dst, uint32_t block_size)
-      : dst_(dst), block_size_(block_size) {}
+  hashed_ostreambuf(std::ostream& dst, uint32_t block_size) : dst_(dst), block_size_(block_size) {}
 
   /// Buffers a character; flushes the current block when it reaches capacity.
   int overflow(int c) override;
@@ -219,7 +213,7 @@ public:
 class LIBKEEPASS_API hmac_istreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
-  std::istream &src_;
+  std::istream& src_;
   const std::array<uint8_t, 64> hmac_key_;
 
   uint64_t block_index_ = 0;
@@ -235,8 +229,7 @@ public:
    * @param src The input stream to read HMAC-protected blocks from.
    * @param hmac_key The 512-bit master HMAC key.
    */
-  hmac_istreambuf(std::istream &src,
-                  const std::array<uint8_t, 64> &hmac_key)
+  hmac_istreambuf(std::istream& src, const std::array<uint8_t, 64>& hmac_key)
       : src_(src), hmac_key_(hmac_key) {}
 
   /// Reads and HMAC-verifies the next block when the get area is exhausted.
@@ -255,7 +248,7 @@ class LIBKEEPASS_API hmac_ostreambuf final
 private:
   static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
 
-  std::ostream &dst_;
+  std::ostream& dst_;
   const std::array<uint8_t, 64> hmac_key_;
   const uint32_t block_size_;
 
@@ -275,8 +268,7 @@ public:
    * @param dst The output stream to write HMAC-protected blocks to.
    * @param hmac_key The 512-bit master HMAC key.
    */
-  hmac_ostreambuf(std::ostream &dst,
-                  const std::array<uint8_t, 64> &hmac_key)
+  hmac_ostreambuf(std::ostream& dst, const std::array<uint8_t, 64>& hmac_key)
       : dst_(dst), hmac_key_(hmac_key), block_size_(kDefaultBlockSize) {}
 
   /**
@@ -286,9 +278,7 @@ public:
    * @param hmac_key The 512-bit master HMAC key.
    * @param block_size The maximum number of data bytes per block.
    */
-  hmac_ostreambuf(std::ostream &dst,
-                  const std::array<uint8_t, 64> &hmac_key,
-                  uint32_t block_size)
+  hmac_ostreambuf(std::ostream& dst, const std::array<uint8_t, 64>& hmac_key, uint32_t block_size)
       : dst_(dst), hmac_key_(hmac_key), block_size_(block_size) {}
 
   /// Buffers a character; flushes the current block when it reaches capacity.
@@ -309,7 +299,7 @@ class LIBKEEPASS_API gzip_istreambuf final
 private:
   static const std::size_t kBufferSize = 16384;
 
-  std::istream &src_;
+  std::istream& src_;
   z_stream z_stream_{};
 
   /** Input buffer for feeding the decompressor. */
@@ -324,7 +314,7 @@ public:
    * @param src The input stream containing gzip-compressed data.
    * @throws InternalError If the zlib inflate context cannot be initialized.
    */
-  explicit gzip_istreambuf(std::istream &src);
+  explicit gzip_istreambuf(std::istream& src);
 
   /// Destroys the streambuf and releases the zlib inflate context.
   ~gzip_istreambuf() override;
@@ -344,7 +334,7 @@ class LIBKEEPASS_API gzip_ostreambuf final
 private:
   static const std::size_t kBufferSize = 16384;
 
-  std::ostream &dst_;
+  std::ostream& dst_;
   z_stream z_stream_{};
 
   std::vector<char> buffer_;
@@ -364,7 +354,7 @@ public:
    * @param dst The output stream to write compressed data to.
    * @throws InternalError If the zlib deflate context cannot be initialized.
    */
-  explicit gzip_ostreambuf(std::ostream &dst);
+  explicit gzip_ostreambuf(std::ostream& dst);
 
   /// Destroys the streambuf, finalizing the gzip stream and releasing the zlib context.
   ~gzip_ostreambuf() override;

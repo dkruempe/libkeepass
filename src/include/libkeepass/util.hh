@@ -56,9 +56,9 @@ template <typename T> inline T clamp(T min, T max, T val) {
  *         If not, the function returns false.
  */
 template <typename T>
-inline bool indirect_equal(const std::vector<T> &v0, const std::vector<T> &v1) {
+inline bool indirect_equal(const std::vector<T>& v0, const std::vector<T>& v1) {
   return std::equal(v0.begin(), v0.end(), v1.begin(),
-                    [](const T &a, const T &b) { return *a == *b; });
+                    [](const T& a, const T& b) { return *a == *b; });
 }
 
 /**
@@ -69,8 +69,7 @@ inline bool indirect_equal(const std::vector<T> &v0, const std::vector<T> &v1) {
  * @return true if the elements of both dereferenced pointers are equal or if
  *         both pointers are null. false is returned otherwise.
  */
-template <typename T>
-inline bool indirect_equal(std::shared_ptr<T> p0, std::shared_ptr<T> p1) {
+template <typename T> inline bool indirect_equal(std::shared_ptr<T> p0, std::shared_ptr<T> p1) {
   if (p0 != nullptr && p1 != nullptr)
     return *p0 == *p1;
 
@@ -85,11 +84,10 @@ inline bool indirect_equal(std::shared_ptr<T> p0, std::shared_ptr<T> p1) {
  * @param [in] current Start node.
  * @param [in] callback Function to be called for each visited node.
  */
-template <typename T, const std::vector<std::shared_ptr<T>> &(T::*F)() const>
-inline void
-dfs(const std::shared_ptr<T> &current,
-    std::function<void(const std::shared_ptr<T> &, std::size_t)> callback,
-    std::size_t level = 0) {
+template <typename T, const std::vector<std::shared_ptr<T>>& (T::*F)() const>
+inline void dfs(const std::shared_ptr<T>& current,
+                std::function<void(const std::shared_ptr<T>&, std::size_t)> callback,
+                std::size_t level = 0) {
   for (auto child : ((current.get())->*F)()) {
     // Note that we're not invoking the callback for the root.
     callback(child, level);
@@ -105,7 +103,7 @@ dfs(const std::shared_ptr<T> &current,
  * @param [in] time Date and time in UTC.
  * @return @a time as a human readable string in UTC.
  */
-LIBKEEPASS_API std::string time_to_str(const std::time_t &time);
+LIBKEEPASS_API std::string time_to_str(const std::time_t& time);
 
 /**
  * @brief Generates a cryptographically random 128-bit UUID.

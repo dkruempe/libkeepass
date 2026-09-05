@@ -43,50 +43,44 @@ using namespace keepass;
 
 namespace {
 
-constexpr std::array<uint8_t, 16> kCipherAes = {
-    {0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21,
-     0x6a, 0xfc, 0x5a, 0xff}};
-constexpr std::array<uint8_t, 16> kCipherChaCha20 = {
-    {0xd6, 0x03, 0x8a, 0x2b, 0x8b, 0x6f, 0x4c, 0xb5, 0xa5, 0x24, 0x33, 0x9a,
-     0x31, 0xdb, 0xb5, 0x9a}};
-constexpr std::array<uint8_t, 16> kCipherTwofish = {
-    {0xad, 0x68, 0xf2, 0x9f, 0x57, 0x6f, 0x4b, 0xb9, 0xa3, 0x6a, 0xd4, 0x7a,
-     0xf9, 0x65, 0x34, 0x6c}};
+constexpr std::array<uint8_t, 16> kCipherAes = {{0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50,
+                                                 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff}};
+constexpr std::array<uint8_t, 16> kCipherChaCha20 = {{0xd6, 0x03, 0x8a, 0x2b, 0x8b, 0x6f, 0x4c,
+                                                      0xb5, 0xa5, 0x24, 0x33, 0x9a, 0x31, 0xdb,
+                                                      0xb5, 0x9a}};
+constexpr std::array<uint8_t, 16> kCipherTwofish = {{0xad, 0x68, 0xf2, 0x9f, 0x57, 0x6f, 0x4b, 0xb9,
+                                                     0xa3, 0x6a, 0xd4, 0x7a, 0xf9, 0x65, 0x34,
+                                                     0x6c}};
 
-constexpr std::array<uint8_t, 16> kKdfAesKdbx4 = {
-    {0x7c, 0x02, 0xbb, 0x82, 0x79, 0xa7, 0x4a, 0xc0, 0x92, 0x7d, 0x11, 0x4a,
-     0x00, 0x64, 0x82, 0x38}};
-constexpr std::array<uint8_t, 16> kKdfAesKdbx3 = {
-    {0xc9, 0xd9, 0xf3, 0x9a, 0x62, 0x8a, 0x44, 0x60, 0xbf, 0x74, 0x0d, 0x08,
-     0xc1, 0x8a, 0x4f, 0xea}};
-constexpr std::array<uint8_t, 16> kKdfArgon2d = {
-    {0xef, 0x63, 0x6d, 0xdf, 0x8c, 0x29, 0x44, 0x4b, 0x91, 0xf7, 0xa9, 0xa4,
-     0x03, 0xe3, 0x0a, 0x0c}};
-constexpr std::array<uint8_t, 16> kKdfArgon2id = {
-    {0x9e, 0x29, 0x8b, 0x19, 0x56, 0xdb, 0x47, 0x73, 0xb2, 0x3d, 0xfc, 0x3e,
-     0xc6, 0xf0, 0xa1, 0xe6}};
+constexpr std::array<uint8_t, 16> kKdfAesKdbx4 = {{0x7c, 0x02, 0xbb, 0x82, 0x79, 0xa7, 0x4a, 0xc0,
+                                                   0x92, 0x7d, 0x11, 0x4a, 0x00, 0x64, 0x82, 0x38}};
+constexpr std::array<uint8_t, 16> kKdfAesKdbx3 = {{0xc9, 0xd9, 0xf3, 0x9a, 0x62, 0x8a, 0x44, 0x60,
+                                                   0xbf, 0x74, 0x0d, 0x08, 0xc1, 0x8a, 0x4f, 0xea}};
+constexpr std::array<uint8_t, 16> kKdfArgon2d = {{0xef, 0x63, 0x6d, 0xdf, 0x8c, 0x29, 0x44, 0x4b,
+                                                  0x91, 0xf7, 0xa9, 0xa4, 0x03, 0xe3, 0x0a, 0x0c}};
+constexpr std::array<uint8_t, 16> kKdfArgon2id = {{0x9e, 0x29, 0x8b, 0x19, 0x56, 0xdb, 0x47, 0x73,
+                                                   0xb2, 0x3d, 0xfc, 0x3e, 0xc6, 0xf0, 0xa1, 0xe6}};
 
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
 constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
 constexpr uint32_t kKdbxVersion4 = 0x00040000;
 constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
 
-std::string GetTestPath(const std::string &name) {
+std::string GetTestPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/data/kdbx4/" + name;
 }
 
-std::string GetKdbx3DataPath(const std::string &name) {
+std::string GetKdbx3DataPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/data/kdbx/" + name;
 }
 
-std::string GetTmpPath(const std::string &name) {
+std::string GetTmpPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/tmp/" + name;
 }
 
-std::string GetTestJson(const std::string &name) {
+std::string GetTestJson(const std::string& name) {
   std::ifstream file(GetTestPath(name));
-  std::string file_str((std::istreambuf_iterator<char>(file)),
-                       std::istreambuf_iterator<char>());
+  std::string file_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
   // Compact the JSON by removing all white space not present in string
   // literals.
@@ -109,25 +103,24 @@ std::string GetTestJson(const std::string &name) {
   return json;
 }
 
-std::string ReadFile(const std::string &path) {
+std::string ReadFile(const std::string& path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
-  return std::string((std::istreambuf_iterator<char>(file)),
-                     std::istreambuf_iterator<char>());
+  return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
 
-void WriteFile(const std::string &path, const std::string &data) {
+void WriteFile(const std::string& path, const std::string& data) {
   std::ofstream file(path, std::ios::out | std::ios::binary);
   file.write(data.data(), static_cast<std::streamsize>(data.size()));
 }
 
-uint32_t ReadU32(const char *p) {
+uint32_t ReadU32(const char* p) {
   uint32_t v = 0;
   for (int i = 0; i < 4; ++i)
     v |= static_cast<uint32_t>(static_cast<uint8_t>(p[i])) << (8 * i);
   return v;
 }
 
-uint16_t ReadU16(const char *p) {
+uint16_t ReadU16(const char* p) {
   uint16_t v = 0;
   for (int i = 0; i < 2; ++i)
     v |= static_cast<uint16_t>(static_cast<uint8_t>(p[i])) << (8 * i);
@@ -145,7 +138,7 @@ struct HeaderInfo {
 
 // Parses the KDBX 4 header fields (cipher, compression, KDF $UUID) from a
 // serialized file without decrypting anything.
-HeaderInfo ReadHeader(const std::string &data) {
+HeaderInfo ReadHeader(const std::string& data) {
   HeaderInfo info;
   if (data.size() < 12)
     return info;
@@ -191,8 +184,7 @@ HeaderInfo ReadHeader(const std::string &data) {
         if (value_len > value.size() - i)
           break;
         if (name == "$UUID" && value_len == 16) {
-          std::copy(value.data() + i, value.data() + i + 16,
-                    info.kdf.begin());
+          std::copy(value.data() + i, value.data() + i + 16, info.kdf.begin());
           info.kdf_seen = true;
         }
         i += value_len;
@@ -205,14 +197,14 @@ HeaderInfo ReadHeader(const std::string &data) {
   return info;
 }
 
-void ConserveU32(std::ostream &dst, uint32_t value) {
-  dst.write(reinterpret_cast<const char *>(&value), 4);
+void ConserveU32(std::ostream& dst, uint32_t value) {
+  dst.write(reinterpret_cast<const char*>(&value), 4);
 }
 
 // Builds a syntactically valid KDBX 4 header (no content) with the given
 // content cipher UUID and KDF variant dictionary.
-std::string MakeKdbx4Header(const std::array<uint8_t, 16> &cipher,
-                            const std::array<uint8_t, 16> &kdf) {
+std::string MakeKdbx4Header(const std::array<uint8_t, 16>& cipher,
+                            const std::array<uint8_t, 16>& kdf) {
   std::stringstream ss;
 
   ConserveU32(ss, kKdbxSignature0);
@@ -224,7 +216,7 @@ std::string MakeKdbx4Header(const std::array<uint8_t, 16> &cipher,
   uint32_t size = 16;
   ss.put(static_cast<char>(id));
   ConserveU32(ss, size);
-  ss.write(reinterpret_cast<const char *>(cipher.data()), cipher.size());
+  ss.write(reinterpret_cast<const char*>(cipher.data()), cipher.size());
 
   // Compression: none.
   id = 3;
@@ -244,16 +236,16 @@ std::string MakeKdbx4Header(const std::array<uint8_t, 16> &cipher,
   // KDF parameters: version 0x0100, $UUID byte array, terminator.
   std::stringstream kdf_ss;
   uint16_t dict_version = 0x0100;
-  kdf_ss.write(reinterpret_cast<const char *>(&dict_version), 2);
+  kdf_ss.write(reinterpret_cast<const char*>(&dict_version), 2);
   uint8_t entry_type = 0x42;
-  const char *uuid_name = "$UUID";
+  const char* uuid_name = "$UUID";
   uint32_t uuid_name_len = 5;
   uint32_t uuid_len = 16;
   kdf_ss.put(static_cast<char>(entry_type));
   ConserveU32(kdf_ss, uuid_name_len);
   kdf_ss.write(uuid_name, uuid_name_len);
   ConserveU32(kdf_ss, uuid_len);
-  kdf_ss.write(reinterpret_cast<const char *>(kdf.data()), kdf.size());
+  kdf_ss.write(reinterpret_cast<const char*>(kdf.data()), kdf.size());
   kdf_ss.put(static_cast<char>(0)); // Terminator.
 
   id = 11;
@@ -273,24 +265,21 @@ std::string MakeKdbx4Header(const std::array<uint8_t, 16> &cipher,
 
 // Asserts that two databases contain identical structures, both via the
 // strong equality operator and via the serialized JSON representation.
-void ExpectSameDatabase(const Database &a, const Database &b) {
+void ExpectSameDatabase(const Database& a, const Database& b) {
   EXPECT_TRUE(*a.root() == *b.root());
   EXPECT_EQ(a.root()->ToJson(), b.root()->ToJson());
 }
 
 // Builds a small deterministic database for programmatic export tests.
-std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher,
-                                       Database::Kdf kdf, bool compress) {
+std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kdf, bool compress) {
   std::unique_ptr<Database> db(new Database());
 
-  std::array<uint8_t, 16> master_seed = {
-      {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-       0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}};
+  std::array<uint8_t, 16> master_seed = {{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+                                          0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}};
   db->set_master_seed(master_seed);
 
-  std::array<uint8_t, 16> init_vector = {
-      {0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-       0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20}};
+  std::array<uint8_t, 16> init_vector = {{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
+                                          0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20}};
   db->set_init_vector(init_vector);
 
   db->set_cipher(cipher);
@@ -298,11 +287,10 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher,
   db->set_compress(compress);
 
   if (kdf == Database::Kdf::kAes) {
-    std::array<uint8_t, 32> transform_seed = {
-        {0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
-         0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30,
-         0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
-         0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40}};
+    std::array<uint8_t, 32> transform_seed = {{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+                                               0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30,
+                                               0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+                                               0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40}};
     db->set_transform_seed(transform_seed);
     db->set_transform_rounds(8192);
   } else {
@@ -359,7 +347,7 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher,
   return db;
 }
 
-const char *CipherName(Database::Cipher cipher) {
+const char* CipherName(Database::Cipher cipher) {
   switch (cipher) {
   case Database::Cipher::kAes:
     return "aes";
@@ -399,27 +387,21 @@ std::array<uint8_t, 16> KdfUuid(Database::Kdf kdf) {
 
 TEST(Kdbx4Test, ImportSamples) {
   struct Sample {
-    const char *file;
+    const char* file;
     Database::Cipher cipher;
     Database::Kdf kdf;
     bool compressed;
   };
   const std::vector<Sample> samples = {
-      {"kdbx4-aes-argon2d.kdbx", Database::Cipher::kAes,
-       Database::Kdf::kArgon2d, true},
-      {"kdbx4-chacha20-argon2d.kdbx", Database::Cipher::kChaCha20,
-       Database::Kdf::kArgon2d, true},
-      {"kdbx4-twofish-argon2d.kdbx", Database::Cipher::kTwofish,
-       Database::Kdf::kArgon2d, true},
-      {"kdbx4-chacha20-aeskdf.kdbx", Database::Cipher::kChaCha20,
-       Database::Kdf::kAes, true},
-      {"kdbx4-aes-argon2id.kdbx", Database::Cipher::kAes,
-       Database::Kdf::kArgon2id, false},
-      {"kdbx4-aes-argon2d-gzip.kdbx", Database::Cipher::kAes,
-       Database::Kdf::kArgon2d, true},
+      {"kdbx4-aes-argon2d.kdbx", Database::Cipher::kAes, Database::Kdf::kArgon2d, true},
+      {"kdbx4-chacha20-argon2d.kdbx", Database::Cipher::kChaCha20, Database::Kdf::kArgon2d, true},
+      {"kdbx4-twofish-argon2d.kdbx", Database::Cipher::kTwofish, Database::Kdf::kArgon2d, true},
+      {"kdbx4-chacha20-aeskdf.kdbx", Database::Cipher::kChaCha20, Database::Kdf::kAes, true},
+      {"kdbx4-aes-argon2id.kdbx", Database::Cipher::kAes, Database::Kdf::kArgon2id, false},
+      {"kdbx4-aes-argon2d-gzip.kdbx", Database::Cipher::kAes, Database::Kdf::kArgon2d, true},
   };
 
-  for (const auto &sample : samples) {
+  for (const auto& sample : samples) {
     SCOPED_TRACE(sample.file);
 
     std::string base = std::string(sample.file);
@@ -543,10 +525,10 @@ TEST(Kdbx4Test, WrongPassword) {
   // by the header HMAC and is identical across the remaining samples, which
   // only differ in cipher; skipping the redundant 64 MiB Argon2 runs keeps the
   // test fast without losing coverage.
-  const char *files[] = {"kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
+  const char* files[] = {"kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
                          "kdbx4-aes-argon2id.kdbx"};
 
-  for (const char *file : files) {
+  for (const char* file : files) {
     SCOPED_TRACE(file);
 
     Key key("wrong_password");
@@ -559,12 +541,10 @@ TEST(Kdbx4Test, NotKdbx4File) {
   Key key("password");
 
   KdbxFile file;
-  EXPECT_THROW(
-      file.Import(std::string(PROJECT_ROOT_PATH) + "/data/gzip_stream-0", key),
-      FormatError); // Too small to even contain a header.
-  EXPECT_THROW(
-      file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-0", key),
-      FormatError); // Fits the header but has no KDBX signature.
+  EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/gzip_stream-0", key),
+               FormatError); // Too small to even contain a header.
+  EXPECT_THROW(file.Import(std::string(PROJECT_ROOT_PATH) + "/data/hashed_stream-0", key),
+               FormatError); // Fits the header but has no KDBX signature.
 }
 
 TEST(Kdbx4Test, TruncatedFile) {
@@ -580,35 +560,30 @@ TEST(Kdbx4Test, TruncatedFile) {
 
 TEST(Kdbx4Test, UnknownCipherRejected) {
   std::array<uint8_t, 16> bogus = {{0x11}};
-  WriteFile(GetTmpPath("kdbx4-bad-cipher.kdbx"),
-            MakeKdbx4Header(bogus, kKdfArgon2d));
+  WriteFile(GetTmpPath("kdbx4-bad-cipher.kdbx"), MakeKdbx4Header(bogus, kKdfArgon2d));
 
   Key key("password");
   KdbxFile file;
-  EXPECT_THROW(file.Import(GetTmpPath("kdbx4-bad-cipher.kdbx"), key),
-               FormatError);
+  EXPECT_THROW(file.Import(GetTmpPath("kdbx4-bad-cipher.kdbx"), key), FormatError);
   std::remove(GetTmpPath("kdbx4-bad-cipher.kdbx").c_str());
 }
 
 TEST(Kdbx4Test, UnknownKdfRejected) {
   std::array<uint8_t, 16> bogus = {{0x22}};
-  WriteFile(GetTmpPath("kdbx4-bad-kdf.kdbx"),
-            MakeKdbx4Header(kCipherAes, bogus));
+  WriteFile(GetTmpPath("kdbx4-bad-kdf.kdbx"), MakeKdbx4Header(kCipherAes, bogus));
 
   Key key("password");
   KdbxFile file;
-  EXPECT_THROW(file.Import(GetTmpPath("kdbx4-bad-kdf.kdbx"), key),
-               FormatError);
+  EXPECT_THROW(file.Import(GetTmpPath("kdbx4-bad-kdf.kdbx"), key), FormatError);
   std::remove(GetTmpPath("kdbx4-bad-kdf.kdbx").c_str());
 }
 
 TEST(Kdbx4Test, RoundtripSamples) {
-  const char *files[] = {
-      "kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-argon2d.kdbx",
-      "kdbx4-twofish-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
-      "kdbx4-aes-argon2id.kdbx", "kdbx4-aes-argon2d-gzip.kdbx"};
+  const char* files[] = {"kdbx4-aes-argon2d.kdbx",     "kdbx4-chacha20-argon2d.kdbx",
+                         "kdbx4-twofish-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
+                         "kdbx4-aes-argon2id.kdbx",    "kdbx4-aes-argon2d-gzip.kdbx"};
 
-  for (const char *file : files) {
+  for (const char* file : files) {
     SCOPED_TRACE(file);
 
     std::string base = std::string(file);
@@ -618,8 +593,7 @@ TEST(Kdbx4Test, RoundtripSamples) {
     KdbxFile exporter;
     KdbxFile importer;
 
-    std::unique_ptr<Database> db =
-        importer.Import(GetTestPath(file), key);
+    std::unique_ptr<Database> db = importer.Import(GetTestPath(file), key);
     const Database::Cipher cipher = db->cipher();
     const Database::Kdf kdf = db->kdf();
     const bool compress = db->compress();
@@ -659,15 +633,13 @@ TEST(Kdbx4Test, RoundtripSamples) {
   bad_exporter.set_write_kdbx4(true);
   EXPECT_NO_THROW(bad_exporter.Export(bad_path, *bad_db, Key("password")));
   KdbxFile bad_importer;
-  EXPECT_THROW(bad_importer.Import(bad_path, Key("wrong_password")),
-               PasswordError);
+  EXPECT_THROW(bad_importer.Import(bad_path, Key("wrong_password")), PasswordError);
   std::remove(bad_path.c_str());
 }
 
 TEST(Kdbx4Test, MatrixRoundtrip) {
   // Full matrix: every content cipher, every KDF and both compression flags.
-  const Database::Cipher ciphers[] = {Database::Cipher::kAes,
-                                      Database::Cipher::kTwofish,
+  const Database::Cipher ciphers[] = {Database::Cipher::kAes, Database::Cipher::kTwofish,
                                       Database::Cipher::kChaCha20};
   const Database::Kdf kdfs[] = {Database::Kdf::kAes, Database::Kdf::kArgon2d,
                                 Database::Kdf::kArgon2id};
@@ -685,12 +657,10 @@ TEST(Kdbx4Test, MatrixRoundtrip) {
         SCOPED_TRACE(std::string(CipherName(cipher)) + " + " +
                      (kdf == Database::Kdf::kAes
                           ? "aes-kdf"
-                          : (kdf == Database::Kdf::kArgon2d ? "argon2d"
-                                                           : "argon2id")) +
+                          : (kdf == Database::Kdf::kArgon2d ? "argon2d" : "argon2id")) +
                      (compress ? " + gzip" : ""));
 
-        std::unique_ptr<Database> db =
-            MakeDatabase(cipher, kdf, compress);
+        std::unique_ptr<Database> db = MakeDatabase(cipher, kdf, compress);
 
         exporter.set_write_kdbx4(true);
         EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
@@ -701,8 +671,7 @@ TEST(Kdbx4Test, MatrixRoundtrip) {
         EXPECT_EQ(header.cipher, CipherUuid(cipher));
         ASSERT_TRUE(header.kdf_seen);
         EXPECT_EQ(header.kdf, KdfUuid(kdf));
-        EXPECT_EQ(header.compression,
-                  compress ? 1u : 0u);
+        EXPECT_EQ(header.compression, compress ? 1u : 0u);
 
         std::unique_ptr<Database> reimported;
         EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
@@ -720,8 +689,7 @@ TEST(Kdbx4Test, MatrixRoundtrip) {
       MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
   exporter.set_write_kdbx4(true);
   exporter.Export(dst_path, *db, key);
-  EXPECT_THROW(importer.Import(dst_path, Key("wrong_password")),
-               PasswordError);
+  EXPECT_THROW(importer.Import(dst_path, Key("wrong_password")), PasswordError);
 
   std::remove(dst_path.c_str());
 }
@@ -758,8 +726,7 @@ TEST(Kdbx4Test, AttachmentRoundtrip) {
 
   // Attach a binary to the first entry; KDBX 4 stores it in the inner header.
   auto entry = db->root()->Entries().front();
-  std::shared_ptr<Binary> binary(new Binary(
-      protect<std::string>("attachment payload", true)));
+  std::shared_ptr<Binary> binary(new Binary(protect<std::string>("attachment payload", true)));
   binary->set_compress(false);
 
   auto attachment = std::make_shared<Entry::Attachment>();
@@ -778,7 +745,7 @@ TEST(Kdbx4Test, AttachmentRoundtrip) {
   EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
   ASSERT_NE(reimported, nullptr);
 
-  const auto &attachments = reimported->root()->Entries().front()->attachments();
+  const auto& attachments = reimported->root()->Entries().front()->attachments();
   ASSERT_EQ(attachments.size(), 1u);
   EXPECT_EQ(attachments[0]->name(), "file.bin");
   ASSERT_NE(attachments[0]->binary(), nullptr);
@@ -789,8 +756,7 @@ TEST(Kdbx4Test, AttachmentRoundtrip) {
 
 TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   std::unique_ptr<Database> db =
-      MakeDatabase(Database::Cipher::kChaCha20, Database::Kdf::kArgon2id,
-                   true);
+      MakeDatabase(Database::Cipher::kChaCha20, Database::Kdf::kArgon2id, true);
 
   // Add another entry with a custom field and a history entry.
   auto entry = db->root()->Entries().front();
@@ -815,15 +781,13 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   ASSERT_NE(reimported, nullptr);
   ExpectSameDatabase(*db, *reimported);
 
-  const auto &reimported_entry =
-      reimported->root()->Entries().front();
-  const auto &custom_fields = reimported_entry->custom_fields();
+  const auto& reimported_entry = reimported->root()->Entries().front();
+  const auto& custom_fields = reimported_entry->custom_fields();
   ASSERT_EQ(custom_fields.size(), 1u);
   EXPECT_EQ(custom_fields[0].key(), "CustomField");
   EXPECT_EQ(std::string(*custom_fields[0].value()), "custom value");
   ASSERT_EQ(reimported_entry->history().size(), 1u);
-  EXPECT_EQ(std::string(*reimported_entry->history()[0]->password()),
-            "oldsecret");
+  EXPECT_EQ(std::string(*reimported_entry->history()[0]->password()), "oldsecret");
 
   std::remove(dst_path.c_str());
 }
@@ -831,39 +795,31 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
 #if LIBKEEPASS_AES_NI
 
 TEST(KdbxAesNi, TransformMatchesEVPReference) {
-  std::array<uint8_t, 32> seed = {
-      {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-       0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-       0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-       0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20}};
-  std::array<uint8_t, 32> composite = {
-      {0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33,
-       0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,
-       0xcc, 0xdd, 0xee, 0xff, 0x12, 0x34, 0x56, 0x78,
-       0x9a, 0xbc, 0xde, 0xf0, 0x0f, 0x1e, 0x2d, 0x3c}};
+  std::array<uint8_t, 32> seed = {{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
+                                   0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+                                   0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20}};
+  std::array<uint8_t, 32> composite = {{0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33,
+                                        0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,
+                                        0xcc, 0xdd, 0xee, 0xff, 0x12, 0x34, 0x56, 0x78,
+                                        0x9a, 0xbc, 0xde, 0xf0, 0x0f, 0x1e, 0x2d, 0x3c}};
   const uint64_t rounds = 1000;
 
   std::array<uint8_t, 32> evp_result = composite;
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
   ASSERT_NE(ctx, nullptr);
-  ASSERT_EQ(EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(),
-                               nullptr),
-            1);
+  ASSERT_EQ(EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, seed.data(), nullptr), 1);
   EVP_CIPHER_CTX_set_padding(ctx, 0);
   std::array<uint8_t, 32> buf{};
   for (uint64_t i = 0; i < rounds; ++i) {
     int outl = 0;
-    ASSERT_EQ(EVP_EncryptUpdate(ctx, buf.data(), &outl, evp_result.data(),
-                                evp_result.size()),
-              1);
+    ASSERT_EQ(EVP_EncryptUpdate(ctx, buf.data(), &outl, evp_result.data(), evp_result.size()), 1);
     ASSERT_EQ(outl, 32);
     evp_result = buf;
   }
   EVP_CIPHER_CTX_free(ctx);
 
   std::array<uint8_t, 32> aeni_result{};
-  aes_ni_transform_aes_kdf(seed.data(), composite.data(), rounds,
-                           aeni_result.data());
+  aes_ni_transform_aes_kdf(seed.data(), composite.data(), rounds, aeni_result.data());
 
   EXPECT_EQ(aeni_result, evp_result);
 }
