@@ -16,18 +16,15 @@ findings warrant it, backported to the most recent previous minor release.
 
 ## Reporting a Vulnerability
 
-Please **do not** report security vulnerabilities through public GitHub
-issues. Instead, report them privately:
+Please do not publish exploit details in public issue titles or descriptions
+before the issue is fixed. Open a GitHub issue at
+<https://github.com/dkruempe/libkeepass/issues> and:
 
-- GitHub: use the **Security Advisories** feature of this repository
-  (`Security` → `Report a vulnerability`).
-- Email: [security@dkruempelmann.de](mailto:security@dkruempelmann.de)
-  (plain-text or OpenPGP-encrypted, please describe the impact and include
-  reproduction steps).
+- keep the title generic (e.g. "Security issue in …"),
+- describe the impact and include reproduction steps in the issue body.
 
-You can expect an acknowledgement within 3 business days and a status update
-at least every 7 days until the issue is resolved. We will not disclose the
-issue publicly until a fix is available and has been released.
+We will respond within 3 business days and coordinate a fix before the issue
+is made public.
 
 ## Security Considerations For This Project
 
