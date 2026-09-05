@@ -32,8 +32,9 @@ std::string time_to_str(const std::time_t& time) {
   (void)err;
   const std::tm* utc_time = &utc_time_buf;
 #else
-  const std::tm* utc_time = std::gmtime(&time);
-  assert(utc_time != nullptr);
+  std::tm utc_time_buf{};
+  gmtime_r(&time, &utc_time_buf);
+  const std::tm* utc_time = &utc_time_buf;
 #endif
 
   char buffer[128];

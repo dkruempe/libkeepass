@@ -98,6 +98,11 @@ bool IsKdbPath(const std::string& path) {
   return ext == "kdb";
 }
 
+// Parses the command-line arguments into @p opt. Supports long options
+// (--password, --keyfile, --format, --output, --export, --with-passwords,
+// --verbose, --help, --version, both with '=' and as separate value
+// arguments), combined short options (-p, -k) and the "--" separator.
+// Returns false and prints an error if an argument is unknown or malformed.
 bool ParseArgs(int argc, const char* argv[], Options& opt) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];

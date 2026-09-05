@@ -83,7 +83,9 @@ struct KdbTime {
       gmtime_s(&time_buf, &time);
       std::tm* time_ptr = &time_buf;
 #else
-      std::tm* time_ptr = std::gmtime(&time);
+      std::tm time_buf{};
+      gmtime_r(&time, &time_buf);
+      std::tm* time_ptr = &time_buf;
 #endif
 
       uint32_t year = static_cast<uint32_t>(time_ptr->tm_year) + 1900;

@@ -300,7 +300,9 @@ std::string KdbxFile::WriteDateTime(std::time_t time) const {
   gmtime_s(&time_buf, &time);
   std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &time_buf);
 #else
-  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&time));
+  std::tm time_buf{};
+  gmtime_r(&time, &time_buf);
+  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &time_buf);
 #endif
   return buffer;
 }

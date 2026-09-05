@@ -554,6 +554,9 @@ ChaCha20Cipher::ChaCha20Cipher(const std::array<uint8_t, 32>& key,
     state_[13 + i] = *reinterpret_cast<const uint32_t*>(nounce_ptr + 4 * i);
 }
 
+// Runs the ChaCha20 round function (20 rounds, RFC 8439 quarter-rounds,
+// column then diagonal) on the given 16-word state and adds the input state
+// back to produce the 64-byte keystream block.
 std::array<uint8_t, 64> ChaCha20Cipher::BlockFunction(const std::array<uint32_t, 16>& state) {
   uint32_t x[16];
   for (std::size_t i = 0; i < 16; ++i)

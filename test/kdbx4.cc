@@ -120,13 +120,6 @@ uint32_t ReadU32(const char* p) {
   return v;
 }
 
-uint16_t ReadU16(const char* p) {
-  uint16_t v = 0;
-  for (int i = 0; i < 2; ++i)
-    v |= static_cast<uint16_t>(static_cast<uint8_t>(p[i])) << (8 * i);
-  return v;
-}
-
 struct HeaderInfo {
   uint32_t version = 0;
   uint32_t compression = 0;
