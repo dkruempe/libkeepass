@@ -41,9 +41,9 @@ namespace keepass {
 
 const uint32_t kKdbSignature0 = 0x9aa2d903;
 const uint32_t kKdbSignature1 = 0xb54bfb65;
-// const uint32_t kKdbFlagSha2 = 0x00000001;
+// The legacy KDB header flags also reserve bits for SHA-256 (0x00000001) and
+// ARC FOUR (0x00000004), which this library does not implement.
 const uint32_t kKdbFlagRijndael = 0x00000002;
-// const uint32_t kKdbFlagArcFour = 0x00000004;
 const uint32_t kKdbFlagTwofish = 0x00000008;
 
 #pragma pack(push, 1)

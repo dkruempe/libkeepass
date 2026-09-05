@@ -1199,11 +1199,43 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   return db;
 }
 
+void KdbxFile::ParseKdfParameters(std::istream& field, Database& db) {
+  VariantDictionary vdict;
+  vdict.Parse(field);
+
+  const VariantDictionary::Entry& uuid_entry = vdict.Get("$UUID");
+  if (uuid_entry.type != VariantDictionary::Type::kByteArray || uuid_entry.value.size() != 16) {
+    throw FormatError("Illegal KDF UUID in KDBX 4 database.");
+  }
+
+  std::array<uint8_t, 16> uuid{};
+  std::copy(uuid_entry.value.begin(), uuid_entry.value.end(), uuid.begin());
+
+  if (uuid == kKdbxKdfAesKdbx4 || uuid == kKdbxKdfAesKdbx3) {
+    db.set_kdf(Database::Kdf::kAes);
+
+    std::vector<uint8_t> seed = vdict.GetBytes("S");
+    if (seed.size() != 32)
+      throw FormatError("Illegal KDF seed size in KDBX 4 database.");
+    std::array<uint8_t, 32> seed_arr{};
+    std::copy(seed.begin(), seed.end(), seed_arr.begin());
+    db.set_transform_seed(seed_arr);
+    db.set_transform_rounds(vdict.GetUInt64("R"));
+  } else if (uuid == kKdbxKdfArgon2d || uuid == kKdbxKdfArgon2id) {
+    db.set_kdf(uuid == kKdbxKdfArgon2d ? Database::Kdf::kArgon2d : Database::Kdf::kArgon2id);
+
+    db.set_argon2_salt(vdict.GetBytes("S"));
+    db.set_argon2_iterations(vdict.GetUInt64("I"));
+    db.set_argon2_memory(vdict.GetUInt64("M"));
+    db.set_argon2_parallelism(vdict.GetUInt32("P"));
+    db.set_argon2_version(vdict.GetUInt32("V"));
+  } else {
+    throw FormatError("Unknown KDF in KDBX 4 database.");
+  }
+}
+
 std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   std::unique_ptr<Database> db(new Database());
-
-  std::vector<uint8_t> argon2_salt;
-  uint64_t argon2_iterations = 0;
 
   // Read header fields.
   bool done = false;
@@ -1257,43 +1289,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
         throw FormatError("Illegal initialization vector size in KDBX.");
       }
       break;
-    case Kdbx4HeaderField::kKdfParameters: {
-      VariantDictionary vdict;
-      vdict.Parse(field);
-
-      const VariantDictionary::Entry& uuid_entry = vdict.Get("$UUID");
-      if (uuid_entry.type != VariantDictionary::Type::kByteArray || uuid_entry.value.size() != 16) {
-        throw FormatError("Illegal KDF UUID in KDBX 4 database.");
-      }
-
-      std::array<uint8_t, 16> uuid{};
-      std::copy(uuid_entry.value.begin(), uuid_entry.value.end(), uuid.begin());
-
-      if (uuid == kKdbxKdfAesKdbx4 || uuid == kKdbxKdfAesKdbx3) {
-        db->set_kdf(Database::Kdf::kAes);
-
-        std::vector<uint8_t> seed = vdict.GetBytes("S");
-        if (seed.size() != 32)
-          throw FormatError("Illegal KDF seed size in KDBX 4 database.");
-        std::array<uint8_t, 32> seed_arr{};
-        std::copy(seed.begin(), seed.end(), seed_arr.begin());
-        db->set_transform_seed(seed_arr);
-        db->set_transform_rounds(vdict.GetUInt64("R"));
-      } else if (uuid == kKdbxKdfArgon2d || uuid == kKdbxKdfArgon2id) {
-        db->set_kdf(uuid == kKdbxKdfArgon2d ? Database::Kdf::kArgon2d : Database::Kdf::kArgon2id);
-
-        argon2_salt = vdict.GetBytes("S");
-        argon2_iterations = vdict.GetUInt64("I");
-        db->set_argon2_salt(argon2_salt);
-        db->set_argon2_iterations(argon2_iterations);
-        db->set_argon2_memory(vdict.GetUInt64("M"));
-        db->set_argon2_parallelism(vdict.GetUInt32("P"));
-        db->set_argon2_version(vdict.GetUInt32("V"));
-      } else {
-        throw FormatError("Unknown KDF in KDBX 4 database.");
-      }
+    case Kdbx4HeaderField::kKdfParameters:
+      ParseKdfParameters(field, *db);
       break;
-    }
     default:
       throw FormatError("Illegal header field in KDBX.");
     }
@@ -1333,7 +1331,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   case Database::Kdf::kArgon2id:
     transformed_key = key.TransformArgon2(
         db->kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d : Key::Kdf::kArgon2id,
-        argon2_salt, argon2_iterations, db->argon2_memory(), db->argon2_parallelism(),
+        db->argon2_salt(), db->argon2_iterations(), db->argon2_memory(), db->argon2_parallelism(),
         db->argon2_version(), Key::SubKeyResolution::kHashSubKeys);
     break;
   }

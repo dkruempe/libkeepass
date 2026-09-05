@@ -96,6 +96,13 @@ private:
   /** Seconds since 0001-01-01 UTC representing the KDBX "never" date. */
   static int64_t NeverSeconds();
 
+  /// Parses the KDF parameters header field of a KDBX 4 database.
+  /**
+   * @param field The stream containing the serialized KDF parameters.
+   * @param db The database to populate with the parsed KDF settings.
+   */
+  static void ParseKdfParameters(std::istream& field, Database& db);
+
   /// Imports a KDBX 3 format database from a stream.
   /**
    * @param src The input stream containing the KDBX 3 database.

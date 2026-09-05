@@ -104,16 +104,22 @@ bool IsKdbPath(const std::string& path) {
 // arguments), combined short options (-p, -k) and the "--" separator.
 // Returns false and prints an error if an argument is unknown or malformed.
 bool ParseArgs(int argc, const char* argv[], Options& opt) {
+  bool skip_next = false;
   for (int i = 1; i < argc; ++i) {
+    if (skip_next) {
+      skip_next = false;
+      continue;
+    }
+
     const std::string arg = argv[i];
 
     if (arg == "--") {
-      for (++i; i < argc; ++i) {
+      for (int rest_idx = i + 1; rest_idx < argc; ++rest_idx) {
         if (!opt.input.empty()) {
-          std::cerr << "error: unexpected extra argument '" << argv[i] << "'\n";
+          std::cerr << "error: unexpected extra argument '" << argv[rest_idx] << "'\n";
           return false;
         }
-        opt.input = argv[i];
+        opt.input = argv[rest_idx];
       }
       break;
     }
@@ -160,15 +166,17 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
     }
 
     if (arg.size() > 1 && arg[0] == '-') {
+      bool consumed_rest = false;
       for (std::size_t j = 1; j < arg.size(); ++j) {
         const char c = arg[j];
         switch (c) {
         case 'p':
           if (j + 1 < arg.size()) {
             opt.password = arg.substr(j + 1);
-            j = arg.size();
+            consumed_rest = true;
           } else if (i + 1 < argc) {
-            opt.password = argv[++i];
+            opt.password = argv[i + 1];
+            skip_next = true;
           } else {
             std::cerr << "error: option '-p' requires a value\n";
             return false;
@@ -177,9 +185,10 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
         case 'k':
           if (j + 1 < arg.size()) {
             opt.keyfile = arg.substr(j + 1);
-            j = arg.size();
+            consumed_rest = true;
           } else if (i + 1 < argc) {
-            opt.keyfile = argv[++i];
+            opt.keyfile = argv[i + 1];
+            skip_next = true;
           } else {
             std::cerr << "error: option '-k' requires a value\n";
             return false;
@@ -188,9 +197,10 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
         case 'f':
           if (j + 1 < arg.size()) {
             opt.format = arg.substr(j + 1);
-            j = arg.size();
+            consumed_rest = true;
           } else if (i + 1 < argc) {
-            opt.format = argv[++i];
+            opt.format = argv[i + 1];
+            skip_next = true;
           } else {
             std::cerr << "error: option '-f' requires a value\n";
             return false;
@@ -199,9 +209,10 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
         case 'o':
           if (j + 1 < arg.size()) {
             opt.output = arg.substr(j + 1);
-            j = arg.size();
+            consumed_rest = true;
           } else if (i + 1 < argc) {
-            opt.output = argv[++i];
+            opt.output = argv[i + 1];
+            skip_next = true;
           } else {
             std::cerr << "error: option '-o' requires a value\n";
             return false;
@@ -210,9 +221,10 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
         case 'e':
           if (j + 1 < arg.size()) {
             opt.export_path = arg.substr(j + 1);
-            j = arg.size();
+            consumed_rest = true;
           } else if (i + 1 < argc) {
-            opt.export_path = argv[++i];
+            opt.export_path = argv[i + 1];
+            skip_next = true;
           } else {
             std::cerr << "error: option '-e' requires a value\n";
             return false;
@@ -228,6 +240,8 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
           std::cerr << "error: unknown option '-" << c << "'\n";
           return false;
         }
+        if (consumed_rest)
+          break;
       }
       continue;
     }
@@ -364,18 +378,19 @@ void PrintCsv(std::ostream& os, const std::shared_ptr<keepass::Group>& root, boo
   PrintCsvGroup(os, root, std::string(), with_passwords);
 }
 
-bool OpenOutput(const Options& opt, std::ofstream& file, std::ostream*& out) {
-  if (opt.output.empty()) {
-    out = &std::cout;
+// Opens the output stream for the print commands. When --output is given the
+// stream is opened in the provided file object; otherwise stdout is used and
+// no file is opened. Returns false and prints an error if the file cannot be
+// opened.
+bool OpenOutput(const Options& opt, std::ofstream& file) {
+  if (opt.output.empty())
     return true;
-  }
 
   file.open(opt.output.c_str());
   if (!file.is_open()) {
     std::cerr << "error: cannot open output file '" << opt.output << "'\n";
     return false;
   }
-  out = &file;
   return true;
 }
 
@@ -426,16 +441,17 @@ int Run(const Options& opt, const char* argv0) {
   }
 
   std::ofstream file;
-  std::ostream* out = nullptr;
-  if (!OpenOutput(opt, file, out))
+  if (!OpenOutput(opt, file))
     return 1;
 
+  std::ostream& out =
+      opt.output.empty() ? static_cast<std::ostream&>(std::cout) : static_cast<std::ostream&>(file);
   if (opt.format == "json") {
-    *out << db->root()->ToJson() << "\n";
+    out << db->root()->ToJson() << "\n";
   } else if (opt.format == "csv") {
-    PrintCsv(*out, db->root(), opt.with_passwords);
+    PrintCsv(out, db->root(), opt.with_passwords);
   } else {
-    PrintText(*out, db->root(), opt.with_passwords);
+    PrintText(out, db->root(), opt.with_passwords);
   }
   return 0;
 }
