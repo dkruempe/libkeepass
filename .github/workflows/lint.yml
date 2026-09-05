@@ -1,0 +1,61 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    env:
+      CONAN_VERSION: "2.31.2"
+      # Pinned to the exact version used by the project maintainers; bump both
+      # together with the locally installed toolchain.
+      CLANG_FORMAT_VERSION: "22.1.8"
+      CLANG_TIDY_VERSION: "22.1.8"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Conan
+        run: |
+          pip install "conan==${{ env.CONAN_VERSION }}"
+          conan profile detect --force
+
+      - name: Install clang-format and clang-tidy
+        run: |
+          pip install "clang-format==${{ env.CLANG_FORMAT_VERSION }}" \
+                      "clang-tidy==${{ env.CLANG_TIDY_VERSION }}"
+
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.conan2
+          key: conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-
+            conan-${{ runner.os }}-
+
+      # Configure the Debug build only to generate compile_commands.json, which
+      # run-clang-tidy needs to resolve the include paths and flags.
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
+
+      # Save the cache immediately after dependency provisioning but before
+      # any linting, so that a later failure does not lose the dependencies.
+      - name: Cache Conan packages (save before lint)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+
+      - name: Check formatting
+        run: clang-format --dry-run --Werror $(git ls-files '*.cc' '*.hh')
+
+      - name: Run clang-tidy
+        run: run-clang-tidy.py -p build -j $(nproc) src cli test
