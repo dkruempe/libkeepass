@@ -37,41 +37,24 @@ namespace keepass {
 std::array<uint8_t, 32> Key::CompositeKey::Resolve(SubKeyResolution resolution) const {
   static const std::array<uint8_t, 32> kEmptyKey = {{0}};
 
-  if (resolution == SubKeyResolution::kHashSubKeys) {
-    std::array<uint8_t, 32> key{};
+  const bool hash_sub_keys = resolution == SubKeyResolution::kHashSubKeys ||
+                             (password_key_ != kEmptyKey && keyfile_key_ != kEmptyKey);
+  if (!hash_sub_keys)
+    return password_key_ != kEmptyKey ? password_key_ : keyfile_key_;
 
-    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-    if (password_key_ != kEmptyKey)
-      EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
-    if (keyfile_key_ != kEmptyKey)
-      EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
-    unsigned int out_len = 0;
-    EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
-    EVP_MD_CTX_free(mdctx);
+  std::array<uint8_t, 32> key{};
 
-    return key;
-  } else {
-    if (password_key_ != kEmptyKey) {
-      if (keyfile_key_ != kEmptyKey) {
-        std::array<uint8_t, 32> key{};
+  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  if (password_key_ != kEmptyKey)
+    EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
+  if (keyfile_key_ != kEmptyKey)
+    EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
+  unsigned int out_len = 0;
+  EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
+  EVP_MD_CTX_free(mdctx);
 
-        EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-        EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-        EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
-        EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
-        unsigned int out_len = 0;
-        EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
-        EVP_MD_CTX_free(mdctx);
-
-        return key;
-      } else {
-        return password_key_;
-      }
-    } else {
-      return keyfile_key_;
-    }
-  }
+  return key;
 }
 
 Key::Key(const std::string& password) { SetPassword(password); }

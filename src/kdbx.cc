@@ -221,7 +221,7 @@ std::shared_ptr<Group> KdbxFile::GetGroup(const std::string& uuid_str) {
   return group;
 }
 
-int64_t KdbxFile::NeverSeconds() const {
+int64_t KdbxFile::NeverSeconds() {
   // The KDBX "never" marker is the fixed timestamp 2999-12-28T22:59:59Z.
   static const int64_t kNeverSeconds = []() {
     std::tm tm{};
@@ -236,7 +236,7 @@ int64_t KdbxFile::NeverSeconds() const {
   return kNeverSeconds;
 }
 
-std::time_t KdbxFile::ParseDateTime(const char* text) {
+std::time_t KdbxFile::ParseDateTime(const char* text) const {
   std::string str(text);
 
   // Check for the special KeePass 1x "never" timestamp.
@@ -277,14 +277,14 @@ std::time_t KdbxFile::ParseDateTime(const char* text) {
 #endif
 }
 
-std::string KdbxFile::WriteDateTime(std::time_t time) {
+std::string KdbxFile::WriteDateTime(std::time_t time) const {
   if (kdbx4_) {
     int64_t secs = time == 0 ? NeverSeconds() : static_cast<int64_t>(time) + kKdbxEpochBias;
 
     uint8_t bytes[8];
     uint64_t val = static_cast<uint64_t>(secs);
-    for (std::size_t i = 0; i < 8; ++i) {
-      bytes[i] = static_cast<uint8_t>(val & 0xff);
+    for (uint8_t& byte : bytes) {
+      byte = static_cast<uint8_t>(val & 0xff);
       val >>= 8;
     }
 
@@ -1711,11 +1711,14 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   conserve<KdbxHeader>(header_stream, header);
 
   conserve<Kdbx4HeaderField>(header_stream, Kdbx4HeaderField(Kdbx4HeaderField::kCipherId, 16));
-  conserve<std::array<uint8_t, 16>>(
-      header_stream,
-      db.cipher() == Database::Cipher::kChaCha20
-          ? kKdbxCipherChaCha20
-          : (db.cipher() == Database::Cipher::kTwofish ? kKdbxCipherTwofish : kKdbxCipherAes));
+
+  const std::array<uint8_t, 16>* cipher_id = &kKdbxCipherAes;
+  if (db.cipher() == Database::Cipher::kChaCha20)
+    cipher_id = &kKdbxCipherChaCha20;
+  else if (db.cipher() == Database::Cipher::kTwofish)
+    cipher_id = &kKdbxCipherTwofish;
+
+  conserve<std::array<uint8_t, 16>>(header_stream, *cipher_id);
 
   conserve<Kdbx4HeaderField>(header_stream,
                              Kdbx4HeaderField(Kdbx4HeaderField::kCompressionFlags, 4));

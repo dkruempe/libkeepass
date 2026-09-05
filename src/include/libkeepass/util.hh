@@ -69,7 +69,8 @@ inline bool indirect_equal(const std::vector<T>& v0, const std::vector<T>& v1) {
  * @return true if the elements of both dereferenced pointers are equal or if
  *         both pointers are null. false is returned otherwise.
  */
-template <typename T> inline bool indirect_equal(std::shared_ptr<T> p0, std::shared_ptr<T> p1) {
+template <typename T>
+inline bool indirect_equal(const std::shared_ptr<T>& p0, const std::shared_ptr<T>& p1) {
   if (p0 != nullptr && p1 != nullptr)
     return *p0 == *p1;
 

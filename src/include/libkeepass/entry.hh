@@ -145,7 +145,7 @@ public:
 
     /// Adds an association between a window and a keystroke sequence.
     void AddAssociation(const std::string& window, const std::string& sequence) {
-      associations_.emplace_back(Association(window, sequence));
+      associations_.emplace_back(window, sequence);
     }
 
     /// Equality comparison.

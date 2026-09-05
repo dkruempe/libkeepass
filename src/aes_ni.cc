@@ -98,10 +98,10 @@ Aes256RoundKeys ExpandKey(const uint8_t key[32]) {
 
 #define LIBKEEPASS_AES256_NEXT_RK(ID, RC)                                                          \
   do {                                                                                             \
-    __m128i xw = _mm_aeskeygenassist_si128(b, (RC));                                               \
-    NextRoundKeys(a, b, xw, &a, &b);                                                               \
-    out.rk[ID] = a;                                                                                \
-    out.rk[ID + 1] = b;                                                                            \
+    __m128i xw = _mm_aeskeygenassist_si128((b), (RC));                                             \
+    NextRoundKeys((a), (b), xw, &a, &b);                                                           \
+    out.rk[(ID)] = (a);                                                                            \
+    out.rk[(ID) + 1] = (b);                                                                        \
   } while (0)
 
   // Round constants 01, 02, 04, 08, 10, 20, 40.

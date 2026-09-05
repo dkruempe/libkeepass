@@ -135,10 +135,7 @@ TEST(StreamTest, ReadBadHashedStream) {
   std::istream stream(&streambuf);
 
   EXPECT_THROW(
-      {
-        std::string str =
-            std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-      },
+      { std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()); },
       IoError);
 }
 

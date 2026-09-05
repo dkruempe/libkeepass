@@ -55,7 +55,7 @@ void VariantDictionary::Parse(std::istream& src) {
 
     std::string key(key_len, '\0');
     if (key_len > 0)
-      src.read(&key[0], key_len);
+      src.read(key.data(), key_len);
     if (src.gcount() != static_cast<std::streamsize>(key_len))
       throw FormatError("Corrupt variant dictionary key.");
 

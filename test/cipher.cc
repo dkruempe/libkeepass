@@ -72,7 +72,7 @@ TEST(CipherTest, AesRandomBlock) {
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
   std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
-  cipher.Decrypt(dst_block, tst_block);
+  cipher.Decrypt(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 
@@ -82,7 +82,7 @@ TEST(CipherTest, AesZeroBlock) {
   std::array<uint8_t, 16> src_block = {0};
   std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
-  cipher.Decrypt(dst_block, tst_block);
+  cipher.Decrypt(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 
@@ -133,7 +133,7 @@ TEST(CipherTest, TwofishRandomBlock) {
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
   std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
-  cipher.Decrypt(dst_block, tst_block);
+  cipher.Decrypt(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 
@@ -143,7 +143,7 @@ TEST(CipherTest, TwofishZeroBlock) {
   std::array<uint8_t, 16> src_block = {0};
   std::array<uint8_t, 16> dst_block{}, tst_block{};
   cipher.Encrypt(src_block, dst_block);
-  cipher.Decrypt(dst_block, tst_block);
+  cipher.Decrypt(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 
@@ -196,7 +196,7 @@ TEST(CipherTest, Salsa20RandomBlock) {
   std::array<uint8_t, 64> src_block = GetRandomBlock<64>();
   std::array<uint8_t, 64> dst_block{}, tst_block{};
   src_cipher.Process(src_block, dst_block);
-  dst_cipher.Process(dst_block, tst_block);
+  dst_cipher.Process(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 
@@ -208,7 +208,7 @@ TEST(CipherTest, Salsa20ZeroBlock) {
   std::array<uint8_t, 64> src_block = {0};
   std::array<uint8_t, 64> dst_block{}, tst_block{};
   src_cipher.Process(src_block, dst_block);
-  dst_cipher.Process(dst_block, tst_block);
+  dst_cipher.Process(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
   EXPECT_EQ(src_block, tst_block);
 }
 

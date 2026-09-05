@@ -43,7 +43,7 @@ bool Entry::HasNonDefaultAutoTypeSettings() const { return auto_type_ != AutoTyp
 
 bool Entry::IsMetaEntry() const {
   bool has_binstream_attachment = false;
-  for (auto& attachment : attachments_) {
+  for (const auto& attachment : attachments_) {
     if (attachment->name() == "bin-stream") {
       has_binstream_attachment = true;
       break;
@@ -92,7 +92,7 @@ std::string Entry::ToJson() const {
     json << R"(,"access_time":")" << time_to_str(access_time_) << "\"";
   if (expiry_time_ != 0)
     json << R"(,"expiry_time":")" << time_to_str(expiry_time_) << "\"";
-  for (auto& attachment : attachments_) {
+  for (const auto& attachment : attachments_) {
     json << ",\"attachment\":" << attachment->ToJson();
   }
   json << "}";

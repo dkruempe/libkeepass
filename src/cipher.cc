@@ -133,7 +133,7 @@ void encrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
                           bool) -> std::size_t {
                         std::array<uint8_t, 16> src_xor_iv{};
                         std::transform(block_in.begin(), block_in.end(), prv.begin(),
-                                       src_xor_iv.begin(), std::bit_xor<uint8_t>());
+                                       src_xor_iv.begin(), std::bit_xor<>());
 
                         if (src_len != 16) {
                           // Handle PKCS #7 padding for the last block.
@@ -159,7 +159,7 @@ void encrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
 
     std::fill(src_block.begin(), src_block.end(), static_cast<uint8_t>(16));
     std::transform(src_block.begin(), src_block.end(), prv.begin(), src_block_xor_iv.begin(),
-                   std::bit_xor<uint8_t>());
+                   std::bit_xor<>());
 
     cipher.Encrypt(src_block_xor_iv, dst_block);
     dst.write(reinterpret_cast<const char*>(dst_block.data()), dst_block.size());
@@ -179,7 +179,7 @@ void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
                         cipher.Decrypt(block_in, block_out);
 
                         std::transform(block_out.begin(), block_out.end(), prv.begin(),
-                                       block_out.begin(), std::bit_xor<uint8_t>());
+                                       block_out.begin(), std::bit_xor<>());
 
                         if (last) {
                           // Handle PKCS #7 padding for the last block.
@@ -364,8 +364,8 @@ void TwofishCipher::InitializeKey(const std::array<uint8_t, 32>& key) {
     uint32_t a = F32(static_cast<uint32_t>(i) * kSubKeyStep, k32e);
     uint32_t b = F32(static_cast<uint32_t>(i) * kSubKeyStep + kSubKeyBump, k32o);
     b = RotateLeft(b, 8);
-    key_.sub_keys[2 * i] = a + b; // Combine with a PHT.
-    key_.sub_keys[2 * i + 1] = RotateLeft(a + 2 * b, 9);
+    key_.sub_keys[2 * static_cast<std::size_t>(i)] = a + b; // Combine with a PHT.
+    key_.sub_keys[2 * static_cast<std::size_t>(i) + 1] = RotateLeft(a + 2 * b, 9);
   }
 }
 

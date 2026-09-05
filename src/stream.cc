@@ -138,8 +138,8 @@ std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
   EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
-  for (std::size_t i = 0; i < 8; ++i) {
-    index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
+  for (uint8_t& byte : index_bytes) {
+    byte = static_cast<uint8_t>(block_index & 0xff);
     block_index >>= 8;
   }
   EVP_DigestUpdate(mdctx, index_bytes, 8);
@@ -168,8 +168,8 @@ int hmac_istreambuf::underflow() {
 
     uint8_t index_bytes[8];
     uint64_t index = block_index_;
-    for (std::size_t i = 0; i < 8; ++i) {
-      index_bytes[i] = static_cast<uint8_t>(index & 0xff);
+    for (uint8_t& byte : index_bytes) {
+      byte = static_cast<uint8_t>(index & 0xff);
       index >>= 8;
     }
 
@@ -216,8 +216,8 @@ std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
   EVP_DigestInit_ex(mdctx, EVP_sha512(), nullptr);
   uint8_t index_bytes[8];
   uint64_t block_index = block_index_;
-  for (std::size_t i = 0; i < 8; ++i) {
-    index_bytes[i] = static_cast<uint8_t>(block_index & 0xff);
+  for (uint8_t& byte : index_bytes) {
+    byte = static_cast<uint8_t>(block_index & 0xff);
     block_index >>= 8;
   }
   EVP_DigestUpdate(mdctx, index_bytes, 8);
@@ -235,8 +235,8 @@ bool hmac_ostreambuf::FlushBlock() {
   uint32_t block_size = static_cast<uint32_t>(block_.size());
   uint64_t index = block_index_;
   uint8_t index_bytes[8];
-  for (std::size_t i = 0; i < 8; ++i) {
-    index_bytes[i] = static_cast<uint8_t>(index & 0xff);
+  for (uint8_t& byte : index_bytes) {
+    byte = static_cast<uint8_t>(index & 0xff);
     index >>= 8;
   }
 

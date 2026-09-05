@@ -68,7 +68,7 @@ public:
    */
   protect(protect<T>&& other) noexcept {
     value_ = std::move(other.value_);
-    protected_ = std::move(other.protected_);
+    protected_ = other.protected_;
   }
 
   /**
@@ -100,11 +100,7 @@ public:
    * @param [in] other Source wrapper.
    * @return Reference to this object.
    */
-  protect<T>& operator=(const protect<T>& other) {
-    value_ = other.value_;
-    protected_ = other.protected_;
-    return *this;
-  }
+  protect<T>& operator=(const protect<T>&) = default;
 
   /**
    * @brief Move-assigns from another protected wrapper.
@@ -113,7 +109,7 @@ public:
    */
   protect<T>& operator=(protect<T>&& other) noexcept {
     value_ = std::move(other.value_);
-    protected_ = std::move(other.protected_);
+    protected_ = other.protected_;
     return *this;
   }
 

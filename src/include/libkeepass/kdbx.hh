@@ -53,13 +53,12 @@ class RandomObfuscator;
  */
 class LIBKEEPASS_API KdbxFile final {
 private:
-  typedef std::unordered_map<std::string, std::shared_ptr<Binary>> BinaryPool;
+  using BinaryPool = std::unordered_map<std::string, std::shared_ptr<Binary>>;
 
-  typedef std::unordered_map<std::string, std::weak_ptr<Icon>> IconPool;
+  using IconPool = std::unordered_map<std::string, std::weak_ptr<Icon>>;
 
-  typedef std::unordered_map<std::string, std::shared_ptr<Group>> GroupPool;
+  using GroupPool = std::unordered_map<std::string, std::shared_ptr<Group>>;
 
-private:
   BinaryPool binary_pool_;
   IconPool icon_pool_;
   GroupPool group_pool_;
@@ -86,16 +85,16 @@ private:
    * @param text The datetime string in KDBX format.
    * @return The parsed time value.
    */
-  std::time_t ParseDateTime(const char* text);
+  std::time_t ParseDateTime(const char* text) const;
 
   /// Converts a std::time_t value to a KDBX datetime string.
   /**
    * @param time The time value to format.
    * @return The formatted datetime string.
    */
-  std::string WriteDateTime(std::time_t time);
+  std::string WriteDateTime(std::time_t time) const;
   /** Seconds since 0001-01-01 UTC representing the KDBX "never" date. */
-  int64_t NeverSeconds() const;
+  static int64_t NeverSeconds();
 
   /// Imports a KDBX 3 format database from a stream.
   /**

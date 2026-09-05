@@ -105,7 +105,7 @@ std::string GetTestJson(const std::string& name) {
 
 std::string ReadFile(const std::string& path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
-  return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
 void WriteFile(const std::string& path, const std::string& data) {
@@ -216,7 +216,8 @@ std::string MakeKdbx4Header(const std::array<uint8_t, 16>& cipher,
   uint32_t size = 16;
   ss.put(static_cast<char>(id));
   ConserveU32(ss, size);
-  ss.write(reinterpret_cast<const char*>(cipher.data()), cipher.size());
+  ss.write(reinterpret_cast<const char*>(cipher.data()),
+           static_cast<std::streamsize>(cipher.size()));
 
   // Compression: none.
   id = 3;
@@ -245,7 +246,7 @@ std::string MakeKdbx4Header(const std::array<uint8_t, 16>& cipher,
   ConserveU32(kdf_ss, uuid_name_len);
   kdf_ss.write(uuid_name, uuid_name_len);
   ConserveU32(kdf_ss, uuid_len);
-  kdf_ss.write(reinterpret_cast<const char*>(kdf.data()), kdf.size());
+  kdf_ss.write(reinterpret_cast<const char*>(kdf.data()), static_cast<std::streamsize>(kdf.size()));
   kdf_ss.put(static_cast<char>(0)); // Terminator.
 
   id = 11;
@@ -296,7 +297,7 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kd
   } else {
     db->set_argon2_salt(std::vector<uint8_t>(16, 0x42));
     db->set_argon2_iterations(2);
-    db->set_argon2_memory(2 * 1024 * 1024);
+    db->set_argon2_memory(static_cast<uint64_t>(2) * 1024 * 1024);
     db->set_argon2_parallelism(1);
     db->set_argon2_version(0x13);
   }
@@ -438,7 +439,7 @@ TEST(Kdbx4Test, KeyfileImport) {
     std::unique_ptr<Database> db(kdbx.Import(path, key));
 
     ASSERT_NE(db->root(), nullptr);
-    ASSERT_EQ(db->root()->Entries().size(), 1u);
+    ASSERT_EQ(db->root()->Entries().size(), 1U);
 
     std::string expected = GetTestJson("kdbx4-aes-argon2d-keyfile.json");
     EXPECT_EQ(db->root()->ToJson(), expected);
@@ -549,7 +550,7 @@ TEST(Kdbx4Test, NotKdbx4File) {
 
 TEST(Kdbx4Test, TruncatedFile) {
   std::string data = ReadFile(GetTestPath("kdbx4-aes-argon2d.kdbx"));
-  ASSERT_GT(data.size(), 100u);
+  ASSERT_GT(data.size(), 100U);
   WriteFile(GetTmpPath("kdbx4-truncated.kdbx"), data.substr(0, 40));
   std::remove(GetTmpPath("kdbx4-truncated.kdbx").c_str());
 
@@ -671,7 +672,7 @@ TEST(Kdbx4Test, MatrixRoundtrip) {
         EXPECT_EQ(header.cipher, CipherUuid(cipher));
         ASSERT_TRUE(header.kdf_seen);
         EXPECT_EQ(header.kdf, KdfUuid(kdf));
-        EXPECT_EQ(header.compression, compress ? 1u : 0u);
+        EXPECT_EQ(header.compression, compress ? 1U : 0U);
 
         std::unique_ptr<Database> reimported;
         EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
@@ -746,7 +747,7 @@ TEST(Kdbx4Test, AttachmentRoundtrip) {
   ASSERT_NE(reimported, nullptr);
 
   const auto& attachments = reimported->root()->Entries().front()->attachments();
-  ASSERT_EQ(attachments.size(), 1u);
+  ASSERT_EQ(attachments.size(), 1U);
   EXPECT_EQ(attachments[0]->name(), "file.bin");
   ASSERT_NE(attachments[0]->binary(), nullptr);
   EXPECT_EQ(*attachments[0]->binary()->data(), "attachment payload");
@@ -783,10 +784,10 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
 
   const auto& reimported_entry = reimported->root()->Entries().front();
   const auto& custom_fields = reimported_entry->custom_fields();
-  ASSERT_EQ(custom_fields.size(), 1u);
+  ASSERT_EQ(custom_fields.size(), 1U);
   EXPECT_EQ(custom_fields[0].key(), "CustomField");
   EXPECT_EQ(std::string(*custom_fields[0].value()), "custom value");
-  ASSERT_EQ(reimported_entry->history().size(), 1u);
+  ASSERT_EQ(reimported_entry->history().size(), 1U);
   EXPECT_EQ(std::string(*reimported_entry->history()[0]->password()), "oldsecret");
 
   std::remove(dst_path.c_str());

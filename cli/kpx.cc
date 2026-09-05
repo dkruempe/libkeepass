@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#if !defined(_WIN32)
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 
@@ -88,8 +88,8 @@ bool NextValue(int argc, const char* argv[], int& i, const std::string& name, bo
 std::string Lower(const std::string& s) {
   std::string lower;
   lower.reserve(s.size());
-  for (std::size_t i = 0; i < s.size(); ++i)
-    lower.push_back(static_cast<char>(std::tolower(s[i])));
+  for (const char c : s)
+    lower.push_back(static_cast<char>(std::tolower(c)));
   return lower;
 }
 
@@ -244,12 +244,12 @@ std::string ResolvePassword(const Options& opt) {
   if (env != nullptr && *env != '\0')
     return env;
 
-#if !defined(_WIN32)
+#ifndef _WIN32
   if (isatty(STDIN_FILENO))
     return getpass("Master password: ");
 #endif
 
-  return std::string();
+  return {};
 }
 
 std::unique_ptr<keepass::Database> ImportDatabase(const std::string& path,
@@ -323,10 +323,10 @@ std::string CsvField(const std::string& value) {
   std::string escaped;
   escaped.reserve(value.size() + 2);
   escaped.push_back('"');
-  for (std::size_t i = 0; i < value.size(); ++i) {
-    if (value[i] == '"')
+  for (const char c : value) {
+    if (c == '"')
       escaped.push_back('"');
-    escaped.push_back(value[i]);
+    escaped.push_back(c);
   }
   escaped.push_back('"');
   return escaped;
@@ -376,23 +376,19 @@ bool OpenOutput(const Options& opt, std::ofstream& file, std::ostream*& out) {
 
 } // namespace
 
-int main(int argc, const char* argv[]) {
-  Options opt;
-  if (!ParseArgs(argc, argv, opt))
-    return 1;
-
+int Run(const Options& opt, const char* argv0) {
   if (opt.help) {
-    PrintUsage(argv[0], std::cout);
+    PrintUsage(argv0, std::cout);
     return 0;
   }
 
   if (opt.show_version) {
-    std::cout << argv[0] << " " << kVersion << " (libkeepass)\n";
+    std::cout << argv0 << " " << kVersion << " (libkeepass)\n";
     return 0;
   }
 
   if (opt.input.empty()) {
-    PrintUsage(argv[0], std::cerr);
+    PrintUsage(argv0, std::cerr);
     return 1;
   }
 
@@ -402,7 +398,7 @@ int main(int argc, const char* argv[]) {
   }
 
   if (opt.verbose) {
-    std::cerr << argv[0] << ": reading '" << opt.input << "' ("
+    std::cerr << argv0 << ": reading '" << opt.input << "' ("
               << (IsKdbPath(opt.input) ? "kdb" : "kdbx") << ")\n";
   }
 
@@ -411,36 +407,42 @@ int main(int argc, const char* argv[]) {
   if (!opt.keyfile.empty())
     key.SetKeyFile(opt.keyfile);
 
+  std::unique_ptr<keepass::Database> db = ImportDatabase(opt.input, key);
+  if (!db) {
+    std::cerr << "error: could not open database\n";
+    return 1;
+  }
+
+  if (!opt.export_path.empty()) {
+    ExportDatabase(opt.export_path, *db, key);
+    if (opt.verbose)
+      std::cerr << argv0 << ": exported to '" << opt.export_path << "'\n";
+    return 0;
+  }
+
+  std::ofstream file;
+  std::ostream* out = nullptr;
+  if (!OpenOutput(opt, file, out))
+    return 1;
+
+  if (opt.format == "json") {
+    *out << db->root()->ToJson() << "\n";
+  } else if (opt.format == "csv") {
+    PrintCsv(*out, db->root(), opt.with_passwords);
+  } else {
+    PrintText(*out, db->root(), opt.with_passwords);
+  }
+  return 0;
+}
+
+int main(int argc, const char* argv[]) {
   try {
-    std::unique_ptr<keepass::Database> db = ImportDatabase(opt.input, key);
-    if (!db) {
-      std::cerr << "error: could not open database\n";
+    Options opt;
+    if (!ParseArgs(argc, argv, opt))
       return 1;
-    }
-
-    if (!opt.export_path.empty()) {
-      ExportDatabase(opt.export_path, *db, key);
-      if (opt.verbose)
-        std::cerr << argv[0] << ": exported to '" << opt.export_path << "'\n";
-      return 0;
-    }
-
-    std::ofstream file;
-    std::ostream* out = nullptr;
-    if (!OpenOutput(opt, file, out))
-      return 1;
-
-    if (opt.format == "json") {
-      *out << db->root()->ToJson() << "\n";
-    } else if (opt.format == "csv") {
-      PrintCsv(*out, db->root(), opt.with_passwords);
-    } else {
-      PrintText(*out, db->root(), opt.with_passwords);
-    }
+    return Run(opt, argv[0]);
   } catch (const std::exception& e) {
     std::cerr << "error: " << e.what() << "\n";
     return 1;
   }
-
-  return 0;
 }
