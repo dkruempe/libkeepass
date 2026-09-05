@@ -1,0 +1,4 @@
+sources:
+  "0.2.1":
+    url: "https://github.com/dkruempe/libkeepass/archive/refs/tags/v0.2.1.tar.gz"
+    sha256: "2dfdb3305962a00395d0f2d0db7cb3ce40ae667bd16b5eefdd62bf59ceebf075"
