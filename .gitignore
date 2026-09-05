@@ -1,4 +1,5 @@
 build
+build-*/
 cmake-build-debug
 cmake-build*
 bin
@@ -9,3 +10,4 @@ TODO.md
 docs
 
 CMakeUserPresets.json
+test_package/build/

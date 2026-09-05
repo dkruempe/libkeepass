@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Conan 2 package recipe (`conanfile.py`) replacing `conanfile.txt`, with a `test_package` consumer; `conan create` builds static and shared variants
 - CI workflow that enforces `clang-format` formatting and `clang-tidy` static analysis
 - `CONTRIBUTING.md` documenting the build, testing, and code style process
 - `.clang-format` and `.clang-tidy` configuration files

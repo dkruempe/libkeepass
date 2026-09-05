@@ -120,6 +120,30 @@ target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
 
 > **Note:** `add_subdirectory` requires the same dependencies (OpenSSL, zlib, pugixml, Argon2) to be resolvable in your build tree, e.g. via [Conan](https://conan.io/), as described under [Prerequisites](#prerequisites).
 
+### Using it as a Conan package
+
+The repository ships a Conan 2 recipe (`conanfile.py`) that builds and packages the library. To create the package from the current sources:
+
+```sh
+conan create . --build=missing
+```
+
+The version is read from `CMakeLists.txt` such that `conan create` always matches the current release. To build a specific variant pass `-o libkeepass/*:shared=True` for a shared library (static is the default).
+
+Consumers declare the package in their `conanfile.txt` / `conanfile.py`:
+
+```text
+[requires]
+libkeepass/0.2.0
+```
+
+and use it from CMake as before:
+
+```cmake
+find_package(libkeepass CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
+```
+
 ## Packaging
 
 CPack generates installable packages from the [install rules](#integration). After building the project, run:

@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
-list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
+# The Conan 2 provider (conan_provider.cmake) intercepts the first find_package()
+# to provision dependencies. When building a Conan package via 'conan create',
+# the dependencies are already provided by CMakeDeps and there is no conanfile
+# in the cache source folder, so the provider must be disabled.
+if (NOT LIBKEEPASS_CONAN_CREATE)
+    list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
+endif()
 project(libkeepass VERSION 0.2.0)
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -19,8 +25,10 @@ ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(cli)
 
 # Tests
-enable_testing()
-ADD_SUBDIRECTORY(test)
+include(CTest)
+if (BUILD_TESTING)
+    ADD_SUBDIRECTORY(test)
+endif()
 
 # Packaging (CPack)
 set(CPACK_PACKAGE_NAME libkeepass)

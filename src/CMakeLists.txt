@@ -14,7 +14,14 @@ find_package(argon2 REQUIRED)
 FILE(GLOB_RECURSE headers include/libkeepass/*.hh)
 FILE(GLOB_RECURSE sources *.cc)
 
-add_library(libkeepass SHARED ${headers} ${sources})
+# The library is shared by default; set LIBKEEPASS_BUILD_SHARED=OFF for a
+# static library (used by the Conan recipe options).
+option(LIBKEEPASS_BUILD_SHARED "Build libkeepass as a shared library" ON)
+if (LIBKEEPASS_BUILD_SHARED)
+    add_library(libkeepass SHARED ${headers} ${sources})
+else()
+    add_library(libkeepass STATIC ${headers} ${sources})
+endif()
 
 # aes_ni.cc uses AES-NI intrinsics, which are an x86/x86-64 extension. Detect
 # the target architecture by asking the compiler directly (this mirrors the
@@ -39,7 +46,14 @@ target_include_directories(libkeepass
         "$<BUILD_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/include>"
         "$<INSTALL_INTERFACE:include>"
         )
-target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml argon2::argon2 PRIVATE project_warnings)
+# project_warnings is a build-time only INTERFACE target (see root
+# CMakeLists.txt). Linking it into a static lib leaks it into the exported
+# target's interface, so only apply it for the shared (development) build.
+if (LIBKEEPASS_BUILD_SHARED)
+    target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml argon2::argon2 PRIVATE project_warnings)
+else()
+    target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml argon2::argon2)
+endif()
 add_library(kruempelmann::libkeepass ALIAS libkeepass)
 INSTALL(TARGETS libkeepass
         EXPORT libkeepass_targets
