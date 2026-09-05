@@ -132,8 +132,8 @@ void encrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
                           std::array<uint8_t, 16>& block_out, std::size_t src_len,
                           bool) -> std::size_t {
                         std::array<uint8_t, 16> src_xor_iv{};
-                        std::transform(block_in.begin(), block_in.end(), prv.begin(),
-                                       src_xor_iv.begin(), std::bit_xor<>());
+                        for (std::size_t i = 0; i < src_xor_iv.size(); ++i)
+                          src_xor_iv[i] = static_cast<uint8_t>(block_in[i] ^ prv[i]);
 
                         if (src_len != 16) {
                           // Handle PKCS #7 padding for the last block.
@@ -158,8 +158,8 @@ void encrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
     std::array<uint8_t, 16> src_block_xor_iv{};
 
     std::fill(src_block.begin(), src_block.end(), static_cast<uint8_t>(16));
-    std::transform(src_block.begin(), src_block.end(), prv.begin(), src_block_xor_iv.begin(),
-                   std::bit_xor<>());
+    for (std::size_t i = 0; i < src_block_xor_iv.size(); ++i)
+      src_block_xor_iv[i] = static_cast<uint8_t>(src_block[i] ^ prv[i]);
 
     cipher.Encrypt(src_block_xor_iv, dst_block);
     dst.write(reinterpret_cast<const char*>(dst_block.data()), dst_block.size());
@@ -178,8 +178,8 @@ void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
 
                         cipher.Decrypt(block_in, block_out);
 
-                        std::transform(block_out.begin(), block_out.end(), prv.begin(),
-                                       block_out.begin(), std::bit_xor<>());
+                        for (std::size_t i = 0; i < block_out.size(); ++i)
+                          block_out[i] = static_cast<uint8_t>(block_out[i] ^ prv[i]);
 
                         if (last) {
                           // Handle PKCS #7 padding for the last block.
