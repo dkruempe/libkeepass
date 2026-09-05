@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-05
+
 ### Added
 
 - Conan 2 package recipe (`conanfile.py`) replacing `conanfile.txt`, with a `test_package` consumer; `conan create` builds static and shared variants
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Reformatted the entire codebase with `clang-format`
 - Fixed static analysis findings reported by `clang-tidy`
+- Replaced the transparent `std::bit_xor` functors with explicit XOR loops so the checks pass on MSVC (`/WX`)
+- Tests are now built behind `BUILD_TESTING` so packaging builds can omit them
 
 ## [0.2.0] - 2026-09-04
 
@@ -72,6 +76,7 @@ First public release with semantic versioning.
 - Unit and integration tests covering KDB/KDBX roundtrips and key derivation
 - GitHub Pages deployment of the generated API documentation
 
-[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.1.0

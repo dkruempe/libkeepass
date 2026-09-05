@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.16)
 if (NOT LIBKEEPASS_CONAN_CREATE)
     list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
 endif()
-project(libkeepass VERSION 0.2.0)
+project(libkeepass VERSION 0.2.1)
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
