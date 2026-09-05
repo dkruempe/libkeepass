@@ -1,0 +1,70 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '23 3 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    permissions:
+      security-events: write
+      actions: read
+
+    env:
+      CONAN_VERSION: "2.31.2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      # The Conan provider (conan_provider.cmake) provisions all dependencies
+      # from the conanfile during the first CMake configure, so install Conan
+      # before initializing CodeQL and simply build the project afterwards.
+      - name: Install Conan
+        run: |
+          pip install "conan==${{ env.CONAN_VERSION }}"
+          conan profile detect --force
+
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.conan2
+          key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-
+            conan-${{ runner.os }}-
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          queries: security-and-quality
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
+
+      - name: Cache Conan packages (save before build)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:cpp"

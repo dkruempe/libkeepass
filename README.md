@@ -2,6 +2,7 @@
 
 [![Build](https://github.com/dkruempe/libkeepass/actions/workflows/cmake.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/cmake.yml)
 [![Docs](https://github.com/dkruempe/libkeepass/actions/workflows/docs.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/docs.yml)
+[![CodeQL](https://github.com/dkruempe/libkeepass/actions/workflows/codeql.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/gh/dkruempe/libkeepass/graph/badge.svg)](https://codecov.io/gh/dkruempe/libkeepass)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-11-blue.svg)](https://isocpp.org/)
@@ -280,7 +281,11 @@ GitHub Actions automatically builds and tests on the following platforms:
 - **macOS** (Clang)
 - **Windows** (MSVC)
 
-Each platform is tested in both Debug and Release configurations. Additionally, a dedicated workflow enforces `clang-format` formatting and `clang-tidy` static analysis on every push and pull request.
+Each platform is tested in both Debug and Release configurations. Additionally, dedicated workflows enforce `clang-format` formatting and `clang-tidy` static analysis on every push and pull request, and run [CodeQL](https://codeql.github.com/) (including the `security-and-quality` query suite) plus a nightly security scan on the C++ code base.
+
+## Security
+
+For information on supported versions and how to report a vulnerability, please see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
