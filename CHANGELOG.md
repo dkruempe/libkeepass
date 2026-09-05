@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- CI workflow that enforces `clang-format` formatting and `clang-tidy` static analysis
+- `CONTRIBUTING.md` documenting the build, testing, and code style process
+- `.clang-format` and `.clang-tidy` configuration files
+
+### Changed
+
+- Reformatted the entire codebase with `clang-format`
+- Fixed static analysis findings reported by `clang-tidy`
+
 ## [0.2.0] - 2026-09-04
 
 ### Added

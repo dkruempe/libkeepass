@@ -256,7 +256,11 @@ GitHub Actions automatically builds and tests on the following platforms:
 - **macOS** (Clang)
 - **Windows** (MSVC)
 
-Each platform is tested in both Debug and Release configurations.
+Each platform is tested in both Debug and Release configurations. Additionally, a dedicated workflow enforces `clang-format` formatting and `clang-tidy` static analysis on every push and pull request.
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, the code style guide, and the pull request process.
 
 ## License
 
