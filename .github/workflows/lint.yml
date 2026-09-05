@@ -57,5 +57,7 @@ jobs:
       - name: Check formatting
         run: clang-format --dry-run --Werror $(git ls-files '*.cc' '*.hh')
 
+      # -extra-arg silences "unknown warning option" hard errors for the
+      # GCC-only -W* flags that CMake injects for the default GCC toolchain.
       - name: Run clang-tidy
-        run: run-clang-tidy.py -p build -j $(nproc) src cli test
+        run: run-clang-tidy.py -p build -j $(nproc) -extra-arg=-Wno-unknown-warning-option src cli test

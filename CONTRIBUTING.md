@@ -66,8 +66,12 @@ clang-format -i <changed files>
 
 ```sh
 cmake -B build-lint -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
-run-clang-tidy -p build-lint src cli test
+run-clang-tidy -p build-lint -extra-arg=-Wno-unknown-warning-option src cli test
 ```
+
+> The `-extra-arg` option is only needed when the compile database was
+> generated for GCC (it prevents clang from erroring on GCC-only warning
+> flags); clang-generated databases do not require it.
 
 > `clang-format` and `clang-tidy` from the current LLVM releases (e.g. `22.1.8`) can be installed through Homebrew (`llvm`), a Linux package manager, or as Python packages (`pip install "clang-format==22.1.8" "clang-tidy==22.1.8"`).
 
