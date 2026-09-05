@@ -27,13 +27,13 @@ BUILTIN_STL_SUPPORT    = YES
 #---------------------------------------------------------------------------
 # Input related configuration
 #---------------------------------------------------------------------------
-INPUT                  = src/include/libkeepass
+INPUT                  = src/include/libkeepass docs
 INPUT_ENCODING         = UTF-8
-FILE_PATTERNS          = *.hh
+FILE_PATTERNS          = *.hh *.md
 RECURSIVE              = YES
 EXCLUDE                =
 EXCLUDE_PATTERNS       =
-USE_MDFILE_AS_MAINPAGE =
+USE_MDFILE_AS_MAINPAGE = docs/index.md
 
 #---------------------------------------------------------------------------
 # Source browsing

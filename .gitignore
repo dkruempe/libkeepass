@@ -7,7 +7,8 @@ bin
 *.pyc
 *.swp
 TODO.md
-docs
+docs/*
+!docs/*.md
 
 CMakeUserPresets.json
 test_package/build/
