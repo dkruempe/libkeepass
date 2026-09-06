@@ -70,6 +70,6 @@ private:
  * @param group The group whose subtree is traversed.
  * @param visitor The visitor to notify during traversal.
  */
-void Visit(Group& group, Visitor& visitor);
+LIBKEEPASS_API void Visit(Group& group, Visitor& visitor);
 
 } // namespace keepass

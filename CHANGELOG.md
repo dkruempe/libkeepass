@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   are static members and take `std::shared_ptr` by `const&`; calls made on a
   `Database` instance keep working
 
+### Fixed
+
+- Windows: `keepass::Visit(Group&, Visitor&)` is now exported from the shared
+  library so consumers link correctly (was `LNK2019`)
+
 ## [0.2.1] - 2026-09-05
 
 ### Added
