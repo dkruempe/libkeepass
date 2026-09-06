@@ -186,7 +186,7 @@ std::unique_ptr<Database> KeePass::Create(const std::string& password, Format fo
     std::array<uint8_t, 32> salt = random_array<32>();
     db->set_argon2_salt(std::vector<uint8_t>(salt.begin(), salt.end()));
     db->set_argon2_iterations(10);
-    db->set_argon2_memory(64 * 1024 * 1024);
+    db->set_argon2_memory(64ULL * 1024 * 1024);
     db->set_argon2_parallelism(2);
     db->set_argon2_version(0x13);
   } else {

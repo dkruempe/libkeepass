@@ -26,9 +26,9 @@
 
 namespace keepass {
 
-void Visitor::Visit(Group&) {}
+void Visitor::Visit(Group& /*unused*/) {}
 
-void Visitor::Visit(Entry&) {}
+void Visitor::Visit(Entry& /*unused*/) {}
 
 void PrintVisitor::Visit(Group& group) { os_ << group.path() << "\n"; }
 

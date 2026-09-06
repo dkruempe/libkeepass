@@ -92,14 +92,14 @@ std::shared_ptr<Group> Database::NewGroup(const std::string& name) {
   return group;
 }
 
-void Database::AddEntry(std::shared_ptr<Group> group, std::shared_ptr<Entry> entry) {
+void Database::AddEntry(const std::shared_ptr<Group>& group, const std::shared_ptr<Entry>& entry) {
   if (group)
-    group->AddEntry(std::move(entry));
+    group->AddEntry(entry);
 }
 
-void Database::AddGroup(std::shared_ptr<Group> parent, std::shared_ptr<Group> group) {
+void Database::AddGroup(const std::shared_ptr<Group>& parent, const std::shared_ptr<Group>& group) {
   if (parent)
-    parent->AddGroup(std::move(group));
+    parent->AddGroup(group);
 }
 
 void Database::DeleteEntry(const std::array<uint8_t, 16>& uuid) {
@@ -156,20 +156,22 @@ void Database::DeleteGroup(const std::array<uint8_t, 16>& uuid) {
     parent->RemoveGroup(target);
 }
 
-void Database::MoveEntry(std::shared_ptr<Entry> entry, std::shared_ptr<Group> new_group) {
+void Database::MoveEntry(const std::shared_ptr<Entry>& entry,
+                         const std::shared_ptr<Group>& new_group) {
   if (!entry || !new_group)
     return;
 
-  std::shared_ptr<Group> old_parent = entry->parent().lock();
+  const auto old_parent = entry->parent().lock();
   if (old_parent == new_group)
     return;
   if (old_parent)
     old_parent->RemoveEntry(entry);
 
-  new_group->AddEntry(std::move(entry));
+  new_group->AddEntry(entry);
 }
 
-void Database::MoveGroup(std::shared_ptr<Group> group, std::shared_ptr<Group> new_parent) {
+void Database::MoveGroup(const std::shared_ptr<Group>& group,
+                         const std::shared_ptr<Group>& new_parent) {
   if (!group || !new_parent)
     return;
 
@@ -180,16 +182,16 @@ void Database::MoveGroup(std::shared_ptr<Group> group, std::shared_ptr<Group> ne
       return;
   }
 
-  std::shared_ptr<Group> old_parent = group->parent().lock();
+  const auto old_parent = group->parent().lock();
   if (old_parent == new_parent)
     return;
   if (old_parent)
     old_parent->RemoveGroup(group);
 
-  new_parent->AddGroup(std::move(group));
+  new_parent->AddGroup(group);
 }
 
-void Database::TrashEntry(std::shared_ptr<Entry> entry) {
+void Database::TrashEntry(const std::shared_ptr<Entry>& entry) {
   if (!entry)
     return;
 
@@ -199,10 +201,10 @@ void Database::TrashEntry(std::shared_ptr<Entry> entry) {
     return;
   }
 
-  MoveEntry(std::move(entry), bin);
+  MoveEntry(entry, bin);
 }
 
-void Database::TrashGroup(std::shared_ptr<Group> group) {
+void Database::TrashGroup(const std::shared_ptr<Group>& group) {
   if (!group)
     return;
 
@@ -212,7 +214,7 @@ void Database::TrashGroup(std::shared_ptr<Group> group) {
     return;
   }
 
-  MoveGroup(std::move(group), bin);
+  MoveGroup(group, bin);
 }
 
 void Database::EmptyRecycleBin() {

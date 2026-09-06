@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Migrated the `kpx` CLI to the unified `KeePass` API
 - Exporting databases without metadata or a root group no longer crashes
+- `Database::NewEntry`/`NewGroup`/`AddEntry`/`AddGroup`/`MoveEntry`/`MoveGroup`
+  are static members and take `std::shared_ptr` by `const&`; calls made on a
+  `Database` instance keep working
 
 ## [0.2.1] - 2026-09-05
 

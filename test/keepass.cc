@@ -43,8 +43,6 @@ using namespace keepass;
 
 namespace {
 
-const std::string kTmpOutput = std::string(PROJECT_ROOT_PATH) + "/tmp/keepass-";
-
 std::string GetDataPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/data/kdbx/" + name;
 }
@@ -53,7 +51,9 @@ std::string GetKdbDataPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/data/kdb/" + name;
 }
 
-std::string GetTmpPath(const std::string& name) { return kTmpOutput + name; }
+std::string GetTmpPath(const std::string& name) {
+  return std::string(PROJECT_ROOT_PATH) + "/tmp/keepass-" + name;
+}
 
 std::string ReadFile(const std::string& path) {
   std::ifstream file(path, std::ios::in | std::ios::binary);
@@ -336,34 +336,34 @@ TEST_F(KeePassTest, CreateDefaults) {
   EXPECT_EQ(Database::Cipher::kAes, db->cipher());
   EXPECT_EQ(Database::Kdf::kArgon2id, db->kdf());
   EXPECT_TRUE(db->compress());
-  EXPECT_EQ(64ull * 1024 * 1024, db->argon2_memory());
-  EXPECT_EQ(10u, db->argon2_iterations());
-  EXPECT_EQ(2u, db->argon2_parallelism());
-  EXPECT_EQ(0x13u, db->argon2_version());
-  EXPECT_EQ(16u, db->master_seed().size());
-  EXPECT_NE(0u, std::count_if(db->master_seed().begin(), db->master_seed().end(),
+  EXPECT_EQ(64ULL * 1024 * 1024, db->argon2_memory());
+  EXPECT_EQ(10U, db->argon2_iterations());
+  EXPECT_EQ(2U, db->argon2_parallelism());
+  EXPECT_EQ(0x13U, db->argon2_version());
+  EXPECT_EQ(16U, db->master_seed().size());
+  EXPECT_NE(0U, std::count_if(db->master_seed().begin(), db->master_seed().end(),
                               [](uint8_t b) { return b != 0; }));
-  EXPECT_NE(0u, std::count_if(db->transform_seed().begin(), db->transform_seed().end(),
+  EXPECT_NE(0U, std::count_if(db->transform_seed().begin(), db->transform_seed().end(),
                               [](uint8_t b) { return b != 0; }));
-  EXPECT_EQ(0u, db->EntryCount());
-  EXPECT_EQ(1u, db->GroupCount());
+  EXPECT_EQ(0U, db->EntryCount());
+  EXPECT_EQ(1U, db->GroupCount());
 }
 
 TEST_F(KeePassTest, CreateAesUsesTransformRounds) {
   std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdbx3,
                                                  Database::Cipher::kAes, Database::Kdf::kAes);
   ASSERT_TRUE(db);
-  EXPECT_EQ(600000u, db->transform_rounds());
+  EXPECT_EQ(600000U, db->transform_rounds());
 }
 
 TEST_F(KeePassTest, CreateAndSaveRoundtrip) {
   std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdbx3,
                                                  Database::Cipher::kAes, Database::Kdf::kAes);
   db->set_transform_rounds(8192);
-  auto entry = db->NewEntry("Roundtrip");
+  auto entry = Database::NewEntry("Roundtrip");
   entry->set_username(protect<std::string>("userA", false));
   entry->set_password(protect<std::string>("pw123", true));
-  db->AddEntry(db->root(), entry);
+  Database::AddEntry(db->root(), entry);
 
   const std::string out = GetTmpPath("create.kdbx");
   KeePass kp("password");
@@ -419,31 +419,31 @@ TEST_F(KeePassTest, TransformedKey) {
 TEST_F(KeePassTest, FindEntriesAndGroups) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
 
-  EXPECT_EQ(1u, db->FindEntries("alpha").size());
-  EXPECT_EQ(1u, db->FindEntries("ALPHA").size());
-  EXPECT_EQ(0u, db->FindEntries("not-there").size());
-  EXPECT_EQ(2u, db->FindEntries("a").size());
-  EXPECT_EQ(1u, db->FindEntries("^alpha$", true).size());
-  EXPECT_EQ(1u, db->FindEntries("^BETA$", true).size());
+  EXPECT_EQ(1U, db->FindEntries("alpha").size());
+  EXPECT_EQ(1U, db->FindEntries("ALPHA").size());
+  EXPECT_EQ(0U, db->FindEntries("not-there").size());
+  EXPECT_EQ(2U, db->FindEntries("a").size());
+  EXPECT_EQ(1U, db->FindEntries("^alpha$", true).size());
+  EXPECT_EQ(1U, db->FindEntries("^BETA$", true).size());
 
-  EXPECT_EQ(1u, db->FindGroups("subgroup").size());
-  EXPECT_EQ(1u, db->FindGroups("^SUB.*", true).size());
+  EXPECT_EQ(1U, db->FindGroups("subgroup").size());
+  EXPECT_EQ(1U, db->FindGroups("^SUB.*", true).size());
 
   EXPECT_NE(nullptr, db->FindEntry("Alpha"));
   EXPECT_EQ(nullptr, db->FindEntry("Nope"));
   EXPECT_NE(nullptr, db->FindGroup("Subgroup"));
   EXPECT_EQ(nullptr, db->FindGroup("Nope"));
 
-  EXPECT_EQ(2u, db->EntryCount());
-  EXPECT_EQ(2u, db->GroupCount());
+  EXPECT_EQ(2U, db->EntryCount());
+  EXPECT_EQ(2U, db->GroupCount());
 }
 
 TEST_F(KeePassTest, NewAddDeleteEntry) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
   const size_t before = db->EntryCount();
 
-  std::shared_ptr<Entry> entry = db->NewEntry("Added");
-  db->AddEntry(db->root(), entry);
+  std::shared_ptr<Entry> entry = Database::NewEntry("Added");
+  Database::AddEntry(db->root(), entry);
   ASSERT_TRUE(entry);
   EXPECT_EQ(before + 1, db->EntryCount());
   EXPECT_FALSE(entry->parent().expired());
@@ -458,8 +458,8 @@ TEST_F(KeePassTest, NewAddDeleteGroup) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
   const size_t before = db->GroupCount();
 
-  std::shared_ptr<Group> group = db->NewGroup("NewGroup");
-  db->AddGroup(db->root(), group);
+  std::shared_ptr<Group> group = Database::NewGroup("NewGroup");
+  Database::AddGroup(db->root(), group);
   ASSERT_TRUE(group);
   EXPECT_EQ(before + 1, db->GroupCount());
   EXPECT_FALSE(group->is_root_group());
@@ -477,25 +477,25 @@ TEST_F(KeePassTest, MoveEntry) {
   ASSERT_TRUE(alpha);
   ASSERT_TRUE(subgroup);
 
-  db->MoveEntry(alpha, subgroup);
+  Database::MoveEntry(alpha, subgroup);
   EXPECT_EQ("/Root/Subgroup/Alpha", alpha->path());
-  EXPECT_EQ(0u, db->root()->entries_count());
-  EXPECT_EQ(2u, subgroup->entries_count());
+  EXPECT_EQ(0U, db->root()->entries_count());
+  EXPECT_EQ(2U, subgroup->entries_count());
 }
 
 TEST_F(KeePassTest, MoveGroup) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
   std::shared_ptr<Group> subgroup = db->FindGroup("Subgroup");
 
-  std::shared_ptr<Group> container = db->NewGroup("Container");
-  db->AddGroup(db->root(), container);
+  std::shared_ptr<Group> container = Database::NewGroup("Container");
+  Database::AddGroup(db->root(), container);
   EXPECT_EQ("/Root/Container", container->path());
 
-  db->MoveGroup(subgroup, container);
+  Database::MoveGroup(subgroup, container);
   EXPECT_EQ("/Root/Container/Subgroup", subgroup->path());
 
   // A group must not be moved into its own subtree; this is a no-op.
-  db->MoveGroup(container, subgroup);
+  Database::MoveGroup(container, subgroup);
   EXPECT_EQ("/Root/Container", container->path());
   EXPECT_EQ("/Root/Container/Subgroup", subgroup->path());
 }
@@ -505,23 +505,23 @@ TEST_F(KeePassTest, RecycleBin) {
   EXPECT_FALSE(db->IsRecycleBinEnabled());
   db->EnableRecycleBin(true);
   EXPECT_TRUE(db->IsRecycleBinEnabled());
-  EXPECT_EQ(3u, db->GroupCount());
+  EXPECT_EQ(3U, db->GroupCount());
 
   std::shared_ptr<Entry> alpha = db->FindEntry("Alpha");
   ASSERT_TRUE(alpha);
   db->TrashEntry(alpha);
-  EXPECT_EQ(1u, db->FindGroup("Recycle Bin")->entries_count());
+  EXPECT_EQ(1U, db->FindGroup("Recycle Bin")->entries_count());
 
   std::shared_ptr<Group> subgroup = db->FindGroup("Subgroup");
   ASSERT_TRUE(subgroup);
   db->TrashGroup(subgroup);
   EXPECT_EQ("/Root/Recycle Bin/Subgroup", subgroup->path());
-  EXPECT_EQ(1u, db->FindGroup("Recycle Bin")->groups_count());
+  EXPECT_EQ(1U, db->FindGroup("Recycle Bin")->groups_count());
 
   db->EmptyRecycleBin();
-  EXPECT_EQ(0u, db->FindGroup("Recycle Bin")->entries_count());
-  EXPECT_EQ(0u, db->FindGroup("Recycle Bin")->groups_count());
-  EXPECT_EQ(0u, db->EntryCount());
+  EXPECT_EQ(0U, db->FindGroup("Recycle Bin")->entries_count());
+  EXPECT_EQ(0U, db->FindGroup("Recycle Bin")->groups_count());
+  EXPECT_EQ(0U, db->EntryCount());
 }
 
 TEST_F(KeePassTest, DeleteGroupRemovesSubtree) {
@@ -532,8 +532,8 @@ TEST_F(KeePassTest, DeleteGroupRemovesSubtree) {
   db->DeleteGroup(subgroup->uuid());
   EXPECT_EQ(nullptr, db->FindGroup("Subgroup"));
   EXPECT_EQ(nullptr, db->FindEntry("Beta"));
-  EXPECT_EQ(1u, db->EntryCount());
-  EXPECT_EQ(1u, db->GroupCount());
+  EXPECT_EQ(1U, db->EntryCount());
+  EXPECT_EQ(1U, db->GroupCount());
 }
 
 TEST_F(KeePassTest, ToJsonAndVisit) {
@@ -545,8 +545,8 @@ TEST_F(KeePassTest, ToJsonAndVisit) {
 
   CountingVisitor visitor;
   db->Visit(visitor);
-  EXPECT_EQ(2u, visitor.groups);
-  EXPECT_EQ(2u, visitor.entries);
+  EXPECT_EQ(2U, visitor.groups);
+  EXPECT_EQ(2U, visitor.entries);
 
   // The free-function visitor over the root behaves identically.
   CountingVisitor direct;
@@ -587,11 +587,11 @@ TEST_F(KeePassTest, EntryCustomProperties) {
 
   entry->set_custom_property("MyField", "updated");
   EXPECT_EQ("updated", entry->GetString("MyField"));
-  EXPECT_EQ(1u, entry->custom_properties().size());
+  EXPECT_EQ(1U, entry->custom_properties().size());
 
   entry->delete_custom_property("MyField");
   EXPECT_FALSE(entry->HasString("MyField"));
-  EXPECT_EQ(0u, entry->custom_properties().size());
+  EXPECT_EQ(0U, entry->custom_properties().size());
 }
 
 TEST_F(KeePassTest, EntryBinaryProperties) {
@@ -618,14 +618,14 @@ TEST_F(KeePassTest, EntryHistoryAndTouch) {
   std::shared_ptr<Entry> entry = db->FindEntry("Alpha");
   ASSERT_TRUE(entry);
 
-  EXPECT_EQ(0u, entry->history().size());
+  EXPECT_EQ(0U, entry->history().size());
   entry->save_history();
-  EXPECT_EQ(1u, entry->history().size());
+  EXPECT_EQ(1U, entry->history().size());
   EXPECT_EQ(0, entry->history()[0]->parent().use_count());
-  EXPECT_EQ(0u, entry->history()[0]->history().size());
+  EXPECT_EQ(0U, entry->history()[0]->history().size());
 
   entry->delete_history();
-  EXPECT_EQ(0u, entry->history().size());
+  EXPECT_EQ(0U, entry->history().size());
 
   const std::time_t before_access = entry->access_time();
   entry->touch();
@@ -669,10 +669,10 @@ TEST_F(KeePassTest, GroupPathAndParent) {
 TEST_F(KeePassTest, GroupFindEntriesNonRecursive) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
 
-  EXPECT_EQ(2u, db->root()->FindEntries("a").size());
-  EXPECT_EQ(1u, db->root()->FindEntries("a", false, false).size());
-  EXPECT_EQ(1u, db->FindGroup("Subgroup")->FindEntries("beta").size());
-  EXPECT_EQ(0u, db->FindGroup("Subgroup")->FindEntries("alpha", false, false).size());
+  EXPECT_EQ(2U, db->root()->FindEntries("a").size());
+  EXPECT_EQ(1U, db->root()->FindEntries("a", false, false).size());
+  EXPECT_EQ(1U, db->FindGroup("Subgroup")->FindEntries("beta").size());
+  EXPECT_EQ(0U, db->FindGroup("Subgroup")->FindEntries("alpha", false, false).size());
 }
 
 } // namespace

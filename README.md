@@ -251,9 +251,9 @@ auto group = db->FindGroup("Work");
 auto entry = db->FindEntry("Home Banking");
 
 // Build and modify the hierarchy.
-auto new_entry = db->NewEntry("A New Login");
-db->AddEntry(group, new_entry);
-db->MoveEntry(new_entry, other_group);
+auto new_entry = Database::NewEntry("A New Login");
+Database::AddEntry(group, new_entry);
+Database::MoveEntry(new_entry, other_group);
 db->DeleteEntry(new_entry->uuid());
 
 // Move groups, entries or a whole subtree into the recycle bin.
@@ -314,15 +314,15 @@ The `Database` class provides access to:
 auto root = db->root();
 
 // Add a new group
-auto group = db->NewGroup("My Group");
-db->AddGroup(root, group);
+auto group = Database::NewGroup("My Group");
+Database::AddGroup(root, group);
 
 // Add a new entry
-auto entry = db->NewEntry("My Entry");
+auto entry = Database::NewEntry("My Entry");
 entry->set_username(keepass::protect<std::string>("user", true));
 entry->set_password(keepass::protect<std::string>("secret", true));
 entry->set_url(keepass::protect<std::string>("https://example.com", false));
-db->AddEntry(group, entry);
+Database::AddEntry(group, entry);
 ```
 
 Parent links are maintained automatically, so `group->path()`, `entry->path()`

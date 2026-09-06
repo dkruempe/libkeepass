@@ -19,6 +19,7 @@
 
 #include "libkeepass/entry.hh"
 
+#include <algorithm>
 #include <sstream>
 
 #include "libkeepass/group.hh"
@@ -89,11 +90,8 @@ bool Entry::HasString(const std::string& key) const {
   if (key == "Title" || key == "URL" || key == "UserName" || key == "Password" || key == "Notes")
     return true;
 
-  for (const auto& field : custom_fields_) {
-    if (field.key() == key)
-      return true;
-  }
-  return false;
+  return std::any_of(custom_fields_.begin(), custom_fields_.end(),
+                     [&](const auto& field) { return field.key() == key; });
 }
 
 void Entry::set_binary_property(const std::string& name, const std::vector<uint8_t>& data) {
@@ -107,7 +105,7 @@ void Entry::set_binary_property(const std::string& name, const std::vector<uint8
 
   auto attachment = std::make_shared<Attachment>();
   attachment->set_name(name);
-  attachment->set_binary(std::make_shared<Binary>(protect<std::string>(std::move(payload), true)));
+  attachment->set_binary(std::make_shared<Binary>(protect<std::string>(payload, true)));
   attachments_.push_back(attachment);
 }
 
@@ -115,7 +113,7 @@ std::vector<uint8_t> Entry::get_binary_property(const std::string& name) const {
   for (const auto& attachment : attachments_) {
     if (attachment->name() == name && attachment->binary() && !attachment->binary()->Empty()) {
       const std::string& data = *attachment->binary()->data();
-      return std::vector<uint8_t>(data.begin(), data.end());
+      return {data.begin(), data.end()};
     }
   }
   return {};

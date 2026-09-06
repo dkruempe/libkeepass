@@ -247,16 +247,16 @@ public:
   std::shared_ptr<Group> FindGroup(const std::string& name) const;
 
   /// Creates a new entry with an optional title.
-  std::shared_ptr<Entry> NewEntry(const std::string& title = "");
+  static std::shared_ptr<Entry> NewEntry(const std::string& title = "");
 
   /// Creates a new group with an optional name.
-  std::shared_ptr<Group> NewGroup(const std::string& name = "");
+  static std::shared_ptr<Group> NewGroup(const std::string& name = "");
 
   /// Adds an entry to the given group.
-  void AddEntry(std::shared_ptr<Group> group, std::shared_ptr<Entry> entry);
+  static void AddEntry(const std::shared_ptr<Group>& group, const std::shared_ptr<Entry>& entry);
 
   /// Adds a group to the given parent group.
-  void AddGroup(std::shared_ptr<Group> parent, std::shared_ptr<Group> group);
+  static void AddGroup(const std::shared_ptr<Group>& parent, const std::shared_ptr<Group>& group);
 
   /// Deletes the entry with the given UUID from the database.
   void DeleteEntry(const std::array<uint8_t, 16>& uuid);
@@ -265,16 +265,18 @@ public:
   void DeleteGroup(const std::array<uint8_t, 16>& uuid);
 
   /// Moves an entry to a different group.
-  void MoveEntry(std::shared_ptr<Entry> entry, std::shared_ptr<Group> new_group);
+  static void MoveEntry(const std::shared_ptr<Entry>& entry,
+                        const std::shared_ptr<Group>& new_group);
 
   /// Moves a group to a different parent group.
-  void MoveGroup(std::shared_ptr<Group> group, std::shared_ptr<Group> new_parent);
+  static void MoveGroup(const std::shared_ptr<Group>& group,
+                        const std::shared_ptr<Group>& new_parent);
 
   /// Moves an entry to the recycle bin.
-  void TrashEntry(std::shared_ptr<Entry> entry);
+  void TrashEntry(const std::shared_ptr<Entry>& entry);
 
   /// Moves a group to the recycle bin.
-  void TrashGroup(std::shared_ptr<Group> group);
+  void TrashGroup(const std::shared_ptr<Group>& group);
 
   /// Empties the recycle bin.
   void EmptyRecycleBin();
