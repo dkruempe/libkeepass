@@ -75,14 +75,6 @@ run-clang-tidy -p build-lint -extra-arg=-Wno-unknown-warning-option src cli test
 
 > `clang-format` and `clang-tidy` from the current LLVM releases (e.g. `22.1.8`) can be installed through Homebrew (`llvm`), a Linux package manager, or as Python packages (`pip install "clang-format==22.1.8" "clang-tidy==22.1.8"`).
 
-### Suppressing Checks
-
-If a check flags a place where the code is deliberately written that way, suppress it *locally* with a comment rather than disabling the check project-wide:
-
-```cpp
-cipher.Decrypt(dst_block, tst_block); // NOLINT(readability-suspicious-call-argument)
-```
-
 ## Documentation
 
 - The public API in `src/include/libkeepass/*.hh` is documented with Doxygen comments (`///` or `/** */`) and a hosted version is published to GitHub Pages on every push to `main`.

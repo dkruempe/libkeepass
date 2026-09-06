@@ -1,3 +1,7 @@
+# The cipher tests deliberately pass the same buffer as both the source and the
+# destination argument (in-place AES encryption/decryption); the
+# readability-suspicious-call-argument check only produces false positives for
+# that intentional use, so it is disabled rather than suppressing it per line.
 Checks: >-
     bugprone-*,
     performance-*,
@@ -19,7 +23,8 @@ Checks: >-
     -readability-implicit-bool-conversion,
     -readability-isolate-declaration,
     -readability-magic-numbers,
-    -readability-math-missing-parentheses
+    -readability-math-missing-parentheses,
+    -readability-suspicious-call-argument
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: file

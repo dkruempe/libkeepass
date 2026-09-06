@@ -35,22 +35,11 @@
 #include "libkeepass/kdbx.hh"
 #include "libkeepass/key.hh"
 
-namespace {
+#include "kpx.hh"
 
-const char* kVersion = "0.2.0";
+namespace kpx {
 
-struct Options {
-  std::string input;
-  std::string password;
-  std::string keyfile;
-  std::string format = "text";
-  std::string output;
-  std::string export_path;
-  bool with_passwords = false;
-  bool verbose = false;
-  bool help = false;
-  bool show_version = false;
-};
+const char* const kVersion = "0.2.0";
 
 void PrintUsage(const char* prog, std::ostream& os) {
   os << "Usage: " << prog << " [options] <database>\n"
@@ -399,8 +388,6 @@ bool OpenOutput(const Options& opt, std::ofstream& file) {
   return true;
 }
 
-} // namespace
-
 int Run(const Options& opt, const char* argv0) {
   if (opt.help) {
     PrintUsage(argv0, std::cout);
@@ -461,7 +448,7 @@ int Run(const Options& opt, const char* argv0) {
   return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int kpx_main(int argc, const char* argv[]) {
   try {
     Options opt;
     if (!ParseArgs(argc, argv, opt))
@@ -472,3 +459,9 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 }
+
+} // namespace kpx
+
+#ifndef KPX_NO_MAIN
+int main(int argc, const char* argv[]) { return kpx::kpx_main(argc, argv); }
+#endif

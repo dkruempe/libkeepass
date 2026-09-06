@@ -27,19 +27,25 @@
 #include <string>
 #include <vector>
 
-#include "config.hh"
+#include "libkeepass/entry.hh"
+#include "libkeepass/group.hh"
+#include "libkeepass/kdbx.hh"
+#include "libkeepass/key.hh"
 
-// Include the CLI implementation in-process so its command handling can be
-// exercised directly. The 'main' function is renamed (and the macro
-// immediately #undef'd) so it does not clash with the GTest main linked in
-// via GTest::Main.
-#define main kpx_main
-#include "../cli/kpx.cc"
-#undef main
+#include "../cli/kpx.hh"
+#include "config.hh"
 
 namespace {
 
 using keepass::protect;
+using kpx::ExportDatabase;
+using kpx::IsKdbPath;
+using kpx::kpx_main;
+using kpx::kVersion;
+using kpx::Options;
+using kpx::ParseArgs;
+using kpx::PrintUsage;
+using kpx::ResolvePassword;
 
 std::string GetDataPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/data/kdbx/" + name;
@@ -117,7 +123,7 @@ CliResult RunCli(std::initializer_list<std::string> args) {
 
 std::string ReadFile(const std::string& path) {
   std::ifstream file(path);
-  return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
 // Builds a small database with known content. Metadata is reused from an
@@ -135,13 +141,13 @@ std::unique_ptr<keepass::Database> CreateTestDatabase() {
                         0x0e, 0x0f, 0x10, 0x11}});
   db->set_meta(meta_source->meta());
 
-  std::shared_ptr<keepass::Group> root(new keepass::Group());
+  auto root = std::make_shared<keepass::Group>();
   root->set_name("root");
 
-  std::shared_ptr<keepass::Group> internet(new keepass::Group());
+  auto internet = std::make_shared<keepass::Group>();
   internet->set_name("Internet");
 
-  std::shared_ptr<keepass::Entry> mail(new keepass::Entry());
+  auto mail = std::make_shared<keepass::Entry>();
   mail->set_title(protect<std::string>("mail, \"quoted\"", false));
   mail->set_username(protect<std::string>("alice", false));
   mail->set_password(protect<std::string>("s3cret", true));
@@ -149,10 +155,10 @@ std::unique_ptr<keepass::Database> CreateTestDatabase() {
   mail->set_notes(protect<std::string>("important, note", false));
   internet->AddEntry(mail);
 
-  std::shared_ptr<keepass::Group> empty(new keepass::Group());
+  auto empty = std::make_shared<keepass::Group>();
   empty->set_name("Empty");
 
-  std::shared_ptr<keepass::Entry> root_entry(new keepass::Entry());
+  auto root_entry = std::make_shared<keepass::Entry>();
   root_entry->set_title(protect<std::string>("RootEntry", false));
   root_entry->set_username(protect<std::string>("rootuser", false));
   root_entry->set_password(protect<std::string>("toppass", true));
@@ -328,7 +334,7 @@ TEST_F(KpxTest, ExportToKdbx) {
 
   CliResult result = RunCli({"-p", "password", "-e", export_path, Kdbx()});
   EXPECT_EQ(0, result.code);
-  EXPECT_TRUE(ReadFile(export_path).size() > 0);
+  EXPECT_FALSE(ReadFile(export_path).empty());
 }
 
 TEST_F(KpxTest, ExportToKdbxVerbose) {
@@ -415,11 +421,11 @@ TEST_F(KpxTest, ShortOptionAttachedValues) {
 
   CliResult out = RunCli({"-o" + output_path, "-p", "password", Kdbx()});
   EXPECT_EQ(0, out.code);
-  EXPECT_TRUE(ReadFile(output_path).size() > 0);
+  EXPECT_FALSE(ReadFile(output_path).empty());
 
   CliResult exp = RunCli({"-e" + export_path, "-p", "password", Kdbx()});
   EXPECT_EQ(0, exp.code);
-  EXPECT_TRUE(ReadFile(export_path).size() > 0);
+  EXPECT_FALSE(ReadFile(export_path).empty());
 
   const std::string database = GetDataPath("complex-1-key_pw-aes.kdbx");
   const std::string keyfile = GetDataPath("complex-1-key_pw-aes.key");
