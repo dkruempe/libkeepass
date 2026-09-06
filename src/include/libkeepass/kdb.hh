@@ -24,6 +24,7 @@
 
 #pragma once
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
 #include <string>
 
@@ -85,6 +86,14 @@ public:
    */
   static std::unique_ptr<Database> Import(const std::string& path, const Key& key);
 
+  /// Imports a KDB database from an input stream.
+  /**
+   * @param src The input stream containing the KDB database.
+   * @param key The key used to decrypt the database.
+   * @return A unique pointer to the imported Database object.
+   */
+  static std::unique_ptr<Database> Import(std::istream& src, const Key& key);
+
   /// Exports a database to a KDB file.
   /**
    * @param path Path to the output file.
@@ -92,6 +101,14 @@ public:
    * @param key The key used to encrypt the database.
    */
   static void Export(const std::string& path, const Database& db, const Key& key);
+
+  /// Exports a database to an output stream in KDB format.
+  /**
+   * @param dst The output stream to write the KDB database to.
+   * @param db The database to export.
+   * @param key The key used to encrypt the database.
+   */
+  static void Export(std::ostream& dst, const Database& db, const Key& key);
 };
 
 } // namespace keepass

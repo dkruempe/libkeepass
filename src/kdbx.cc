@@ -1001,18 +1001,31 @@ void KdbxFile::WriteXml(std::ostream& dst, RandomObfuscator& obfuscator, const D
   pugi::xml_node meta_node = kpf_node.append_child("Meta");
   pugi::xml_node group_node = kpf_node.append_child("Root").append_child("Group");
 
-  WriteMeta(meta_node, obfuscator, db.meta());
-  WriteGroup(group_node, obfuscator, db.root());
+  // A freshly created database may lack metadata or a root group; export a
+  // default placeholder in that case instead of dereferencing a null pointer.
+  if (!db.meta()) {
+    static const std::shared_ptr<Metadata> empty_meta = std::make_shared<Metadata>();
+    WriteMeta(meta_node, obfuscator, empty_meta);
+  } else {
+    WriteMeta(meta_node, obfuscator, db.meta());
+  }
+
+  static const std::shared_ptr<Group> empty_root = std::make_shared<Group>();
+  WriteGroup(group_node, obfuscator, db.root() ? db.root() : empty_root);
 
   doc.save(dst);
 }
 
 std::unique_ptr<Database> KdbxFile::Import(const std::string& path, const Key& key) {
-  Reset();
-
   std::ifstream src(path, std::ios::binary);
   if (!src.is_open())
     throw FileNotFoundError();
+
+  return Import(src, key);
+}
+
+std::unique_ptr<Database> KdbxFile::Import(std::istream& src, const Key& key) {
+  Reset();
 
   // Read header.
   KdbxHeader header{};
@@ -1518,21 +1531,23 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 }
 
 void KdbxFile::Export(const std::string& path, const Database& db, const Key& key) {
+  std::ofstream dst(path, std::ios::out | std::ios::binary);
+  if (!dst.is_open())
+    throw IoError("Unable to open database for writing.");
+
+  Export(dst, db, key);
+}
+
+void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   Reset();
 
   if (write_kdbx4_ || db.kdf() != Database::Kdf::kAes) {
     kdbx4_ = true;
-    std::ofstream dst(path, std::ios::out | std::ios::binary);
-    if (!dst.is_open())
-      throw IoError("Unable to open database for writing.");
     Export4(dst, db, key);
     return;
   }
 
   kdbx4_ = false;
-  std::ofstream dst(path, std::ios::out | std::ios::binary);
-  if (!dst.is_open())
-    throw IoError("Unable to open database for writing.");
   Export3(dst, db, key);
 }
 

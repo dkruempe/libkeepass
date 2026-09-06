@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <istream>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <unordered_map>
 
@@ -235,6 +236,14 @@ public:
    */
   std::unique_ptr<Database> Import(const std::string& path, const Key& key);
 
+  /// Imports a KDBX database from an input stream.
+  /**
+   * @param src The input stream containing the KDBX database.
+   * @param key The key used to decrypt the database.
+   * @return A unique pointer to the imported Database object.
+   */
+  std::unique_ptr<Database> Import(std::istream& src, const Key& key);
+
   /// Exports a database to a KDBX file.
   /**
    * @param path Path to the output file.
@@ -242,6 +251,14 @@ public:
    * @param key The key used to encrypt the database.
    */
   void Export(const std::string& path, const Database& db, const Key& key);
+
+  /// Exports a database to an output stream in KDBX format.
+  /**
+   * @param dst The output stream to write the KDBX database to.
+   * @param db The database to export.
+   * @param key The key used to encrypt the database.
+   */
+  void Export(std::ostream& dst, const Database& db, const Key& key);
 
   /** Forces the exporter to produce a KDBX 4 format database. */
   void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }

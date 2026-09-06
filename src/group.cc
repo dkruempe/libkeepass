@@ -19,11 +19,34 @@
 
 #include "libkeepass/group.hh"
 
+#include <cctype>
+#include <regex>
 #include <sstream>
 
 #include "libkeepass/util.hh"
 
 namespace keepass {
+
+namespace {
+
+bool Matches(const std::string& text, const std::string& query, bool regex) {
+  if (regex) {
+    try {
+      return std::regex_search(text, std::regex(query, std::regex::icase));
+    } catch (const std::regex_error&) {
+      return false;
+    }
+  }
+
+  if (query.empty())
+    return true;
+
+  auto it = std::search(text.begin(), text.end(), query.begin(), query.end(),
+                        [](char a, char b) { return std::tolower(a) == std::tolower(b); });
+  return it != text.end();
+}
+
+} // namespace
 
 Group::Group() : uuid_(generate_uuid()) {}
 
@@ -31,9 +54,90 @@ const std::vector<std::shared_ptr<Group>>& Group::Groups() const { return groups
 
 const std::vector<std::shared_ptr<Entry>>& Group::Entries() const { return entries_; }
 
-void Group::AddGroup(const std::shared_ptr<Group>& group) { groups_.push_back(group); }
+std::string Group::path() const {
+  std::vector<std::string> names;
+  std::shared_ptr<Group> current = parent_.lock();
+  while (current) {
+    if (!current->name().empty())
+      names.push_back(current->name());
+    current = current->parent().lock();
+  }
 
-void Group::AddEntry(const std::shared_ptr<Entry>& entry) { entries_.push_back(entry); }
+  std::string path;
+  for (auto it = names.rbegin(); it != names.rend(); ++it)
+    path += "/" + *it;
+
+  if (!name_.empty())
+    path += "/" + name_;
+
+  return path.empty() ? "/" : path;
+}
+
+std::vector<std::shared_ptr<Entry>> Group::FindEntries(const std::string& query, bool regex,
+                                                       bool recursive) const {
+  std::vector<std::shared_ptr<Entry>> result;
+
+  std::function<void(const Group&)> collect = [&](const Group& group) {
+    for (const auto& entry : group.entries_) {
+      if (Matches(*entry->title(), query, regex))
+        result.push_back(entry);
+    }
+    if (recursive) {
+      for (const auto& child : group.groups_)
+        collect(*child);
+    }
+  };
+
+  collect(*this);
+  return result;
+}
+
+std::vector<std::shared_ptr<Group>> Group::FindGroups(const std::string& query, bool regex,
+                                                      bool recursive) const {
+  std::vector<std::shared_ptr<Group>> result;
+
+  std::function<void(const Group&)> collect = [&](const Group& group) {
+    for (const auto& child : group.groups_) {
+      if (Matches(child->name(), query, regex))
+        result.push_back(child);
+      if (recursive)
+        collect(*child);
+    }
+  };
+
+  collect(*this);
+  return result;
+}
+
+void Group::AddGroup(const std::shared_ptr<Group>& group) {
+  group->set_parent(shared_from_this());
+  groups_.push_back(group);
+}
+
+void Group::RemoveGroup(const std::shared_ptr<Group>& group) {
+  for (auto it = groups_.begin(); it != groups_.end(); ++it) {
+    if (*it == group) {
+      group->set_parent({});
+      groups_.erase(it);
+      return;
+    }
+  }
+}
+
+void Group::AddEntry(const std::shared_ptr<Entry>& entry) {
+  entry->set_parent(shared_from_this());
+  entries_.push_back(entry);
+}
+
+void Group::RemoveEntry(const std::shared_ptr<Entry>& entry) {
+  for (auto it = entries_.begin(); it != entries_.end(); ++it) {
+    if (*it == entry) {
+      entry->set_parent({});
+      entries_.erase(it);
+      return;
+    }
+  }
+}
 
 bool Group::HasNonMetaEntries() const {
   return std::find_if(entries_.begin(), entries_.end(), [](const std::shared_ptr<Entry>& entry) {

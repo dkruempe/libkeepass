@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Unified `KeePass` API (`libkeepass/keepass.hh`) for opening and saving
+  databases: auto-detects the input format (KDB, KDBX3, KDBX4), selects the
+  output format from the file extension, the database KDF/cipher or an explicit
+  `SetFormat()`, and supports in-memory streams for both `Open` and `Save`
+- `KeePass::Create()` factory that builds a new database with generated
+  cryptographic material
+- Stream-based `Import`/`Export` overloads for `KdbFile` and `KdbxFile`
+- `Database` convenience API: `FindEntries`/`FindGroups` (substring or regex),
+  `FindEntry`/`FindGroup`, `NewEntry`/`NewGroup`, `AddEntry`/`AddGroup`,
+  `DeleteEntry`/`DeleteGroup`, `MoveEntry`/`MoveGroup`, `TrashEntry`/`TrashGroup`,
+  `EmptyRecycleBin`, `IsRecycleBinEnabled`/`EnableRecycleBin`, `EntryCount`/
+  `GroupCount`, `ToJson()` and `Visit()`
+- `Entry` convenience API: weak parent with `path()`, `custom_properties()`,
+  `GetString`/`HasString`, `set_custom_property`/`delete_custom_property`,
+  attachment helpers `set_binary_property`/`get_binary_property`/
+  `delete_binary_property`, `save_history`/`delete_history` and `touch()`
+- `Group` convenience API: `path()`, `parent()`/`set_parent()`, `is_root_group()`,
+  `entries_count()`/`groups_count()`, subtree `FindEntries`/`FindGroups` and
+  `RemoveGroup`/`RemoveEntry`; groups track their parent via
+  `std::enable_shared_from_this`
+- `Key` convenience constructors: composite `Key(password, keyfile)` and
+  pre-derived transformed key `Key(vector<uint8_t>)`
+- Visitor pattern (`libkeepass/visitor.hh`) with `Visit(Group&, Visitor&)`,
+  `PrintVisitor` and `Database::Visit()`
+
+### Changed
+
+- Migrated the `kpx` CLI to the unified `KeePass` API
+- Exporting databases without metadata or a root group no longer crashes
+
 ## [0.2.1] - 2026-09-05
 
 ### Added

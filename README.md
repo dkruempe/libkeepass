@@ -19,6 +19,7 @@ The API documentation is available at [https://dkruempe.github.io/libkeepass/](h
 ## Features
 
 - **Formats:** KDB (Legacy) and KDBX (KeePass2)
+- **Unified API:** One `KeePass` class with format auto-detection and in-memory stream support
 - **Ciphers:** AES, Twofish, ChaCha20
 - **KDFs:** AES-KDF, Argon2d, Argon2id
 - **Keys:** Password, Keyfile, Composite Keys
@@ -191,30 +192,103 @@ The password is read from `--password`, otherwise from the `KEEPASS_PASSWORD` en
 
 ## Usage
 
-### KDBX (KeePass2)
+### Unified API (recommended)
+
+The `KeePass` class is the single entry point for opening and saving databases.
+The input format is auto-detected; the output format is derived from the file
+extension and the database KDF/cipher, or can be forced explicitly:
+
+```cpp
+#include "libkeepass/keepass.hh"
+
+// Open with a password (and optionally a keyfile).
+keepass::KeePass keeper("password", "/path/to/keyfile.key");
+std::unique_ptr<keepass::Database> db = keeper.Open("database.kdbx");
+
+// Manipulate the database...
+auto root = db->root();
+for (const auto& entry : root->Entries()) {
+    std::cout << entry->path() << std::endl;
+}
+
+// Save back.
+keeper.Save("output.kdbx", *db);
+
+// Save encrypted with a different password.
+keeper.SaveAs("output.kdbx", *db, "new_password");
+
+// Force the output format.
+keeper.SetFormat(keepass::KeePass::Format::kKdb);   // kKdb, kKdbx3, kKdbx4
+```
+
+Both `Open` and `Save` work with in-memory streams:
+
+```cpp
+std::ostringstream out;
+keeper.Save(out, *db);
+
+std::istringstream in(out.str());
+std::unique_ptr<keepass::Database> reopened = keeper.Open(in);
+```
+
+Create brand-new databases with generated cryptographic material:
+
+```cpp
+auto db = keepass::KeePass::Create(
+    "password", keepass::KeePass::Format::kKdbx4,
+    keepass::Database::Cipher::kAes, keepass::Database::Kdf::kArgon2id);
+```
+
+### Convenience API
+
+`Database`, `Group` and `Entry` provide helpers for common operations:
+
+```cpp
+// Database-level lookups (case-insensitive substring, or regex).
+for (const auto& entry : db->FindEntries("github"))
+    std::cout << entry->path() << std::endl;
+auto group = db->FindGroup("Work");
+auto entry = db->FindEntry("Home Banking");
+
+// Build and modify the hierarchy.
+auto new_entry = db->NewEntry("A New Login");
+db->AddEntry(group, new_entry);
+db->MoveEntry(new_entry, other_group);
+db->DeleteEntry(new_entry->uuid());
+
+// Move groups, entries or a whole subtree into the recycle bin.
+db->EnableRecycleBin(true);
+db->TrashEntry(entry);
+db->EmptyRecycleBin();
+
+// Serialize the whole database to JSON or traverse it with a visitor.
+std::string json = db->ToJson();
+class CountingVisitor : public keepass::Visitor {
+    void Visit(keepass::Group&) override { ++groups_; }
+    void Visit(keepass::Entry&) override { ++entries_; }
+    std::size_t groups_ = 0, entries_ = 0;
+};
+CountingVisitor visitor;
+db->Visit(visitor);
+```
+
+### Low-level format classes
+
+The format-specific classes remain available for low-level access:
+
+**KDBX (KeePass2):**
 
 ```cpp
 #include "libkeepass/kdbx.hh"
 #include "libkeepass/key.hh"
 
 keepass::Key key("password");
-// Optional: add keyfile
-// key.SetKeyFile("/path/to/keyfile.key");
-
 keepass::KdbxFile file;
 std::unique_ptr<keepass::Database> db = file.Import("database.kdbx", key);
-
-// Manipulate database...
-auto root = db->root();
-for (const auto& entry : root->Entries()) {
-    std::cout << *entry->title() << std::endl;
-}
-
-// Export
 file.Export("output.kdbx", *db, key);
 ```
 
-### KDB (Legacy)
+**KDB (Legacy):**
 
 ```cpp
 #include "libkeepass/kdb.hh"
@@ -222,9 +296,6 @@ file.Export("output.kdbx", *db, key);
 
 keepass::Key key("password");
 std::unique_ptr<keepass::Database> db = keepass::KdbFile::Import("database.kdb", key);
-
-// Manipulate database...
-
 keepass::KdbFile::Export("output.kdb", *db, key);
 ```
 
@@ -243,18 +314,19 @@ The `Database` class provides access to:
 auto root = db->root();
 
 // Add a new group
-auto group = std::make_shared<keepass::Group>();
-group->set_name("My Group");
-root->AddGroup(group);
+auto group = db->NewGroup("My Group");
+db->AddGroup(root, group);
 
 // Add a new entry
-auto entry = std::make_shared<keepass::Entry>();
-entry->set_title("My Entry");
-entry->set_username("user");
-entry->set_password("secret");
-entry->set_url("https://example.com");
-group->AddEntry(entry);
+auto entry = db->NewEntry("My Entry");
+entry->set_username(keepass::protect<std::string>("user", true));
+entry->set_password(keepass::protect<std::string>("secret", true));
+entry->set_url(keepass::protect<std::string>("https://example.com", false));
+db->AddEntry(group, entry);
 ```
+
+Parent links are maintained automatically, so `group->path()`, `entry->path()`
+and `parent()` are available throughout the tree.
 
 ## Project Structure
 
@@ -262,9 +334,14 @@ group->AddEntry(entry);
 libkeepass/
 ├── src/                    # Library source code
 │   ├── include/libkeepass/ # Public headers
+│   ├── keepass.cc          # Unified KeePass API
 │   ├── kdb.cc              # KDB format implementation
 │   ├── kdbx.cc             # KDBX format implementation
+│   ├── database.cc         # Database convenience API
+│   ├── entry.cc            # Entry convenience API
+│   ├── group.cc            # Group convenience API
 │   ├── key.cc              # Key management
+│   ├── visitor.cc          # Visitor pattern
 │   ├── cipher.cc           # Encryption
 │   └── ...
 ├── test/                   # Unit tests

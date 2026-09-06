@@ -40,11 +40,12 @@ class Icon;
  * A Group forms the hierarchical structure of a database. Every database has a
  * root group; groups can contain \ref Entry objects and nested groups.
  */
-class LIBKEEPASS_API Group final {
+class LIBKEEPASS_API Group final : public std::enable_shared_from_this<Group> {
 private:
   std::array<uint8_t, 16> uuid_;
   uint32_t icon_ = 0;
   std::weak_ptr<Icon> custom_icon_;
+  std::weak_ptr<Group> parent_;
   std::string name_;
   std::string notes_;
   std::time_t creation_time_ = 0;
@@ -186,11 +187,59 @@ public:
   /// Returns the list of entries in this group.
   const std::vector<std::shared_ptr<Entry>>& Entries() const;
 
+  /// Returns the parent group (empty if this is the root group).
+  std::weak_ptr<Group> parent() const { return parent_; }
+
+  /// Sets the parent group.
+  void set_parent(std::weak_ptr<Group> parent) { parent_ = std::move(parent); }
+
+  /// Returns whether this group is the root group.
+  bool is_root_group() const { return parent_.expired(); }
+
+  /// Returns the full path of this group from the database root.
+  std::string path() const;
+
+  /// Returns the number of entries directly contained in this group.
+  size_t entries_count() const { return entries_.size(); }
+
+  /// Returns the number of subgroups directly contained in this group.
+  size_t groups_count() const { return groups_.size(); }
+
+  /// Finds entries matching the given query in this group's subtree.
+  /**
+   * @param query The title to search for.
+   * @param regex Whether the query is a regular expression (matches anywhere
+   *              in the title, case-insensitive). Otherwise the query must be
+   *              a case-insensitive substring of the title.
+   * @param recursive Whether to also search in subgroups.
+   * @return The matching entries.
+   */
+  std::vector<std::shared_ptr<Entry>> FindEntries(const std::string& query, bool regex = false,
+                                                  bool recursive = true) const;
+
+  /// Finds groups matching the given query in this group's subtree.
+  /**
+   * @param query The name to search for.
+   * @param regex Whether the query is a regular expression (matches anywhere
+   *              in the name, case-insensitive). Otherwise the query must be
+   *              a case-insensitive substring of the name.
+   * @param recursive Whether to also search in subgroups.
+   * @return The matching groups.
+   */
+  std::vector<std::shared_ptr<Group>> FindGroups(const std::string& query, bool regex = false,
+                                                 bool recursive = true) const;
+
   /// Adds a subgroup to this group.
   void AddGroup(const std::shared_ptr<Group>& group);
 
+  /// Removes a subgroup from this group.
+  void RemoveGroup(const std::shared_ptr<Group>& group);
+
   /// Adds an entry to this group.
   void AddEntry(const std::shared_ptr<Entry>& entry);
+
+  /// Removes an entry from this group.
+  void RemoveEntry(const std::shared_ptr<Entry>& entry);
 
   /// Returns whether the group contains any non-metadata entries.
   bool HasNonMetaEntries() const;

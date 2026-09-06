@@ -78,6 +78,10 @@ private:
     std::array<uint8_t, 32> Resolve(SubKeyResolution resolution) const;
   } key_;
 
+  /** Set when the key was created from a pre-derived transformed key. */
+  bool has_transformed_key_ = false;
+  std::array<uint8_t, 32> transformed_key_ = {{0}};
+
 public:
   /// Default constructor. Creates an empty key with no password or key file.
   Key() = default;
@@ -87,6 +91,23 @@ public:
    * @param password The password string used to derive the encryption key.
    */
   explicit Key(const std::string& password);
+
+  /// Constructs a composite key from a password and a key file.
+  /**
+   * @param password The password string used to derive the password part.
+   * @param keyfile Path to the key file used to derive the key file part.
+   */
+  Key(const std::string& password, const std::string& keyfile);
+
+  /// Constructs a key from a pre-derived transformed master key.
+  /**
+   * The supplied 32-byte key is used directly as the result of any key
+   * derivation, bypassing the password and key file processing. This is
+   * useful for re-opening databases with an already computed transformed key.
+   *
+   * @param transformed_key The 32-byte pre-derived transformed key.
+   */
+  explicit Key(const std::vector<uint8_t>& transformed_key);
 
   /// Sets the password used to derive the encryption key.
   /**

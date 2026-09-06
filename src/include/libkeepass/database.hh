@@ -25,6 +25,7 @@
 #pragma once
 #include <array>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "group.hh"
@@ -33,6 +34,7 @@
 namespace keepass {
 
 class Metadata;
+class Visitor;
 
 /**
  * @brief Represents a KeePass (KDB/KDBX) database.
@@ -211,6 +213,89 @@ public:
 
   /// Sets the database metadata.
   void set_meta(std::shared_ptr<Metadata> meta) { meta_ = std::move(meta); }
+
+  /// Finds entries matching the given query anywhere in the database.
+  /**
+   * @param query The title to search for.
+   * @param regex Whether the query is a regular expression.
+   * @return The matching entries.
+   */
+  std::vector<std::shared_ptr<Entry>> FindEntries(const std::string& query,
+                                                  bool regex = false) const;
+
+  /// Finds groups matching the given query anywhere in the database.
+  /**
+   * @param query The name to search for.
+   * @param regex Whether the query is a regular expression.
+   * @return The matching groups.
+   */
+  std::vector<std::shared_ptr<Group>> FindGroups(const std::string& query,
+                                                 bool regex = false) const;
+
+  /// Finds the first entry with exactly the given title.
+  /**
+   * @param title The exact title of the entry to find.
+   * @return The entry, or \c nullptr if no entry matches.
+   */
+  std::shared_ptr<Entry> FindEntry(const std::string& title) const;
+
+  /// Finds the first group with exactly the given name.
+  /**
+   * @param name The exact name of the group to find.
+   * @return The group, or \c nullptr if no group matches.
+   */
+  std::shared_ptr<Group> FindGroup(const std::string& name) const;
+
+  /// Creates a new entry with an optional title.
+  std::shared_ptr<Entry> NewEntry(const std::string& title = "");
+
+  /// Creates a new group with an optional name.
+  std::shared_ptr<Group> NewGroup(const std::string& name = "");
+
+  /// Adds an entry to the given group.
+  void AddEntry(std::shared_ptr<Group> group, std::shared_ptr<Entry> entry);
+
+  /// Adds a group to the given parent group.
+  void AddGroup(std::shared_ptr<Group> parent, std::shared_ptr<Group> group);
+
+  /// Deletes the entry with the given UUID from the database.
+  void DeleteEntry(const std::array<uint8_t, 16>& uuid);
+
+  /// Deletes the group with the given UUID and its subtree from the database.
+  void DeleteGroup(const std::array<uint8_t, 16>& uuid);
+
+  /// Moves an entry to a different group.
+  void MoveEntry(std::shared_ptr<Entry> entry, std::shared_ptr<Group> new_group);
+
+  /// Moves a group to a different parent group.
+  void MoveGroup(std::shared_ptr<Group> group, std::shared_ptr<Group> new_parent);
+
+  /// Moves an entry to the recycle bin.
+  void TrashEntry(std::shared_ptr<Entry> entry);
+
+  /// Moves a group to the recycle bin.
+  void TrashGroup(std::shared_ptr<Group> group);
+
+  /// Empties the recycle bin.
+  void EmptyRecycleBin();
+
+  /// Returns whether a recycle bin is configured.
+  bool IsRecycleBinEnabled() const;
+
+  /// Enables or disables the recycle bin.
+  void EnableRecycleBin(bool enable = true);
+
+  /// Serializes the whole database to a JSON string.
+  std::string ToJson() const;
+
+  /// Returns the total number of entries in the database.
+  size_t EntryCount() const;
+
+  /// Returns the total number of groups in the database (including the root).
+  size_t GroupCount() const;
+
+  /// Applies a visitor to every group and entry in the database.
+  void Visit(Visitor& visitor) const;
 };
 
 } // namespace keepass

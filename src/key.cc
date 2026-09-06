@@ -59,6 +59,20 @@ std::array<uint8_t, 32> Key::CompositeKey::Resolve(SubKeyResolution resolution) 
 
 Key::Key(const std::string& password) { SetPassword(password); }
 
+Key::Key(const std::string& password, const std::string& keyfile) {
+  SetPassword(password);
+  if (!keyfile.empty())
+    SetKeyFile(keyfile);
+}
+
+Key::Key(const std::vector<uint8_t>& transformed_key) {
+  if (transformed_key.size() != 32)
+    throw FormatError("Invalid transformed key size.");
+
+  std::copy(transformed_key.begin(), transformed_key.end(), transformed_key_.begin());
+  has_transformed_key_ = true;
+}
+
 void Key::SetPassword(const std::string& password) {
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
@@ -106,6 +120,9 @@ void Key::SetKeyFile(const std::string& path) {
 
 std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
                                        SubKeyResolution resolution) const {
+  if (has_transformed_key_)
+    return transformed_key_;
+
   std::array<uint8_t, 32> transformed_key = key_.Resolve(resolution);
   std::array<uint8_t, 32> encrypted{};
 
@@ -151,6 +168,9 @@ std::array<uint8_t, 32> Key::TransformArgon2(Kdf kdf, const std::vector<uint8_t>
                                              uint64_t iterations, uint64_t memory_bytes,
                                              uint32_t parallelism, uint32_t argon2_version,
                                              SubKeyResolution resolution) const {
+  if (has_transformed_key_)
+    return transformed_key_;
+
   std::array<uint8_t, 32> transformed_key{};
   std::array<uint8_t, 32> composite_key = key_.Resolve(resolution);
 

@@ -67,3 +67,8 @@ target_compile_features(kpx_test PUBLIC cxx_std_11)
 target_compile_definitions(kpx_test PRIVATE KPX_NO_MAIN=1)
 target_link_libraries(kpx_test PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.kpx COMMAND kpx_test)
+
+add_executable(keepass keepass.cc)
+target_compile_features(keepass PUBLIC cxx_std_11)
+target_link_libraries(keepass PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.keepass COMMAND keepass)

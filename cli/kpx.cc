@@ -31,8 +31,7 @@
 
 #include "libkeepass/entry.hh"
 #include "libkeepass/group.hh"
-#include "libkeepass/kdb.hh"
-#include "libkeepass/kdbx.hh"
+#include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
 
 #include "kpx.hh"
@@ -267,21 +266,13 @@ std::string ResolvePassword(const Options& opt) {
 
 std::unique_ptr<keepass::Database> ImportDatabase(const std::string& path,
                                                   const keepass::Key& key) {
-  if (IsKdbPath(path))
-    return keepass::KdbFile::Import(path, key);
-
-  keepass::KdbxFile file;
-  return file.Import(path, key);
+  keepass::KeePass keeper(key);
+  return keeper.Open(path);
 }
 
 void ExportDatabase(const std::string& path, const keepass::Database& db, const keepass::Key& key) {
-  if (IsKdbPath(path)) {
-    keepass::KdbFile::Export(path, db, key);
-    return;
-  }
-
-  keepass::KdbxFile file;
-  file.Export(path, db, key);
+  keepass::KeePass keeper(key);
+  keeper.Save(path, db);
 }
 
 void PrintTextEntry(std::ostream& os, const std::shared_ptr<keepass::Entry>& entry,
@@ -415,18 +406,16 @@ int Run(const Options& opt, const char* argv0) {
   }
 
   const std::string password = ResolvePassword(opt);
-  keepass::Key key(password);
-  if (!opt.keyfile.empty())
-    key.SetKeyFile(opt.keyfile);
+  keepass::KeePass keeper(password, opt.keyfile);
 
-  std::unique_ptr<keepass::Database> db = ImportDatabase(opt.input, key);
+  std::unique_ptr<keepass::Database> db = keeper.Open(opt.input);
   if (!db) {
     std::cerr << "error: could not open database\n";
     return 1;
   }
 
   if (!opt.export_path.empty()) {
-    ExportDatabase(opt.export_path, *db, key);
+    keeper.Save(opt.export_path, *db);
     if (opt.verbose)
       std::cerr << argv0 << ": exported to '" << opt.export_path << "'\n";
     return 0;

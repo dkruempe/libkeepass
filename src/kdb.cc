@@ -481,6 +481,10 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path, const Key& ke
   if (!src.is_open())
     throw FileNotFoundError();
 
+  return Import(src, key);
+}
+
+std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   // Read header.
   KdbHeader header{};
   try {
@@ -637,14 +641,18 @@ std::unique_ptr<Database> KdbFile::Import(const std::string& path, const Key& ke
 }
 
 void KdbFile::Export(const std::string& path, const Database& db, const Key& key) {
+  std::ofstream dst(path, std::ios::out | std::ios::binary);
+  if (!dst.is_open())
+    throw IoError("Unable to open database for writing.");
+
+  Export(dst, db, key);
+}
+
+void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   // Extract database values in compatible formats.
   assert(db.master_seed().size() == 16);
   std::array<uint8_t, 16> master_seed{};
   std::copy(db.master_seed().begin(), db.master_seed().end(), master_seed.begin());
-
-  std::ofstream dst(path, std::ios::out | std::ios::binary);
-  if (!dst.is_open())
-    throw IoError("Unable to open database for writing.");
 
   // Produce the final key used for encrypting the contents.
   std::array<uint8_t, 32> transformed_key =

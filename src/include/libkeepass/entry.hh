@@ -24,6 +24,7 @@
 
 #pragma once
 #include <ctime>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,6 +36,7 @@
 
 namespace keepass {
 
+class Group;
 class Icon;
 
 /**
@@ -212,6 +214,7 @@ private:
   std::array<uint8_t, 16> uuid_;
   uint32_t icon_ = 0;
   std::weak_ptr<Icon> custom_icon_;
+  std::weak_ptr<Group> parent_;
   protect<std::string> title_;
   protect<std::string> url_;
   std::string override_url_;
@@ -362,6 +365,52 @@ public:
 
   /// Returns the list of custom fields.
   const std::vector<Field>& custom_fields() const { return custom_fields_; }
+
+  /// Returns the parent group (empty if this entry is not attached).
+  std::weak_ptr<Group> parent() const { return parent_; }
+
+  /// Sets the parent group.
+  void set_parent(std::weak_ptr<Group> parent) { parent_ = std::move(parent); }
+
+  /// Returns the full path of this entry including its title.
+  std::string path() const;
+
+  /// Returns the custom fields as a key/value map.
+  std::map<std::string, std::string> custom_properties() const;
+
+  /// Returns the value of the given string field.
+  /**
+   * The standard fields Title, URL, UserName, Password and Notes are checked
+   * first; otherwise the custom fields are searched.
+   */
+  std::string GetString(const std::string& key) const;
+
+  /// Returns whether the given string field exists.
+  bool HasString(const std::string& key) const;
+
+  /// Sets a custom field, creating it if it does not exist.
+  void set_custom_property(const std::string& key, const std::string& value);
+
+  /// Removes a custom field.
+  void delete_custom_property(const std::string& key);
+
+  /// Sets (or replaces) a binary property (attachment) of this entry.
+  void set_binary_property(const std::string& name, const std::vector<uint8_t>& data);
+
+  /// Returns the data of the binary property with the given name.
+  std::vector<uint8_t> get_binary_property(const std::string& name) const;
+
+  /// Removes the binary property with the given name.
+  void delete_binary_property(const std::string& name);
+
+  /// Saves a copy of the current state into the entry history.
+  void save_history();
+
+  /// Clears the entry history.
+  void delete_history();
+
+  /// Updates the last access time (and optionally the modification time).
+  void touch(bool modify = false);
 
   /// Adds an attachment to the entry.
   void AddAttachment(const std::shared_ptr<Attachment>& attachment);

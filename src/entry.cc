@@ -21,6 +21,7 @@
 
 #include <sstream>
 
+#include "libkeepass/group.hh"
 #include "libkeepass/util.hh"
 
 namespace keepass {
@@ -37,6 +38,123 @@ void Entry::AddHistoryEntry(const std::shared_ptr<Entry>& entry) { history_.push
 
 void Entry::AddCustomField(std::string& key, const protect<std::string>& value) {
   custom_fields_.emplace_back(key, value);
+}
+
+void Entry::set_custom_property(const std::string& key, const std::string& value) {
+  for (auto& field : custom_fields_) {
+    if (field.key() == key) {
+      field = Field(key, protect<std::string>(value, true));
+      return;
+    }
+  }
+  custom_fields_.emplace_back(key, protect<std::string>(value, true));
+}
+
+void Entry::delete_custom_property(const std::string& key) {
+  for (auto it = custom_fields_.begin(); it != custom_fields_.end(); ++it) {
+    if (it->key() == key) {
+      custom_fields_.erase(it);
+      return;
+    }
+  }
+}
+
+std::map<std::string, std::string> Entry::custom_properties() const {
+  std::map<std::string, std::string> props;
+  for (const auto& field : custom_fields_)
+    props[field.key()] = *field.value();
+  return props;
+}
+
+std::string Entry::GetString(const std::string& key) const {
+  if (key == "Title")
+    return *title_;
+  if (key == "URL")
+    return *url_;
+  if (key == "UserName")
+    return *username_;
+  if (key == "Password")
+    return *password_;
+  if (key == "Notes")
+    return *notes_;
+
+  for (const auto& field : custom_fields_) {
+    if (field.key() == key)
+      return *field.value();
+  }
+  return "";
+}
+
+bool Entry::HasString(const std::string& key) const {
+  if (key == "Title" || key == "URL" || key == "UserName" || key == "Password" || key == "Notes")
+    return true;
+
+  for (const auto& field : custom_fields_) {
+    if (field.key() == key)
+      return true;
+  }
+  return false;
+}
+
+void Entry::set_binary_property(const std::string& name, const std::vector<uint8_t>& data) {
+  std::string payload(data.begin(), data.end());
+  for (const auto& attachment : attachments_) {
+    if (attachment->name() == name) {
+      attachment->set_binary(std::make_shared<Binary>(protect<std::string>(payload, true)));
+      return;
+    }
+  }
+
+  auto attachment = std::make_shared<Attachment>();
+  attachment->set_name(name);
+  attachment->set_binary(std::make_shared<Binary>(protect<std::string>(std::move(payload), true)));
+  attachments_.push_back(attachment);
+}
+
+std::vector<uint8_t> Entry::get_binary_property(const std::string& name) const {
+  for (const auto& attachment : attachments_) {
+    if (attachment->name() == name && attachment->binary() && !attachment->binary()->Empty()) {
+      const std::string& data = *attachment->binary()->data();
+      return std::vector<uint8_t>(data.begin(), data.end());
+    }
+  }
+  return {};
+}
+
+void Entry::delete_binary_property(const std::string& name) {
+  for (auto it = attachments_.begin(); it != attachments_.end(); ++it) {
+    if ((*it)->name() == name) {
+      attachments_.erase(it);
+      return;
+    }
+  }
+}
+
+void Entry::save_history() {
+  auto history = std::make_shared<Entry>(*this);
+  history->history_.clear();
+  history->parent_ = {};
+  history_.push_back(history);
+}
+
+void Entry::delete_history() { history_.clear(); }
+
+void Entry::touch(bool modify) {
+  access_time_ = std::time(nullptr);
+  if (modify)
+    modification_time_ = std::time(nullptr);
+}
+
+std::string Entry::path() const {
+  std::string result = *title_;
+  std::shared_ptr<Group> parent = parent_.lock();
+  if (!parent)
+    return result;
+
+  std::string group_path = parent->path();
+  if (group_path == "/" || group_path.empty())
+    return "/" + result;
+  return group_path + "/" + result;
 }
 
 bool Entry::HasNonDefaultAutoTypeSettings() const { return auto_type_ != AutoType(); }
