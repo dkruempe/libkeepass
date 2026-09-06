@@ -558,10 +558,13 @@ ChaCha20Cipher::ChaCha20Cipher(const std::array<uint8_t, 32>& key,
 // column then diagonal) on the given 16-word state and adds the input state
 // back to produce the 64-byte keystream block.
 std::array<uint8_t, 64> ChaCha20Cipher::BlockFunction(const std::array<uint32_t, 16>& state) {
+  // Work on a copy so the original state remains available for the final addition.
   uint32_t x[16];
   for (std::size_t i = 0; i < 16; ++i)
     x[i] = state[i];
 
+  // 20 rounds = 10 double rounds; each double round runs four column
+  // quarter-rounds followed by four diagonal quarter-rounds.
   for (std::size_t i = 0; i < 10; ++i) {
     x[0] += x[4];
     x[12] ^= x[0];
@@ -615,6 +618,7 @@ std::array<uint8_t, 64> ChaCha20Cipher::BlockFunction(const std::array<uint32_t,
     x[7] ^= x[11];
     x[7] = RotateLeft(x[7], 7);
 
+    // Diagonal quarter-rounds (second half of each double round).
     x[0] += x[5];
     x[15] ^= x[0];
     x[15] = RotateLeft(x[15], 16);
@@ -668,6 +672,7 @@ std::array<uint8_t, 64> ChaCha20Cipher::BlockFunction(const std::array<uint32_t,
     x[4] = RotateLeft(x[4], 7);
   }
 
+  // Add the original input state back to produce the keystream block.
   for (std::size_t i = 0; i < 16; ++i)
     x[i] += state[i];
 

@@ -107,12 +107,14 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
   bool skip_next = false;
   for (int i = 1; i < argc; ++i) {
     if (skip_next) {
+      // This element was already consumed as the value of a short option.
       skip_next = false;
       continue;
     }
 
     const std::string arg = argv[i];
 
+    // "--" ends option parsing; every remaining element is the input path.
     if (arg == "--") {
       for (int rest_idx = i + 1; rest_idx < argc; ++rest_idx) {
         if (!opt.input.empty()) {
@@ -124,6 +126,7 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
       break;
     }
 
+    // Long options, either as "--name=value" or as "--name value".
     if (arg.size() > 2 && arg.compare(0, 2, "--") == 0) {
       std::string name = arg.substr(2);
       std::string value;
@@ -165,6 +168,8 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
       continue;
     }
 
+    // Short options may be combined; a value-taking option consumes the rest
+    // of the argument or, if empty, the following argument.
     if (arg.size() > 1 && arg[0] == '-') {
       bool consumed_rest = false;
       for (std::size_t j = 1; j < arg.size(); ++j) {
