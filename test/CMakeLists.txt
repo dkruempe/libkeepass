@@ -61,3 +61,8 @@ add_executable(util util.cc)
 target_compile_features(util PUBLIC cxx_std_11)
 target_link_libraries(util PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.util COMMAND util)
+
+add_executable(kpx_test kpx.cc)
+target_compile_features(kpx_test PUBLIC cxx_std_11)
+target_link_libraries(kpx_test PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.kpx COMMAND kpx_test)
