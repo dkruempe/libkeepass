@@ -23,6 +23,7 @@
 #include <cassert>
 
 #include "libkeepass/exception.hh"
+#include "libkeepass/secure.hh"
 #include "libkeepass/stream.hh"
 #include "libkeepass/util.hh"
 
@@ -200,8 +201,12 @@ void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
                       });
 }
 
-AesCipher::AesCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 16>& init_vec)
+AesCipher::AesCipher(const uint8_t* key, const std::array<uint8_t, 16>& init_vec)
     : init_vec_(init_vec) {
+  if (key == nullptr) {
+    assert(false);
+    throw InternalError("Invalid AES key.");
+  }
   ctx_dec_ = EVP_CIPHER_CTX_new();
   ctx_enc_ = EVP_CIPHER_CTX_new();
   if (!ctx_dec_ || !ctx_enc_) {
@@ -212,8 +217,8 @@ AesCipher::AesCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_
     assert(false);
     throw InternalError("Failed to create AES cipher context.");
   }
-  if (EVP_DecryptInit_ex(ctx_dec_, EVP_aes_256_ecb(), nullptr, key.data(), nullptr) != 1 ||
-      EVP_EncryptInit_ex(ctx_enc_, EVP_aes_256_ecb(), nullptr, key.data(), nullptr) != 1) {
+  if (EVP_DecryptInit_ex(ctx_dec_, EVP_aes_256_ecb(), nullptr, key, nullptr) != 1 ||
+      EVP_EncryptInit_ex(ctx_enc_, EVP_aes_256_ecb(), nullptr, key, nullptr) != 1) {
     EVP_CIPHER_CTX_free(ctx_dec_);
     EVP_CIPHER_CTX_free(ctx_enc_);
     assert(false);
@@ -342,7 +347,7 @@ uint32_t TwofishCipher::F32(uint32_t x, const uint32_t* k32) {
   return res;
 }
 
-void TwofishCipher::InitializeKey(const std::array<uint8_t, 32>& key) {
+void TwofishCipher::InitializeKey(const uint8_t* key) {
   static const uint32_t kSubKeyStep = 0x02020202;
   static const uint32_t kSubKeyBump = 0x01010101;
 
@@ -352,8 +357,8 @@ void TwofishCipher::InitializeKey(const std::array<uint8_t, 32>& key) {
 
   for (std::size_t i = 0; i < 4; ++i) {
     // Split into even/odd key dwords.
-    k32e[i] = reinterpret_cast<const uint32_t*>(key.data())[2 * i];
-    k32o[i] = reinterpret_cast<const uint32_t*>(key.data())[2 * i + 1];
+    k32e[i] = reinterpret_cast<const uint32_t*>(key)[2 * i];
+    k32o[i] = reinterpret_cast<const uint32_t*>(key)[2 * i + 1];
 
     // Compute S-box keys using (12,8) Reed-Solomon code over GF(256).
     key_.sbox_keys[4 - 1 - i] = ReedSolomonEncode(k32e[i], k32o[i]);
@@ -369,11 +374,16 @@ void TwofishCipher::InitializeKey(const std::array<uint8_t, 32>& key) {
   }
 }
 
-TwofishCipher::TwofishCipher(const std::array<uint8_t, 32>& key,
-                             const std::array<uint8_t, 16>& init_vec)
+TwofishCipher::TwofishCipher(const uint8_t* key, const std::array<uint8_t, 16>& init_vec)
     : init_vec_(init_vec) {
+  if (key == nullptr) {
+    assert(false);
+    throw InternalError("Invalid Twofish key.");
+  }
   InitializeKey(key);
 }
+
+TwofishCipher::~TwofishCipher() { secure_zero(&key_, sizeof(key_)); }
 
 void TwofishCipher::Decrypt(const std::array<uint8_t, 16>& src,
                             std::array<uint8_t, 16>& dst) const {
@@ -446,11 +456,13 @@ void TwofishCipher::Encrypt(const std::array<uint8_t, 16>& src,
     dst_ptr[i] ^= key_.sub_keys[i + 4];
 }
 
-Salsa20Cipher::Salsa20Cipher(const std::array<uint8_t, 32>& key,
-                             const std::array<uint8_t, 8>& init_vec) {
+Salsa20Cipher::Salsa20Cipher(const uint8_t* key, const std::array<uint8_t, 8>& init_vec) {
   static const char* kSigma = "expand 32-byte k";
+  static const std::array<uint8_t, 32> kZeroKey = {{0}};
 
-  const uint8_t* key_ptr = key.data();
+  if (key == nullptr)
+    key = kZeroKey.data();
+  const uint8_t* key_ptr = key;
 
   input_[1] = *reinterpret_cast<const uint32_t*>(key_ptr + 0);
   input_[2] = *reinterpret_cast<const uint32_t*>(key_ptr + 4);
@@ -471,6 +483,8 @@ Salsa20Cipher::Salsa20Cipher(const std::array<uint8_t, 32>& key,
   input_[8] = 0;
   input_[9] = 0;
 }
+
+Salsa20Cipher::~Salsa20Cipher() { secure_zero(input_.data(), input_.size() * sizeof(uint32_t)); }
 
 std::array<uint8_t, 64> Salsa20Cipher::WordToByte(const std::array<uint32_t, 16>& input) {
   uint32_t x[16];
@@ -534,16 +548,18 @@ void Salsa20Cipher::Process(const std::array<uint8_t, 64>& src, std::array<uint8
     dst[i] = src[i] ^ output[i];
 }
 
-ChaCha20Cipher::ChaCha20Cipher(const std::array<uint8_t, 32>& key,
-                               const std::array<uint8_t, 12>& init_vec) {
+ChaCha20Cipher::ChaCha20Cipher(const uint8_t* key, const std::array<uint8_t, 12>& init_vec) {
   static const char* kSigma = "expand 32-byte k";
+  static const std::array<uint8_t, 32> kZeroKey = {{0}};
 
   state_[0] = *reinterpret_cast<const uint32_t*>(kSigma + 0);
   state_[1] = *reinterpret_cast<const uint32_t*>(kSigma + 4);
   state_[2] = *reinterpret_cast<const uint32_t*>(kSigma + 8);
   state_[3] = *reinterpret_cast<const uint32_t*>(kSigma + 12);
 
-  const uint8_t* key_ptr = key.data();
+  if (key == nullptr)
+    key = kZeroKey.data();
+  const uint8_t* key_ptr = key;
   for (std::size_t i = 0; i < 8; ++i)
     state_[4 + i] = *reinterpret_cast<const uint32_t*>(key_ptr + 4 * i);
 
@@ -553,6 +569,8 @@ ChaCha20Cipher::ChaCha20Cipher(const std::array<uint8_t, 32>& key,
   for (std::size_t i = 0; i < 3; ++i)
     state_[13 + i] = *reinterpret_cast<const uint32_t*>(nounce_ptr + 4 * i);
 }
+
+ChaCha20Cipher::~ChaCha20Cipher() { secure_zero(state_.data(), state_.size() * sizeof(uint32_t)); }
 
 // Runs the ChaCha20 round function (20 rounds, RFC 8439 quarter-rounds,
 // column then diagonal) on the given 16-word state and adds the input state

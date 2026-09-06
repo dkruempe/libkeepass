@@ -35,6 +35,7 @@
 #include "libkeepass/group.hh"
 #include "libkeepass/io.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/secure.hh"
 #include "libkeepass/util.hh"
 
 namespace keepass {
@@ -333,19 +334,21 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
       entry->set_icon(consume<uint32_t>(field));
       break;
     case KdbEntryFieldType::kTitle:
-      entry->set_title(protect<std::string>(consume<std::string>(field), false));
+      entry->set_title(protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
     case KdbEntryFieldType::kUrl:
-      entry->set_url(protect<std::string>(consume<std::string>(field), false));
+      entry->set_url(protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
     case KdbEntryFieldType::kUsername:
-      entry->set_username(protect<std::string>(consume<std::string>(field), false));
+      entry->set_username(
+          protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
     case KdbEntryFieldType::kPassword:
-      entry->set_password(protect<std::string>(consume<std::string>(field), false));
+      entry->set_password(
+          protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
     case KdbEntryFieldType::kNotes:
-      entry->set_notes(protect<std::string>(consume<std::string>(field), false));
+      entry->set_notes(protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
     case KdbEntryFieldType::kCreationTime:
       entry->set_creation_time(consume<KdbTime>(field).ToTime());
@@ -379,7 +382,7 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
         std::vector<char> data = consume<std::vector<char>>(field);
 
         std::shared_ptr<Binary> binary = std::make_shared<Binary>(
-            protect<std::string>(std::string(data.begin(), data.end()), false));
+            protect<secure_string>(secure_string(std::string(data.begin(), data.end())), false));
         attachment->set_binary(binary);
       }
       break;
@@ -413,23 +416,23 @@ void KdbFile::WriteEntry(std::ostream& dst, const std::shared_ptr<Entry>& entry,
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kTitle));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->title()->size()) + 1);
-  conserve<std::string>(dst, entry->title().value());
+  conserve<std::string>(dst, entry->title().value().str());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUrl));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->url()->size()) + 1);
-  conserve<std::string>(dst, entry->url().value());
+  conserve<std::string>(dst, entry->url().value().str());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kUsername));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->username()->size()) + 1);
-  conserve<std::string>(dst, entry->username().value());
+  conserve<std::string>(dst, entry->username().value().str());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kPassword));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->password()->size()) + 1);
-  conserve<std::string>(dst, entry->password().value());
+  conserve<std::string>(dst, entry->password().value().str());
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kNotes));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->notes()->size()) + 1);
-  conserve<std::string>(dst, entry->notes().value());
+  conserve<std::string>(dst, entry->notes().value().str());
 
   KdbTime creation_time(entry->creation_time());
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kCreationTime));
@@ -519,7 +522,7 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   db->set_transform_rounds(header.transform_rounds);
 
   // Produce the final key used for decrypting the contents.
-  std::array<uint8_t, 32> transformed_key =
+  SecureBuffer<32> transformed_key =
       key.Transform(header.transform_seed, header.transform_rounds,
                     Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   std::array<uint8_t, 32> final_key{};
@@ -531,19 +534,21 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   unsigned int out_len = 0;
   EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  secure_zero(transformed_key.data(), transformed_key.size());
 
   std::unique_ptr<Cipher<16>> cipher;
   if (header.flags & kKdbFlagRijndael) {
     db->set_cipher(Database::Cipher::kAes);
 
-    cipher.reset(new AesCipher(final_key, header.init_vector));
+    cipher.reset(new AesCipher(final_key.data(), header.init_vector));
   } else if (header.flags & kKdbFlagTwofish) {
     db->set_cipher(Database::Cipher::kTwofish);
 
-    cipher.reset(new TwofishCipher(final_key, header.init_vector));
+    cipher.reset(new TwofishCipher(final_key.data(), header.init_vector));
   } else {
     throw FormatError("Unknown cipher in KDB.");
   }
+  secure_zero(final_key.data(), final_key.size());
 
   // Decrypt the content.
   std::stringstream content;
@@ -655,7 +660,7 @@ void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   std::copy(db.master_seed().begin(), db.master_seed().end(), master_seed.begin());
 
   // Produce the final key used for encrypting the contents.
-  std::array<uint8_t, 32> transformed_key =
+  SecureBuffer<32> transformed_key =
       key.Transform(db.transform_seed(), db.transform_rounds(),
                     Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   std::array<uint8_t, 32> final_key{};
@@ -667,19 +672,21 @@ void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   unsigned int out_len = 0;
   EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  secure_zero(transformed_key.data(), transformed_key.size());
 
   std::unique_ptr<Cipher<16>> cipher;
   switch (db.cipher()) {
   case Database::Cipher::kAes:
-    cipher.reset(new AesCipher(final_key, db.init_vector()));
+    cipher.reset(new AesCipher(final_key.data(), db.init_vector()));
     break;
   case Database::Cipher::kTwofish:
-    cipher.reset(new TwofishCipher(final_key, db.init_vector()));
+    cipher.reset(new TwofishCipher(final_key.data(), db.init_vector()));
     break;
   default:
     assert(false);
     break;
   }
+  secure_zero(final_key.data(), final_key.size());
 
   // Write unencrypted content to temporary stream.
   std::stringstream content;

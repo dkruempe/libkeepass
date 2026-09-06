@@ -33,10 +33,16 @@ is made public.
   databases using unknown or insecure ciphers/KDFs are rejected with a
   `FormatError` at import time.
 - **Key material in memory:** transformed keys are cached on the `Database`
-  object to avoid re-running expensive KDFs on export. Be aware that this
-  keeps key-derived material in heap memory for the lifetime of the object;
-  we intentionally do **not** guarantee memory scrubbing (see
+  object to avoid re-running expensive KDFs on export. The cached keys are
+  stored in `SecureBuffer<32>` and the buffer contents are wiped when the
+  key is released. Transient transformed keys, HMAC keys, master keys and
+  inner random stream keys are zeroized immediately after their last use in
+  the import/export code paths. Allocation uses best-effort `mlock`/
+  `VirtualLock`, so memory locking is not guaranteed on all platforms (see
   `docs/key-derivation.md`).
+- **Entry data in memory:** secret entry fields (passwords, protected
+  strings) are stored in `secure_string` buffers that are wiped on release
+  and are never kept in inline (SSO) storage.
 - **Third-party crypto:** AES and hashes are provided by OpenSSL; Argon2 by
   the reference `libargon2`. We do not roll our own production-grade
   primitives beyond the format-specific ciphers listed above.

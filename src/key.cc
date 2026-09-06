@@ -20,6 +20,7 @@
 #include "libkeepass/key.hh"
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <memory>
 
@@ -34,27 +35,71 @@
 
 namespace keepass {
 
-std::array<uint8_t, 32> Key::CompositeKey::Resolve(SubKeyResolution resolution) const {
-  static const std::array<uint8_t, 32> kEmptyKey = {{0}};
+namespace {
 
-  const bool hash_sub_keys = resolution == SubKeyResolution::kHashSubKeys ||
-                             (password_key_ != kEmptyKey && keyfile_key_ != kEmptyKey);
-  if (!hash_sub_keys)
-    return password_key_ != kEmptyKey ? password_key_ : keyfile_key_;
+/// Returns whether a secure buffer contains only zero bytes.
+bool IsZeroKey(const SecureBuffer<32>& key) {
+  return std::all_of(key.begin(), key.end(), [](uint8_t byte) { return byte == 0; });
+}
 
-  std::array<uint8_t, 32> key{};
+/// Decodes a single hexadecimal digit.
+int HexValue(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
+
+} // namespace
+
+void Key::CompositeKey::Resolve(SubKeyResolution resolution, SecureBuffer<32>& out) const {
+  out.fill(0);
+
+  const bool password_present = !IsZeroKey(password_key_);
+  const bool keyfile_present = !IsZeroKey(keyfile_key_);
+  const bool hash_sub_keys =
+      resolution == SubKeyResolution::kHashSubKeys || (password_present && keyfile_present);
+  if (!hash_sub_keys) {
+    if (password_present)
+      std::memcpy(out.data(), password_key_.data(), out.size());
+    else if (keyfile_present)
+      std::memcpy(out.data(), keyfile_key_.data(), out.size());
+    return;
+  }
 
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-  if (password_key_ != kEmptyKey)
+  if (password_present)
     EVP_DigestUpdate(mdctx, password_key_.data(), password_key_.size());
-  if (keyfile_key_ != kEmptyKey)
+  if (keyfile_present)
     EVP_DigestUpdate(mdctx, keyfile_key_.data(), keyfile_key_.size());
   unsigned int out_len = 0;
-  EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
+  EVP_DigestFinal_ex(mdctx, out.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+}
 
-  return key;
+Key::Key(const Key& other) {
+  key_.password_key_ = other.key_.password_key_.Clone();
+  key_.keyfile_key_ = other.key_.keyfile_key_.Clone();
+  has_transformed_key_ = other.has_transformed_key_;
+  if (other.has_transformed_key_)
+    transformed_key_ = other.transformed_key_.Clone();
+}
+
+Key& Key::operator=(const Key& other) {
+  if (this != &other) {
+    key_.password_key_ = other.key_.password_key_.Clone();
+    key_.keyfile_key_ = other.key_.keyfile_key_.Clone();
+    has_transformed_key_ = other.has_transformed_key_;
+    if (other.has_transformed_key_)
+      transformed_key_ = other.transformed_key_.Clone();
+    else
+      has_transformed_key_ = false;
+  }
+  return *this;
 }
 
 Key::Key(const std::string& password) { SetPassword(password); }
@@ -69,7 +114,7 @@ Key::Key(const std::vector<uint8_t>& transformed_key) {
   if (transformed_key.size() != 32)
     throw FormatError("Invalid transformed key size.");
 
-  std::copy(transformed_key.begin(), transformed_key.end(), transformed_key_.begin());
+  std::copy(transformed_key.begin(), transformed_key.end(), transformed_key_.data());
   has_transformed_key_ = true;
 }
 
@@ -94,7 +139,8 @@ void Key::SetKeyFile(const std::string& path) {
     if (key_str.size() != 32)
       throw FormatError("Invalid key size in key file.");
 
-    std::copy(key_str.begin(), key_str.end(), key_.keyfile_key_.begin());
+    std::memcpy(key_.keyfile_key_.data(), key_str.data(), key_str.size());
+    secure_zero(key_str.data(), key_str.size());
     return;
   }
 
@@ -108,28 +154,31 @@ void Key::SetKeyFile(const std::string& path) {
     throw FormatError("Unknown key file format.");
 
   for (std::size_t i = 0; i < key_.keyfile_key_.size(); ++i) {
-    char c[2] = {data[i * 2], data[i * 2 + 1]};
+    const int hi = HexValue(data[i * 2]);
+    const int lo = HexValue(data[i * 2 + 1]);
 
-    if (!std::isxdigit(c[0]) || !std::isxdigit(c[1]))
+    if (hi < 0 || lo < 0)
       throw FormatError("Unknown key file format.");
 
-    uint8_t v = static_cast<uint8_t>(std::stoi(std::string(c, 2), nullptr, 16));
-    key_.keyfile_key_[i] = v;
+    key_.keyfile_key_[i] = static_cast<uint8_t>((hi << 4) | lo);
   }
+
+  secure_zero(data.data(), data.size());
 }
 
-std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
-                                       SubKeyResolution resolution) const {
+SecureBuffer<32> Key::Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
+                                SubKeyResolution resolution) const {
   if (has_transformed_key_)
-    return transformed_key_;
+    return transformed_key_.Clone();
 
-  std::array<uint8_t, 32> transformed_key = key_.Resolve(resolution);
-  std::array<uint8_t, 32> encrypted{};
+  SecureBuffer<32> transformed_key;
+  key_.Resolve(resolution, transformed_key);
+  SecureBuffer<32> encrypted;
 
 #if LIBKEEPASS_AES_NI
   if (aes_ni_supported()) {
     aes_ni_transform_aes_kdf(seed.data(), transformed_key.data(), rounds, encrypted.data());
-    transformed_key = encrypted;
+    transformed_key = std::move(encrypted);
   } else
 #endif
   {
@@ -150,7 +199,7 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32>& seed, uint
         EVP_CIPHER_CTX_free(ctx);
         throw InternalError("AES-KDF transform failed.");
       }
-      transformed_key = encrypted;
+      transformed_key = encrypted.Clone();
     }
     EVP_CIPHER_CTX_free(ctx);
   }
@@ -164,15 +213,16 @@ std::array<uint8_t, 32> Key::Transform(const std::array<uint8_t, 32>& seed, uint
   return transformed_key;
 }
 
-std::array<uint8_t, 32> Key::TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt,
-                                             uint64_t iterations, uint64_t memory_bytes,
-                                             uint32_t parallelism, uint32_t argon2_version,
-                                             SubKeyResolution resolution) const {
+SecureBuffer<32> Key::TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt,
+                                      uint64_t iterations, uint64_t memory_bytes,
+                                      uint32_t parallelism, uint32_t argon2_version,
+                                      SubKeyResolution resolution) const {
   if (has_transformed_key_)
-    return transformed_key_;
+    return transformed_key_.Clone();
 
-  std::array<uint8_t, 32> transformed_key{};
-  std::array<uint8_t, 32> composite_key = key_.Resolve(resolution);
+  SecureBuffer<32> transformed_key;
+  SecureBuffer<32> composite_key;
+  key_.Resolve(resolution, composite_key);
 
   uint32_t memory_kib = static_cast<uint32_t>(memory_bytes / 1024ULL);
 

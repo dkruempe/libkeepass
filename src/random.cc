@@ -21,6 +21,8 @@
 
 #include <openssl/evp.h>
 
+#include "libkeepass/secure.hh"
+
 namespace keepass {
 
 namespace {
@@ -29,13 +31,14 @@ constexpr std::array<uint8_t, 8> kSalsa20Iv = {0xe8, 0x30, 0x09, 0x4b, 0x97, 0x2
 
 RandomObfuscator::RandomObfuscator(const std::array<uint8_t, 32>& key,
                                    const std::array<uint8_t, 8>& init_vec)
-    : salsa_cipher_(key, init_vec), chacha_cipher_({0}, {0}) {}
+    : salsa_cipher_(key.data(), init_vec), chacha_cipher_(nullptr, std::array<uint8_t, 12>()) {}
 
 RandomObfuscator::RandomObfuscator(Type type, const std::array<uint8_t, 32>& stream_key)
     : RandomObfuscator(type, std::vector<uint8_t>(stream_key.begin(), stream_key.end())) {}
 
 RandomObfuscator::RandomObfuscator(Type type, const std::vector<uint8_t>& stream_key)
-    : type_(type), salsa_cipher_({0}, {0}), chacha_cipher_({0}, {0}) {
+    : type_(type), salsa_cipher_(nullptr, std::array<uint8_t, 8>()),
+      chacha_cipher_(nullptr, std::array<uint8_t, 12>()) {
   if (type_ == Type::kChaCha20) {
     std::array<uint8_t, 64> key_iv{};
 
@@ -52,7 +55,9 @@ RandomObfuscator::RandomObfuscator(Type type, const std::vector<uint8_t>& stream
     std::array<uint8_t, 12> iv{};
     std::copy(key_iv.begin() + 32, key_iv.begin() + 44, iv.begin());
 
-    chacha_cipher_ = ChaCha20Cipher(key, iv);
+    chacha_cipher_ = ChaCha20Cipher(key.data(), iv);
+    secure_zero(key_iv.data(), key_iv.size());
+    secure_zero(key.data(), key.size());
   } else {
     std::array<uint8_t, 32> key{};
 
@@ -63,9 +68,12 @@ RandomObfuscator::RandomObfuscator(Type type, const std::vector<uint8_t>& stream
     EVP_DigestFinal_ex(mdctx, key.data(), &out_len);
     EVP_MD_CTX_free(mdctx);
 
-    salsa_cipher_ = Salsa20Cipher(key, kSalsa20Iv);
+    salsa_cipher_ = Salsa20Cipher(key.data(), kSalsa20Iv);
+    secure_zero(key.data(), key.size());
   }
 }
+
+RandomObfuscator::~RandomObfuscator() { secure_zero(buffer_.data(), buffer_.size()); }
 
 void RandomObfuscator::FillBuffer() {
   static constexpr std::array<uint8_t, 64> kZeroBlock = {0};
@@ -103,6 +111,20 @@ std::string RandomObfuscator::Process(const std::string& data) {
       FillBuffer();
 
     obfuscated_data[i] = static_cast<char>(data[i] ^ buffer_[buffer_pos_++]);
+  }
+
+  return obfuscated_data;
+}
+
+secure_string RandomObfuscator::Process(const secure_string& data) {
+  secure_string obfuscated_data(data);
+
+  for (std::size_t i = 0; i < data.size(); ++i) {
+    if (buffer_pos_ == buffer_.size())
+      FillBuffer();
+
+    obfuscated_data.data()[i] =
+        static_cast<char>(static_cast<uint8_t>(obfuscated_data.data()[i]) ^ buffer_[buffer_pos_++]);
   }
 
   return obfuscated_data;

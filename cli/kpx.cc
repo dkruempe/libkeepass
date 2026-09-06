@@ -59,8 +59,9 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "      --version         print version and exit\n";
 }
 
+template <typename T>
 bool NextValue(int argc, const char* argv[], int& i, const std::string& name, bool has_value,
-               const std::string& value, std::string& out) {
+               const std::string& value, T& out) {
   if (has_value) {
     out = value;
     return true;
@@ -248,17 +249,17 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
   return true;
 }
 
-std::string ResolvePassword(const Options& opt) {
+keepass::secure_string ResolvePassword(const Options& opt) {
   if (!opt.password.empty())
     return opt.password;
 
   const char* env = std::getenv("KEEPASS_PASSWORD");
   if (env != nullptr && *env != '\0')
-    return env;
+    return {env};
 
 #ifndef _WIN32
   if (isatty(STDIN_FILENO))
-    return getpass("Master password: ");
+    return {getpass("Master password: ")};
 #endif
 
   return {};
@@ -349,10 +350,10 @@ void PrintCsvGroup(std::ostream& os, const std::shared_ptr<keepass::Group>& grou
     if (entry->IsMetaEntry())
       continue;
 
-    os << CsvField(group_path) << "," << CsvField(*entry->title()) << ","
-       << CsvField(*entry->username()) << ","
-       << (with_passwords ? CsvField(*entry->password()) : std::string()) << ","
-       << CsvField(*entry->url()) << "," << CsvField(*entry->notes()) << "\n";
+    os << CsvField(group_path) << "," << CsvField(entry->title()->str()) << ","
+       << CsvField(entry->username()->str()) << ","
+       << (with_passwords ? CsvField(entry->password()->str()) : std::string()) << ","
+       << CsvField(entry->url()->str()) << "," << CsvField(entry->notes()->str()) << "\n";
   }
   for (const auto& child : group->Groups())
     PrintCsvGroup(os, child, group_path, with_passwords);
@@ -405,8 +406,10 @@ int Run(const Options& opt, const char* argv0) {
               << (IsKdbPath(opt.input) ? "kdb" : "kdbx") << ")\n";
   }
 
-  const std::string password = ResolvePassword(opt);
-  keepass::KeePass keeper(password, opt.keyfile);
+  const keepass::secure_string password = ResolvePassword(opt);
+  // KeePass stores the password in a wiped buffer and receives it here as a
+  // transient std::string copy kept only until the constructor returns.
+  keepass::KeePass keeper(password.str(), opt.keyfile);
 
   std::unique_ptr<keepass::Database> db = keeper.Open(opt.input);
   if (!db) {

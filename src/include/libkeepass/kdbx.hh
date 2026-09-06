@@ -143,8 +143,8 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @return The decrypted protected string.
    */
-  static protect<std::string> ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                                   RandomObfuscator& obfuscator);
+static protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
+                                                     RandomObfuscator& obfuscator);
 
   /// Writes a protected string value to an XML node.
   /**
@@ -152,7 +152,7 @@ private:
    * @param str The protected string to encrypt and write.
    * @param obfuscator The random stream obfuscator for encryption.
    */
-  static void WriteProtectedString(pugi::xml_node& node, const protect<std::string>& str,
+  static void WriteProtectedString(pugi::xml_node& node, const protect<secure_string>& str,
                                    RandomObfuscator& obfuscator);
 
   /// Parses the metadata section from the KDBX XML tree.

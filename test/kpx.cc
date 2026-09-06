@@ -38,6 +38,7 @@
 namespace {
 
 using keepass::protect;
+using keepass::secure_string;
 using kpx::ExportDatabase;
 using kpx::IsKdbPath;
 using kpx::kpx_main;
@@ -148,21 +149,21 @@ std::unique_ptr<keepass::Database> CreateTestDatabase() {
   internet->set_name("Internet");
 
   auto mail = std::make_shared<keepass::Entry>();
-  mail->set_title(protect<std::string>("mail, \"quoted\"", false));
-  mail->set_username(protect<std::string>("alice", false));
-  mail->set_password(protect<std::string>("s3cret", true));
-  mail->set_url(protect<std::string>("https://example.com", false));
-  mail->set_notes(protect<std::string>("important, note", false));
+  mail->set_title(protect<secure_string>("mail, \"quoted\"", false));
+  mail->set_username(protect<secure_string>("alice", false));
+  mail->set_password(protect<secure_string>("s3cret", true));
+  mail->set_url(protect<secure_string>("https://example.com", false));
+  mail->set_notes(protect<secure_string>("important, note", false));
   internet->AddEntry(mail);
 
   auto empty = std::make_shared<keepass::Group>();
   empty->set_name("Empty");
 
   auto root_entry = std::make_shared<keepass::Entry>();
-  root_entry->set_title(protect<std::string>("RootEntry", false));
-  root_entry->set_username(protect<std::string>("rootuser", false));
-  root_entry->set_password(protect<std::string>("toppass", true));
-  root_entry->set_url(protect<std::string>("https://root.example", false));
+  root_entry->set_title(protect<secure_string>("RootEntry", false));
+  root_entry->set_username(protect<secure_string>("rootuser", false));
+  root_entry->set_password(protect<secure_string>("toppass", true));
+  root_entry->set_url(protect<secure_string>("https://root.example", false));
 
   root->AddEntry(root_entry);
   root->AddGroup(internet);

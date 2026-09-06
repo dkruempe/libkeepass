@@ -31,6 +31,7 @@
 
 #include "binary.hh"
 #include "libkeepass/export.hh"
+#include "secure.hh"
 #include "security.hh"
 #include "util.hh"
 
@@ -166,11 +167,11 @@ public:
   class Field final {
   private:
     std::string key_;
-    protect<std::string> value_;
+    protect<secure_string> value_;
 
   public:
     /// Creates a field with the given key and protected value.
-    Field(std::string key, protect<std::string> value)
+    Field(std::string key, protect<secure_string> value)
         : key_(std::move(key)), value_(std::move(value)) {}
 
     /// Copy constructor.
@@ -189,7 +190,7 @@ public:
     const std::string& key() const { return key_; }
 
     /// Returns the field value.
-    const protect<std::string>& value() const { return value_; }
+    const protect<secure_string>& value() const { return value_; }
 
     /// Copy assignment.
     Field& operator=(const Field& other) = default;
@@ -215,12 +216,12 @@ private:
   uint32_t icon_ = 0;
   std::weak_ptr<Icon> custom_icon_;
   std::weak_ptr<Group> parent_;
-  protect<std::string> title_;
-  protect<std::string> url_;
+  protect<secure_string> title_;
+  protect<secure_string> url_;
   std::string override_url_;
-  protect<std::string> username_;
-  protect<std::string> password_;
-  protect<std::string> notes_;
+  protect<secure_string> username_;
+  protect<secure_string> password_;
+  protect<secure_string> notes_;
   std::string tags_;
   std::time_t creation_time_ = 0;
   std::time_t modification_time_ = 0;
@@ -259,16 +260,16 @@ public:
   void set_custom_icon(std::weak_ptr<Icon> icon) { custom_icon_ = std::move(icon); }
 
   /// Returns the entry title.
-  const protect<std::string>& title() const { return title_; }
+  const protect<secure_string>& title() const { return title_; }
 
   /// Sets the entry title.
-  void set_title(const protect<std::string>& title) { title_ = title; }
+  void set_title(const protect<secure_string>& title) { title_ = title; }
 
   /// Returns the URL.
-  const protect<std::string>& url() const { return url_; }
+  const protect<secure_string>& url() const { return url_; }
 
   /// Sets the URL.
-  void set_url(const protect<std::string>& url) { url_ = url; }
+  void set_url(const protect<secure_string>& url) { url_ = url; }
 
   /// Returns the override URL.
   const std::string& override_url() const { return override_url_; }
@@ -277,22 +278,22 @@ public:
   void set_override_url(const std::string& url) { override_url_ = url; }
 
   /// Returns the username.
-  const protect<std::string>& username() const { return username_; }
+  const protect<secure_string>& username() const { return username_; }
 
   /// Sets the username.
-  void set_username(const protect<std::string>& username) { username_ = username; }
+  void set_username(const protect<secure_string>& username) { username_ = username; }
 
   /// Returns the password.
-  const protect<std::string>& password() const { return password_; }
+  const protect<secure_string>& password() const { return password_; }
 
   /// Sets the password.
-  void set_password(const protect<std::string>& password) { password_ = password; }
+  void set_password(const protect<secure_string>& password) { password_ = password; }
 
   /// Returns the notes.
-  const protect<std::string>& notes() const { return notes_; }
+  const protect<secure_string>& notes() const { return notes_; }
 
   /// Sets the notes.
-  void set_notes(const protect<std::string>& notes) { notes_ = notes; }
+  void set_notes(const protect<secure_string>& notes) { notes_ = notes; }
 
   /// Returns the tags (space-separated).
   const std::string& tags() const { return tags_; }
@@ -422,7 +423,7 @@ public:
   void AddHistoryEntry(const std::shared_ptr<Entry>& entry);
 
   /// Adds a custom field with the given key and value.
-  void AddCustomField(std::string& key, const protect<std::string>& value);
+  void AddCustomField(std::string& key, const protect<secure_string>& value);
 
   /// Returns whether the auto-type settings differ from the defaults.
   bool HasNonDefaultAutoTypeSettings() const;

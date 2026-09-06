@@ -72,3 +72,8 @@ add_executable(keepass keepass.cc)
 target_compile_features(keepass PUBLIC cxx_std_11)
 target_link_libraries(keepass PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.keepass COMMAND keepass)
+
+add_executable(secure secure.cc)
+target_compile_features(secure PUBLIC cxx_std_11)
+target_link_libraries(secure PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.secure COMMAND secure)

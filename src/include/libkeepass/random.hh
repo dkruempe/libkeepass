@@ -25,6 +25,7 @@
 #pragma once
 #include "cipher.hh"
 #include "libkeepass/export.hh"
+#include "libkeepass/secure.hh"
 
 #include <memory>
 #include <random>
@@ -76,6 +77,9 @@ public:
    */
   RandomObfuscator(Type type, const std::vector<uint8_t>& stream_key);
 
+  /// Wipes the buffered keystream and destroys the underlying ciphers.
+  ~RandomObfuscator();
+
   /// Obfuscates or deobfuscates a byte vector using the random stream.
   /**
    * @param data The data to process (xor with the random stream).
@@ -89,6 +93,13 @@ public:
    * @return The processed string.
    */
   std::string Process(const std::string& data);
+
+  /// Obfuscates or deobfuscates a sensitive string using the random stream.
+  /**
+   * @param data The sensitive string data to process.
+   * @return The processed string, stored in wiped memory.
+   */
+  secure_string Process(const secure_string& data);
 };
 
 /// Generates an array of N cryptographically random bytes.

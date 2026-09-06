@@ -72,6 +72,7 @@ char* portable_strptime(const char* buf, const char* /*format*/, std::tm* tm) {
 #include "libkeepass/key.hh"
 #include "libkeepass/metadata.hh"
 #include "libkeepass/random.hh"
+#include "libkeepass/secure.hh"
 #include "libkeepass/security.hh"
 #include "libkeepass/stream.hh"
 #include "libkeepass/variantdictionary.hh"
@@ -307,28 +308,32 @@ std::string KdbxFile::WriteDateTime(std::time_t time) const {
   return buffer;
 }
 
-protect<std::string> KdbxFile::ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                                    RandomObfuscator& obfuscator) {
+protect<secure_string> KdbxFile::ParseProtectedString(const pugi::xml_node& node, const char* name,
+                                                      RandomObfuscator& obfuscator) {
   pugi::xml_node val_node = node.child(name);
   if (val_node) {
     bool prot = val_node.attribute("Protected").as_bool();
     if (prot) {
       std::string val = base64_decode(val_node.text().as_string());
-      if (!val.empty())
-        return {obfuscator.Process(val), true};
+      if (!val.empty()) {
+        secure_string decrypted = obfuscator.Process(secure_string(val));
+        secure_zero(val.data(), val.size());
+        return {std::move(decrypted), true};
+      }
     }
 
-    return {val_node.text().as_string(), prot || val_node.attribute("ProtectedInMemory").as_bool()};
+    return {secure_string(val_node.text().as_string()),
+            prot || val_node.attribute("ProtectedInMemory").as_bool()};
   }
 
-  return {std::string(), false};
+  return {secure_string(), false};
 }
 
-void KdbxFile::WriteProtectedString(pugi::xml_node& node, const protect<std::string>& str,
+void KdbxFile::WriteProtectedString(pugi::xml_node& node, const protect<secure_string>& str,
                                     RandomObfuscator& obfuscator) {
   if (str.is_protected()) {
     node.append_attribute("Protected").set_value("True");
-    node.text().set(base64_encode(obfuscator.Process(*str)).c_str());
+    node.text().set(base64_encode(obfuscator.Process(*str).str()).c_str());
   } else {
     node.text().set(str->c_str());
   }
@@ -409,12 +414,12 @@ std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
          bin_node = bin_node.next_sibling("Binary")) {
       std::string id = bin_node.attribute("ID").value();
 
-      protect<std::string> data;
+      protect<secure_string> data;
 
       bool compressed = false;
       if (bin_node.attribute("Protected").as_bool()) {
-        data = protect<std::string>(obfuscator.Process(base64_decode(bin_node.text().as_string())),
-                                    true);
+        data = protect<secure_string>(
+            obfuscator.Process(secure_string(base64_decode(bin_node.text().as_string()))), true);
       } else {
         if (bin_node.attribute("Compressed").as_bool()) {
           compressed = true;
@@ -422,11 +427,11 @@ std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
           gzip_istreambuf gzip_streambuf(raw_stream);
           std::istream gzip_stream(&gzip_streambuf);
 
-          data = protect<std::string>(consume<std::string>(gzip_stream),
-                                      bin_node.attribute("ProtectedInMemory").as_bool());
+          data = protect<secure_string>(secure_string(consume<std::string>(gzip_stream)),
+                                        bin_node.attribute("ProtectedInMemory").as_bool());
         } else {
-          data = protect<std::string>(base64_decode(bin_node.text().as_string()),
-                                      bin_node.attribute("ProtectedInMemory").as_bool());
+          data = protect<secure_string>(secure_string(base64_decode(bin_node.text().as_string())),
+                                        bin_node.attribute("ProtectedInMemory").as_bool());
         }
       }
 
@@ -558,7 +563,7 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
 
       if (binary->data().is_protected()) {
         bin_node.append_attribute("Protected").set_value("True");
-        bin_node.text().set(base64_encode(obfuscator.Process(*binary->data())).c_str());
+        bin_node.text().set(base64_encode(obfuscator.Process(*binary->data()).str()).c_str());
       } else {
         if (binary->compress()) {
           bin_node.append_attribute("Compressed").set_value("True");
@@ -574,7 +579,7 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
                                             std::istreambuf_iterator<char>())
                                   .c_str());
         } else {
-          bin_node.text().set(base64_encode(*binary->data()).c_str());
+          bin_node.text().set(base64_encode((*binary->data()).str()).c_str());
         }
       }
 
@@ -646,7 +651,7 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
   for (pugi::xml_node str_node = entry_node.child("String"); str_node;
        str_node = str_node.next_sibling("String")) {
     std::string key = str_node.child_value("Key");
-    protect<std::string> val = ParseProtectedString(str_node, "Value", obfuscator);
+    protect<secure_string> val = ParseProtectedString(str_node, "Value", obfuscator);
 
     if (key == "Title") {
       entry->set_title(val);
@@ -680,22 +685,23 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
 
         binary = it->second;
       } else {
-        protect<std::string> prot_val;
+        protect<secure_string> prot_val;
 
         if (bin_node.attribute("Protected").as_bool()) {
-          prot_val = protect<std::string>(
-              obfuscator.Process(base64_decode(bin_node.text().as_string())), true);
+          prot_val = protect<secure_string>(
+              obfuscator.Process(secure_string(base64_decode(bin_node.text().as_string()))), true);
         } else {
           if (bin_node.attribute("Compressed").as_bool()) {
             std::stringstream raw_stream(base64_decode(bin_node.text().as_string()));
             gzip_istreambuf gzip_streambuf(raw_stream);
             std::istream gzip_stream(&gzip_streambuf);
 
-            prot_val = protect<std::string>(consume<std::string>(gzip_stream),
-                                            bin_node.attribute("ProtectedInMemory").as_bool());
+            prot_val = protect<secure_string>(secure_string(consume<std::string>(gzip_stream)),
+                                              bin_node.attribute("ProtectedInMemory").as_bool());
           } else {
-            prot_val = protect<std::string>(base64_decode(bin_node.text().as_string()),
-                                            bin_node.attribute("ProtectedInMemory").as_bool());
+            prot_val =
+                protect<secure_string>(secure_string(base64_decode(bin_node.text().as_string())),
+                                       bin_node.attribute("ProtectedInMemory").as_bool());
           }
         }
 
@@ -812,7 +818,7 @@ void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscat
 
     if (!found_in_pool) {
       bin_node.append_child("Value").text().set(
-          base64_encode(attachment->binary()->data().value()).c_str());
+          base64_encode(attachment->binary()->data().value().str()).c_str());
     }
   }
 
@@ -1142,9 +1148,9 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   EVP_MD_CTX_free(mdctx);
 
   // Produce the final key used for encrypting the contents.
-  std::array<uint8_t, 32> transformed_key = key.Transform(
-      db->transform_seed(), db->transform_rounds(), Key::SubKeyResolution::kHashSubKeys);
-  db->set_transformed_key(transformed_key);
+  SecureBuffer<32> transformed_key = key.Transform(db->transform_seed(), db->transform_rounds(),
+                                                   Key::SubKeyResolution::kHashSubKeys);
+  db->set_transformed_key(transformed_key.Clone());
   std::array<uint8_t, 32> final_key{};
 
   mdctx = EVP_MD_CTX_new();
@@ -1153,19 +1159,21 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
   EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  secure_zero(transformed_key.data(), transformed_key.size());
 
   std::unique_ptr<Cipher<16>> cipher;
   switch (db->cipher()) {
   case Database::Cipher::kAes:
-    cipher = std::make_unique<AesCipher>(final_key, db->init_vector());
+    cipher = std::make_unique<AesCipher>(final_key.data(), db->init_vector());
     break;
   case Database::Cipher::kTwofish:
-    cipher = std::make_unique<TwofishCipher>(final_key, db->init_vector());
+    cipher = std::make_unique<TwofishCipher>(final_key.data(), db->init_vector());
     break;
   default:
     assert(false);
     break;
   }
+  secure_zero(final_key.data(), final_key.size());
 
   // Decrypt the content.
   std::stringstream content;
@@ -1191,6 +1199,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   EVP_DigestFinal_ex(mdctx, final_inner_random_stream_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
   RandomObfuscator obfuscator(final_inner_random_stream_key, kKdbxInnerRandomStreamInitVec);
+  secure_zero(final_inner_random_stream_key.data(), final_inner_random_stream_key.size());
 
   // Parse XML content.
   hashed_istreambuf hashed_streambuf(content);
@@ -1334,7 +1343,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // Produce the transformed key used for both the final encryption key and
   // the HMAC verification key.
-  std::array<uint8_t, 32> transformed_key{};
+  SecureBuffer<32> transformed_key;
   switch (db->kdf()) {
   case Database::Kdf::kAes:
     transformed_key = key.Transform(db->transform_seed(), db->transform_rounds(),
@@ -1348,11 +1357,11 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
         db->argon2_version(), Key::SubKeyResolution::kHashSubKeys);
     break;
   }
-  db->set_transformed_key(transformed_key);
+  db->set_transformed_key(transformed_key.Clone());
 
   // Compute the HMAC key for the header. The block index 0xFFFFFFFFFFFFFFFF
   // denotes the header in the HMAC key derivation.
-  std::array<uint8_t, 64> hmac_key{};
+  SecureBuffer<64> hmac_key;
   EVP_MD_CTX* mdctx512 = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
   EVP_DigestUpdate(mdctx512, db->master_seed().data(), db->master_seed().size());
@@ -1362,7 +1371,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   EVP_DigestFinal_ex(mdctx512, hmac_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx512);
 
-  std::array<uint8_t, 64> header_hmac_key{};
+  SecureBuffer<64> header_hmac_key;
   const std::array<uint8_t, 8> kKdbxHeaderHmacIndex = {0xff, 0xff, 0xff, 0xff,
                                                        0xff, 0xff, 0xff, 0xff};
   mdctx512 = EVP_MD_CTX_new();
@@ -1382,6 +1391,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     throw PasswordError();
   }
 
+  secure_zero(header_hmac_key.data(), header_hmac_key.size());
+  secure_zero(computed_hmac, sizeof(computed_hmac));
+
   // Produce the final key used for encrypting the contents.
   std::array<uint8_t, 32> final_key{};
   mdctx = EVP_MD_CTX_new();
@@ -1390,24 +1402,28 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
   EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  secure_zero(transformed_key.data(), transformed_key.size());
 
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
   if (db->cipher() == Database::Cipher::kAes) {
-    cipher = std::make_unique<AesCipher>(final_key, db->init_vector());
+    cipher = std::make_unique<AesCipher>(final_key.data(), db->init_vector());
   } else if (db->cipher() == Database::Cipher::kTwofish) {
-    cipher = std::make_unique<TwofishCipher>(final_key, db->init_vector());
+    cipher = std::make_unique<TwofishCipher>(final_key.data(), db->init_vector());
   } else if (db->cipher() == Database::Cipher::kChaCha20) {
     std::array<uint8_t, 12> iv{};
     std::copy(db->init_vector().begin(), db->init_vector().begin() + 12, iv.begin());
-    chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key, iv);
+    chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key.data(), iv);
   }
+  secure_zero(final_key.data(), final_key.size());
 
   // In KDBX 4 the content is first encrypted and the ciphertext is then
   // wrapped in HMAC protected blocks. Read the HMAC blocks from the file and
   // decrypt the payload inside them.
-  hmac_istreambuf hmac_streambuf(src, hmac_key);
+  hmac_istreambuf hmac_streambuf(src, hmac_key.data());
   std::istream hmac_stream(&hmac_streambuf);
+
+  secure_zero(hmac_key.data(), hmac_key.size());
 
   std::string ciphertext((std::istreambuf_iterator<char>(hmac_stream)),
                          std::istreambuf_iterator<char>());
@@ -1494,8 +1510,10 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
                        std::istreambuf_iterator<char>());
 
       std::shared_ptr<Binary> binary =
-          std::make_shared<Binary>(protect<std::string>(data, (flags & 0x01)));
+          std::make_shared<Binary>(protect<secure_string>(secure_string(data), (flags & 0x01)));
       inner_binaries.push_back(binary);
+
+      secure_zero(data.data(), data.size());
 
       binary_pool_.insert(std::make_pair(std::to_string(binary_pool_.size()), binary));
       break;
@@ -1517,6 +1535,8 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   default:
     throw FormatError("Unknown inner random stream in KDBX 4 database.");
   }
+
+  secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
 
   // Parse the XML content, which follows the inner header in the same
   // (already decompressed) payload.
@@ -1553,10 +1573,10 @@ void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
 
 void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   // Produce the final key used for encrypting the contents.
-  std::array<uint8_t, 32> transformed_key =
-      db.has_transformed_key() ? db.transformed_key()
-                               : key.Transform(db.transform_seed(), db.transform_rounds(),
-                                               Key::SubKeyResolution::kHashSubKeys);
+  SecureBuffer<32> transformed_key = db.has_transformed_key()
+                                         ? db.transformed_key().Clone()
+                                         : key.Transform(db.transform_seed(), db.transform_rounds(),
+                                                         Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
 
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
@@ -1566,9 +1586,11 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   unsigned int out_len = 0;
   EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  secure_zero(transformed_key.data(), transformed_key.size());
 
   assert(db.cipher() == Database::Cipher::kAes);
-  std::unique_ptr<Cipher<16>> cipher(new AesCipher(final_key, db.init_vector()));
+  std::unique_ptr<Cipher<16>> cipher(new AesCipher(final_key.data(), db.init_vector()));
+  secure_zero(final_key.data(), final_key.size());
 
   // Write header to temporary stream so that we can compute the hash of it.
   KdbxHeader header{};
@@ -1607,7 +1629,7 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
 
   conserve<KdbxHeaderField>(header_stream,
                             KdbxHeaderField(KdbxHeaderField::kInnerRandomStreamKey, 32));
-  conserve<std::array<uint8_t, 32>>(header_stream, db.inner_random_stream_key());
+  header_stream.write(reinterpret_cast<const char*>(db.inner_random_stream_key().data()), 32);
 
   std::array<uint8_t, 32> content_start_bytes = random_array<32>();
   conserve<KdbxHeaderField>(header_stream,
@@ -1643,6 +1665,7 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestFinal_ex(mdctx3, final_inner_random_stream_key.data(), &out_len3);
   EVP_MD_CTX_free(mdctx3);
   RandomObfuscator obfuscator(final_inner_random_stream_key, kKdbxInnerRandomStreamInitVec);
+  secure_zero(final_inner_random_stream_key.data(), final_inner_random_stream_key.size());
 
   // Write content to content stream.
   std::stringstream content_stream;
@@ -1674,9 +1697,9 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // Derive the transformed key used for the final encryption key and the HMAC
   // key. If the database was imported and the KDF parameters were not modified,
   // the cached key can be reused; otherwise recompute it.
-  std::array<uint8_t, 32> transformed_key{};
+  SecureBuffer<32> transformed_key;
   if (db.has_transformed_key()) {
-    transformed_key = db.transformed_key();
+    transformed_key = db.transformed_key().Clone();
   } else {
     switch (db.kdf()) {
     case Database::Kdf::kAes:
@@ -1706,14 +1729,15 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
   if (db.cipher() == Database::Cipher::kAes) {
-    cipher = std::make_unique<AesCipher>(final_key, db.init_vector());
+    cipher = std::make_unique<AesCipher>(final_key.data(), db.init_vector());
   } else if (db.cipher() == Database::Cipher::kTwofish) {
-    cipher = std::make_unique<TwofishCipher>(final_key, db.init_vector());
+    cipher = std::make_unique<TwofishCipher>(final_key.data(), db.init_vector());
   } else if (db.cipher() == Database::Cipher::kChaCha20) {
     std::array<uint8_t, 12> iv{};
     std::copy(db.init_vector().begin(), db.init_vector().begin() + 12, iv.begin());
-    chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key, iv);
+    chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key.data(), iv);
   }
+  secure_zero(final_key.data(), final_key.size());
 
   // Write header to a temporary stream so that we can compute the hash and
   // HMAC of it.
@@ -1829,7 +1853,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestFinal_ex(mdctx_h, header_hash_.data(), &out_len_h);
   EVP_MD_CTX_free(mdctx_h);
 
-  std::array<uint8_t, 64> hmac_key{};
+  SecureBuffer<64> hmac_key;
   EVP_MD_CTX* mdctx512 = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
   EVP_DigestUpdate(mdctx512, db.master_seed().data(), db.master_seed().size());
@@ -1839,7 +1863,9 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestFinal_ex(mdctx512, hmac_key.data(), &out_len_h);
   EVP_MD_CTX_free(mdctx512);
 
-  std::array<uint8_t, 64> header_hmac_key{};
+  secure_zero(transformed_key.data(), transformed_key.size());
+
+  SecureBuffer<64> header_hmac_key;
   const std::array<uint8_t, 8> kKdbxHeaderHmacIndex = {0xff, 0xff, 0xff, 0xff,
                                                        0xff, 0xff, 0xff, 0xff};
   EVP_MD_CTX* mdctx512b = EVP_MD_CTX_new();
@@ -1855,6 +1881,8 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
        reinterpret_cast<const unsigned char*>(header_data.c_str()),
        KEEPASS_HMAC_DATA_LEN(header_data.size()), header_hmac.data(), &header_hmac_len);
   assert(header_hmac_len == header_hmac.size());
+
+  secure_zero(header_hmac_key.data(), header_hmac_key.size());
 
   // Write header, stored hash and stored HMAC to the file.
   std::copy(std::istreambuf_iterator<char>(header_stream), std::istreambuf_iterator<char>(),
@@ -1918,7 +1946,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
     std::stringstream bin_stream;
     uint8_t flags = binary->data().is_protected() ? 0x01 : 0x00;
     conserve<uint8_t>(bin_stream, flags);
-    const std::string& raw = binary->data().value();
+    const secure_string& raw = binary->data().value();
     if (!raw.empty()) {
       bin_stream.write(raw.data(), static_cast<std::streamsize>(raw.size()));
     }
@@ -1974,12 +2002,14 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // ... and then wrap the ciphertext in HMAC protected blocks. In KDBX 4 the
   // HMAC is computed over the encrypted content, so the HMAC framing is the
   // outermost layer below the stored header.
-  hmac_ostreambuf hmac_streambuf(dst, hmac_key);
+  hmac_ostreambuf hmac_streambuf(dst, hmac_key.data());
   std::ostream hmac_stream(&hmac_streambuf);
 
   std::copy(std::istreambuf_iterator<char>(hmac_input), std::istreambuf_iterator<char>(),
             std::ostreambuf_iterator<char>(hmac_stream));
   hmac_stream.flush();
+
+  secure_zero(hmac_key.data(), hmac_key.size());
 }
 
 } // namespace keepass

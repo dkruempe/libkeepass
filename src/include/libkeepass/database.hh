@@ -24,12 +24,14 @@
 
 #pragma once
 #include <array>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "group.hh"
 #include "libkeepass/export.hh"
+#include "libkeepass/secure.hh"
 
 namespace keepass {
 
@@ -60,7 +62,7 @@ private:
   std::vector<uint8_t> master_seed_;
   std::array<uint8_t, 16> init_vector_ = {{0}};
   std::array<uint8_t, 32> transform_seed_{{0}};
-  std::array<uint8_t, 32> inner_random_stream_key_ = {{0}};
+  SecureBuffer<32> inner_random_stream_key_;
   uint64_t transform_rounds_ = 8192;
   uint64_t argon2_memory_ = 0;
   uint32_t argon2_parallelism_ = 0;
@@ -69,7 +71,7 @@ private:
   uint64_t argon2_iterations_ = 0;
   bool compress_ = false;
   std::shared_ptr<Metadata> meta_;
-  std::array<uint8_t, 32> transformed_key_{{0}};
+  SecureBuffer<32> transformed_key_;
   bool has_transformed_key_ = false;
 
 public:
@@ -124,13 +126,24 @@ public:
   }
 
   /// Returns the inner random stream key.
-  const std::array<uint8_t, 32>& inner_random_stream_key() const {
-    return inner_random_stream_key_;
+  const SecureBuffer<32>& inner_random_stream_key() const { return inner_random_stream_key_; }
+
+  /// Sets the inner random stream key from a secure buffer.
+  /**
+   * @param key The low-level copy of the key to store.
+   */
+  void set_inner_random_stream_key(const SecureBuffer<32>& key) {
+    inner_random_stream_key_ = key.Clone();
   }
 
-  /// Sets the inner random stream key.
+  /// Sets the inner random stream key from a fixed 32-byte array.
+  /**
+   * @param key The 32-byte inner random stream key.
+   */
   void set_inner_random_stream_key(const std::array<uint8_t, 32>& key) {
-    inner_random_stream_key_ = key;
+    SecureBuffer<32> secure_key;
+    std::memcpy(secure_key.data(), key.data(), key.size());
+    inner_random_stream_key_ = std::move(secure_key);
   }
 
   /// Returns the number of AES key-transform rounds.
@@ -194,19 +207,23 @@ public:
   void set_compress(bool compress) { compress_ = compress; }
 
   /// Returns the transformed master key (if present).
-  const std::array<uint8_t, 32>& transformed_key() const { return transformed_key_; }
+  const SecureBuffer<32>& transformed_key() const { return transformed_key_; }
 
   /// Returns whether a transformed key has been computed.
   bool has_transformed_key() const { return has_transformed_key_; }
 
   /// Sets the transformed master key and marks it as present.
-  void set_transformed_key(const std::array<uint8_t, 32>& key) {
-    transformed_key_ = key;
+  void set_transformed_key(SecureBuffer<32> key) {
+    transformed_key_ = std::move(key);
     has_transformed_key_ = true;
   }
 
   /// Clears any cached transformed key.
-  void clear_transformed_key() { has_transformed_key_ = false; }
+  void clear_transformed_key() {
+    has_transformed_key_ = false;
+    SecureBuffer<32> empty;
+    transformed_key_ = std::move(empty);
+  }
 
   /// Returns the database metadata.
   std::shared_ptr<Metadata> meta() const { return meta_; }

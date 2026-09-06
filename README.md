@@ -362,7 +362,26 @@ Each platform is tested in both Debug and Release configurations. Additionally, 
 
 ## Security
 
-For information on supported versions and how to report a vulnerability, please see [SECURITY.md](SECURITY.md).
+libkeepass stores secret material (keys, entry passwords, protected strings)
+in wiped, best-effort locked memory:
+
+- `secure_zero` scrubs buffers through a volatile write so the compiler cannot
+  elide the wipe.
+- `secure_alloc`/`secure_free` use `mlock`/`VirtualLock` (best effort) and
+  always zero the allocation before freeing it.
+- `SecureBuffer<N>` is a move-only, automatically zeroized buffer used for
+  keys and derived key material.
+- `secure_string` holds strings without SSO in wiped, locked memory and is
+  used for all secret entry fields.
+- Transient transformed keys, HMAC keys, master keys and inner random stream
+  keys are zeroized immediately after their last use in both import and
+  export.
+
+Wiping is deterministic, but locking is best effort: systems that restrict
+`mlock`/`VirtualLock` (or where it fails) allow pages to be swapped out.
+
+For supported versions and how to report a vulnerability, please see
+[SECURITY.md](SECURITY.md).
 
 ## Contributing
 

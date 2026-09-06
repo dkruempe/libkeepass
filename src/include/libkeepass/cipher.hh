@@ -130,7 +130,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit AesCipher(const std::array<uint8_t, 32>& key) : AesCipher(key, {0}) {}
+  explicit AesCipher(const uint8_t* key) : AesCipher(key, {0}) {}
 
   /**
    * @brief Constructs an AES cipher with a given initialization vector.
@@ -139,7 +139,7 @@ public:
    * @param init_vec The 16-byte initialization vector.
    * @throws InternalError If the OpenSSL cipher context cannot be created or initialized.
    */
-  AesCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 16>& init_vec);
+  AesCipher(const uint8_t* key, const std::array<uint8_t, 16>& init_vec);
 
   /// Destroys the cipher and frees the OpenSSL contexts.
   ~AesCipher();
@@ -207,7 +207,7 @@ private:
   static uint32_t F32(uint32_t x, const uint32_t* k32);
 
   /// Initializes the Twofish key schedule from the given 256-bit key.
-  void InitializeKey(const std::array<uint8_t, 32>& key);
+  void InitializeKey(const uint8_t* key);
 
 public:
   /**
@@ -215,7 +215,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit TwofishCipher(const std::array<uint8_t, 32>& key) : TwofishCipher(key, {0}) {}
+  explicit TwofishCipher(const uint8_t* key) : TwofishCipher(key, {0}) {}
 
   /**
    * @brief Constructs a Twofish cipher with a given initialization vector.
@@ -223,7 +223,10 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 16-byte initialization vector.
    */
-  TwofishCipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 16>& init_vec);
+  TwofishCipher(const uint8_t* key, const std::array<uint8_t, 16>& init_vec);
+
+  /// Zeroizes the expanded key schedule.
+  ~TwofishCipher();
 
   /// @brief Returns the initialization vector.
   const std::array<uint8_t, 16>& InitializationVector() const override { return init_vec_; }
@@ -270,7 +273,7 @@ public:
    *
    * @param key The 256-bit (32-byte) encryption key.
    */
-  explicit Salsa20Cipher(const std::array<uint8_t, 32>& key) : Salsa20Cipher(key, {0}) {}
+  explicit Salsa20Cipher(const uint8_t* key) : Salsa20Cipher(key, {0}) {}
 
   /**
    * @brief Constructs a Salsa20 cipher with a given 64-bit nonce.
@@ -278,7 +281,10 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 8-byte nonce (initialization vector).
    */
-  Salsa20Cipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 8>& init_vec);
+  Salsa20Cipher(const uint8_t* key, const std::array<uint8_t, 8>& init_vec);
+
+  /// Zeroizes the cipher state holding the key.
+  ~Salsa20Cipher();
 
   /**
    * @brief Encrypts or decrypts a single 64-byte block.
@@ -318,7 +324,10 @@ public:
    * @param key The 256-bit (32-byte) encryption key.
    * @param init_vec The 12-byte nonce (initialization vector).
    */
-  ChaCha20Cipher(const std::array<uint8_t, 32>& key, const std::array<uint8_t, 12>& init_vec);
+  ChaCha20Cipher(const uint8_t* key, const std::array<uint8_t, 12>& init_vec);
+
+  /// Zeroizes the cipher state holding the key.
+  ~ChaCha20Cipher();
 
   /**
    * @brief Encrypts or decrypts a single 64-byte block.

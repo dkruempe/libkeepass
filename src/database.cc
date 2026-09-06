@@ -79,7 +79,7 @@ std::shared_ptr<Entry> Database::NewEntry(const std::string& title) {
   entry->set_creation_time(std::time(nullptr));
   entry->set_modification_time(std::time(nullptr));
   if (!title.empty())
-    entry->set_title(protect<std::string>(title, false));
+    entry->set_title(protect<secure_string>(secure_string(title), false));
   return entry;
 }
 

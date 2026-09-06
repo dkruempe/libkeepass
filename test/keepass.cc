@@ -141,10 +141,10 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kd
   db->set_root(root);
 
   auto alpha = std::make_shared<Entry>();
-  alpha->set_title(protect<std::string>("Alpha", false));
-  alpha->set_url(protect<std::string>("https://alpha.example", false));
-  alpha->set_username(protect<std::string>("alice", false));
-  alpha->set_password(protect<std::string>("secret", true));
+  alpha->set_title(protect<secure_string>("Alpha", false));
+  alpha->set_url(protect<secure_string>("https://alpha.example", false));
+  alpha->set_username(protect<secure_string>("alice", false));
+  alpha->set_password(protect<secure_string>("secret", true));
   alpha->set_creation_time(1700000100);
   root->AddEntry(alpha);
 
@@ -154,8 +154,8 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kd
   root->AddGroup(subgroup);
 
   auto beta = std::make_shared<Entry>();
-  beta->set_title(protect<std::string>("Beta", false));
-  beta->set_username(protect<std::string>("bob", false));
+  beta->set_title(protect<secure_string>("Beta", false));
+  beta->set_username(protect<secure_string>("bob", false));
   beta->set_creation_time(1700000300);
   subgroup->AddEntry(beta);
 
@@ -361,8 +361,8 @@ TEST_F(KeePassTest, CreateAndSaveRoundtrip) {
                                                  Database::Cipher::kAes, Database::Kdf::kAes);
   db->set_transform_rounds(8192);
   auto entry = Database::NewEntry("Roundtrip");
-  entry->set_username(protect<std::string>("userA", false));
-  entry->set_password(protect<std::string>("pw123", true));
+  entry->set_username(protect<secure_string>("userA", false));
+  entry->set_password(protect<secure_string>("pw123", true));
   Database::AddEntry(db->root(), entry);
 
   const std::string out = GetTmpPath("create.kdbx");
@@ -402,7 +402,7 @@ TEST_F(KeePassTest, TransformedKey) {
     ASSERT_TRUE(db);
 
     Key key("password");
-    std::array<uint8_t, 32> transformed = key.Transform(
+    keepass::SecureBuffer<32> transformed = key.Transform(
         db->transform_seed(), db->transform_rounds(), Key::SubKeyResolution::kHashSubKeys);
     std::vector<uint8_t> bytes(transformed.begin(), transformed.end());
 

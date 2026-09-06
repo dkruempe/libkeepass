@@ -20,9 +20,11 @@
 #include "libkeepass/entry.hh"
 
 #include <algorithm>
+#include <cstring>
 #include <sstream>
 
 #include "libkeepass/group.hh"
+#include "libkeepass/secure.hh"
 #include "libkeepass/util.hh"
 
 namespace keepass {
@@ -37,18 +39,18 @@ bool Entry::HasAttachment() const { return !attachments_.empty(); }
 
 void Entry::AddHistoryEntry(const std::shared_ptr<Entry>& entry) { history_.push_back(entry); }
 
-void Entry::AddCustomField(std::string& key, const protect<std::string>& value) {
+void Entry::AddCustomField(std::string& key, const protect<secure_string>& value) {
   custom_fields_.emplace_back(key, value);
 }
 
 void Entry::set_custom_property(const std::string& key, const std::string& value) {
   for (auto& field : custom_fields_) {
     if (field.key() == key) {
-      field = Field(key, protect<std::string>(value, true));
+      field = Field(key, protect<secure_string>(secure_string(value), true));
       return;
     }
   }
-  custom_fields_.emplace_back(key, protect<std::string>(value, true));
+  custom_fields_.emplace_back(key, protect<secure_string>(secure_string(value), true));
 }
 
 void Entry::delete_custom_property(const std::string& key) {
@@ -63,25 +65,25 @@ void Entry::delete_custom_property(const std::string& key) {
 std::map<std::string, std::string> Entry::custom_properties() const {
   std::map<std::string, std::string> props;
   for (const auto& field : custom_fields_)
-    props[field.key()] = *field.value();
+    props[field.key()] = field.value()->str();
   return props;
 }
 
 std::string Entry::GetString(const std::string& key) const {
   if (key == "Title")
-    return *title_;
+    return title_->str();
   if (key == "URL")
-    return *url_;
+    return url_->str();
   if (key == "UserName")
-    return *username_;
+    return username_->str();
   if (key == "Password")
-    return *password_;
+    return password_->str();
   if (key == "Notes")
-    return *notes_;
+    return notes_->str();
 
   for (const auto& field : custom_fields_) {
     if (field.key() == key)
-      return *field.value();
+      return field.value()->str();
   }
   return "";
 }
@@ -98,21 +100,23 @@ void Entry::set_binary_property(const std::string& name, const std::vector<uint8
   std::string payload(data.begin(), data.end());
   for (const auto& attachment : attachments_) {
     if (attachment->name() == name) {
-      attachment->set_binary(std::make_shared<Binary>(protect<std::string>(payload, true)));
+      attachment->set_binary(
+          std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true)));
       return;
     }
   }
 
   auto attachment = std::make_shared<Attachment>();
   attachment->set_name(name);
-  attachment->set_binary(std::make_shared<Binary>(protect<std::string>(payload, true)));
+  attachment->set_binary(
+      std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true)));
   attachments_.push_back(attachment);
 }
 
 std::vector<uint8_t> Entry::get_binary_property(const std::string& name) const {
   for (const auto& attachment : attachments_) {
     if (attachment->name() == name && attachment->binary() && !attachment->binary()->Empty()) {
-      const std::string& data = *attachment->binary()->data();
+      const secure_string& data = *attachment->binary()->data();
       return {data.begin(), data.end()};
     }
   }
@@ -144,7 +148,7 @@ void Entry::touch(bool modify) {
 }
 
 std::string Entry::path() const {
-  std::string result = *title_;
+  std::string result = title_->str();
   std::shared_ptr<Group> parent = parent_.lock();
   if (!parent)
     return result;

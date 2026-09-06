@@ -22,6 +22,7 @@
 #pragma once
 #include <string>
 
+#include "secure.hh"
 #include "security.hh"
 
 namespace keepass {
@@ -32,12 +33,12 @@ namespace keepass {
  */
 class Binary final {
 private:
-  protect<std::string> data_;
+  protect<secure_string> data_;
   bool compress_ = false;
 
 public:
   /// Creates a binary from the given protected data.
-  explicit Binary(const protect<std::string>& data) : data_(data) {}
+  explicit Binary(const protect<secure_string>& data) : data_(data) {}
 
   /// Returns whether the binary data is empty.
   bool Empty() const { return data_->empty(); }
@@ -46,10 +47,10 @@ public:
   std::size_t Size() const { return data_->size(); }
 
   /// Returns the binary data.
-  const protect<std::string>& data() const { return data_; }
+  const protect<secure_string>& data() const { return data_; }
 
   /// Sets the binary data.
-  void set_data(const protect<std::string>& data) { data_ = data; }
+  void set_data(const protect<secure_string>& data) { data_ = data; }
 
   /// Returns whether the binary is stored compressed.
   bool compress() const { return compress_; }

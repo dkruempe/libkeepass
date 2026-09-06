@@ -24,6 +24,7 @@
 
 #include "libkeepass/database.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/secure.hh"
 
 namespace kpx {
 
@@ -32,7 +33,7 @@ extern const char* const kVersion;
 /// Command-line options as parsed by kpx::ParseArgs.
 struct Options {
   std::string input;
-  std::string password;
+  keepass::secure_string password;
   std::string keyfile;
   std::string format = "text";
   std::string output;
@@ -52,7 +53,7 @@ bool ParseArgs(int argc, const char* argv[], Options& opt);
 
 /// Resolves the master password: the -p value, the KEEPASS_PASSWORD
 /// environment variable or, on a terminal, an interactive prompt.
-std::string ResolvePassword(const Options& opt);
+keepass::secure_string ResolvePassword(const Options& opt);
 
 /// Returns true if the path names a KDB (legacy) key database.
 bool IsKdbPath(const std::string& path);

@@ -305,11 +305,11 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kd
   root->set_move_time(1700000004);
 
   auto entry = std::make_shared<Entry>();
-  entry->set_title(protect<std::string>("TestEntry", false));
-  entry->set_url(protect<std::string>("https://example.com", false));
-  entry->set_username(protect<std::string>("user", false));
-  entry->set_password(protect<std::string>("secret", true));
-  entry->set_notes(protect<std::string>("notes", false));
+  entry->set_title(protect<secure_string>("TestEntry", false));
+  entry->set_url(protect<secure_string>("https://example.com", false));
+  entry->set_username(protect<secure_string>("user", false));
+  entry->set_password(protect<secure_string>("secret", true));
+  entry->set_notes(protect<secure_string>("notes", false));
   entry->set_icon(0);
   entry->set_creation_time(1700000100);
   entry->set_modification_time(1700000101);
@@ -322,8 +322,8 @@ std::unique_ptr<Database> MakeDatabase(Database::Cipher cipher, Database::Kdf kd
   subgroup->set_creation_time(1700000200);
 
   auto sub_entry = std::make_shared<Entry>();
-  sub_entry->set_title(protect<std::string>("SubEntry", false));
-  sub_entry->set_password(protect<std::string>("subsecret", true));
+  sub_entry->set_title(protect<secure_string>("SubEntry", false));
+  sub_entry->set_password(protect<secure_string>("subsecret", true));
   sub_entry->set_creation_time(1700000300);
   subgroup->AddEntry(sub_entry);
 
@@ -720,7 +720,7 @@ TEST(Kdbx4Test, AttachmentRoundtrip) {
 
   // Attach a binary to the first entry; KDBX 4 stores it in the inner header.
   auto entry = db->root()->Entries().front();
-  std::shared_ptr<Binary> binary(new Binary(protect<std::string>("attachment payload", true)));
+  std::shared_ptr<Binary> binary(new Binary(protect<secure_string>("attachment payload", true)));
   binary->set_compress(false);
 
   auto attachment = std::make_shared<Entry::Attachment>();
@@ -755,11 +755,11 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   // Add another entry with a custom field and a history entry.
   auto entry = db->root()->Entries().front();
   std::string field_key = "CustomField";
-  entry->AddCustomField(field_key, protect<std::string>("custom value", true));
+  entry->AddCustomField(field_key, protect<secure_string>("custom value", true));
 
   auto history = std::make_shared<Entry>();
-  history->set_title(protect<std::string>("OldTitle", false));
-  history->set_password(protect<std::string>("oldsecret", true));
+  history->set_title(protect<secure_string>("OldTitle", false));
+  history->set_password(protect<secure_string>("oldsecret", true));
   history->set_creation_time(1690000000);
   entry->AddHistoryEntry(history);
 
@@ -779,9 +779,9 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   const auto& custom_fields = reimported_entry->custom_fields();
   ASSERT_EQ(custom_fields.size(), 1U);
   EXPECT_EQ(custom_fields[0].key(), "CustomField");
-  EXPECT_EQ(std::string(*custom_fields[0].value()), "custom value");
+  EXPECT_EQ(custom_fields[0].value()->str(), "custom value");
   ASSERT_EQ(reimported_entry->history().size(), 1U);
-  EXPECT_EQ(std::string(*reimported_entry->history()[0]->password()), "oldsecret");
+  EXPECT_EQ(reimported_entry->history()[0]->password()->str(), "oldsecret");
 
   std::remove(dst_path.c_str());
 }

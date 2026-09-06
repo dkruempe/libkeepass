@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <istream>
 #include <memory>
 #include <ostream>
@@ -214,7 +215,7 @@ class LIBKEEPASS_API hmac_istreambuf final
     : public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   std::istream& src_;
-  const std::array<uint8_t, 64> hmac_key_;
+  std::array<uint8_t, 64> hmac_key_ = {{0}};
 
   uint64_t block_index_ = 0;
   std::vector<char> block_;
@@ -229,8 +230,13 @@ public:
    * @param src The input stream to read HMAC-protected blocks from.
    * @param hmac_key The 512-bit master HMAC key.
    */
-  hmac_istreambuf(std::istream& src, const std::array<uint8_t, 64>& hmac_key)
-      : src_(src), hmac_key_(hmac_key) {}
+  hmac_istreambuf(std::istream& src, const uint8_t* hmac_key) : src_(src) {
+    if (hmac_key != nullptr)
+      std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
+  }
+
+  /// Zeroizes the stored master HMAC key.
+  ~hmac_istreambuf();
 
   /// Reads and HMAC-verifies the next block when the get area is exhausted.
   int underflow() override;
@@ -249,7 +255,7 @@ private:
   static constexpr uint32_t kDefaultBlockSize = 1024 * 1024;
 
   std::ostream& dst_;
-  const std::array<uint8_t, 64> hmac_key_;
+  std::array<uint8_t, 64> hmac_key_ = {{0}};
   const uint32_t block_size_;
 
   uint64_t block_index_ = 0;
@@ -268,8 +274,11 @@ public:
    * @param dst The output stream to write HMAC-protected blocks to.
    * @param hmac_key The 512-bit master HMAC key.
    */
-  hmac_ostreambuf(std::ostream& dst, const std::array<uint8_t, 64>& hmac_key)
-      : dst_(dst), hmac_key_(hmac_key), block_size_(kDefaultBlockSize) {}
+  hmac_ostreambuf(std::ostream& dst, const uint8_t* hmac_key)
+      : dst_(dst), block_size_(kDefaultBlockSize) {
+    if (hmac_key != nullptr)
+      std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
+  }
 
   /**
    * @brief Constructs an HMAC-signing output streambuf with a custom block size.
@@ -278,8 +287,14 @@ public:
    * @param hmac_key The 512-bit master HMAC key.
    * @param block_size The maximum number of data bytes per block.
    */
-  hmac_ostreambuf(std::ostream& dst, const std::array<uint8_t, 64>& hmac_key, uint32_t block_size)
-      : dst_(dst), hmac_key_(hmac_key), block_size_(block_size) {}
+  hmac_ostreambuf(std::ostream& dst, const uint8_t* hmac_key, uint32_t block_size)
+      : dst_(dst), block_size_(block_size) {
+    if (hmac_key != nullptr)
+      std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
+  }
+
+  /// Zeroizes the stored master HMAC key.
+  ~hmac_ostreambuf();
 
   /// Buffers a character; flushes the current block when it reaches capacity.
   int overflow(int c) override;

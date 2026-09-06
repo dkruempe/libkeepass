@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "libkeepass/export.hh"
+#include "libkeepass/secure.hh"
 
 namespace keepass {
 
@@ -72,19 +73,25 @@ public:
 
 private:
   struct CompositeKey {
-    std::array<uint8_t, 32> password_key_ = {{0}};
-    std::array<uint8_t, 32> keyfile_key_ = {{0}};
+    SecureBuffer<32> password_key_;
+    SecureBuffer<32> keyfile_key_;
 
-    std::array<uint8_t, 32> Resolve(SubKeyResolution resolution) const;
+    void Resolve(SubKeyResolution resolution, SecureBuffer<32>& out) const;
   } key_;
 
   /** Set when the key was created from a pre-derived transformed key. */
   bool has_transformed_key_ = false;
-  std::array<uint8_t, 32> transformed_key_ = {{0}};
+  SecureBuffer<32> transformed_key_;
 
 public:
   /// Default constructor. Creates an empty key with no password or key file.
   Key() = default;
+
+  /// Copy-constructs, allocating wiped copies of all sub keys.
+  Key(const Key& other);
+
+  /// Copy-assigns, allocating wiped copies of all sub keys.
+  Key& operator=(const Key& other);
 
   /// Constructs a key with the given password.
   /**
@@ -128,8 +135,8 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  std::array<uint8_t, 32> Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
-                                    SubKeyResolution resolution) const;
+  SecureBuffer<32> Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
+                             SubKeyResolution resolution) const;
 
   /// Derives the composite key using Argon2 for KDBX 4 databases.
   /**
@@ -142,10 +149,9 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  std::array<uint8_t, 32> TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt,
-                                          uint64_t iterations, uint64_t memory_bytes,
-                                          uint32_t parallelism, uint32_t argon2_version,
-                                          SubKeyResolution resolution) const;
+  SecureBuffer<32> TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt, uint64_t iterations,
+                                   uint64_t memory_bytes, uint32_t parallelism,
+                                   uint32_t argon2_version, SubKeyResolution resolution) const;
 };
 
 } // namespace keepass

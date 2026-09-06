@@ -33,6 +33,7 @@
 
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
+#include "libkeepass/secure.hh"
 
 namespace keepass {
 
@@ -151,6 +152,8 @@ std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
   return hmac_key;
 }
 
+hmac_istreambuf::~hmac_istreambuf() { secure_zero(hmac_key_.data(), hmac_key_.size()); }
+
 int hmac_istreambuf::underflow() {
   if (gptr() == egptr()) {
     std::array<uint8_t, 32> block_hmac{};
@@ -197,6 +200,9 @@ int hmac_istreambuf::underflow() {
     if (block_hmac != computed)
       throw IoError("Block checksum error.");
 
+    secure_zero(key_64.data(), key_64.size());
+    secure_zero(digest, sizeof(digest));
+
     ++block_index_;
 
     if (block_size == 0)
@@ -229,6 +235,8 @@ std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
   return hmac_key;
 }
 
+hmac_ostreambuf::~hmac_ostreambuf() { secure_zero(hmac_key_.data(), hmac_key_.size()); }
+
 bool hmac_ostreambuf::FlushBlock() {
   std::array<uint8_t, 64> key_64 = GetCurrentHmacKey();
 
@@ -252,12 +260,16 @@ bool hmac_ostreambuf::FlushBlock() {
   HMAC(EVP_sha256(), key_64.data(), static_cast<int>(key_64.size()), mac_input.data(),
        KEEPASS_HMAC_DATA_LEN(mac_input.size()), digest, &digest_len);
 
+  secure_zero(key_64.data(), key_64.size());
+
   dst_.write(reinterpret_cast<const char*>(digest), 32);
   dst_.write(reinterpret_cast<const char*>(&block_size), 4);
   if (!block_.empty())
     dst_.write(block_.data(), static_cast<std::streamsize>(block_.size()));
   if (!dst_.good())
     return false;
+
+  secure_zero(digest, sizeof(digest));
 
   ++block_index_;
   block_.clear();

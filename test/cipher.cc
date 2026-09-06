@@ -67,7 +67,7 @@ void GetRandomStream(std::ostream& dst, std::size_t min_len, std::size_t max_len
 } // namespace
 
 TEST(CipherTest, AesRandomBlock) {
-  AesCipher cipher(GetRandomKey());
+  AesCipher cipher(GetRandomKey().data());
 
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
   std::array<uint8_t, 16> dst_block{}, tst_block{};
@@ -77,7 +77,7 @@ TEST(CipherTest, AesRandomBlock) {
 }
 
 TEST(CipherTest, AesZeroBlock) {
-  AesCipher cipher(GetRandomKey());
+  AesCipher cipher(GetRandomKey().data());
 
   std::array<uint8_t, 16> src_block = {0};
   std::array<uint8_t, 16> dst_block{}, tst_block{};
@@ -87,7 +87,7 @@ TEST(CipherTest, AesZeroBlock) {
 }
 
 TEST(CipherTest, AesKnownBlocks) {
-  AesCipher cipher(GetTestKey());
+  AesCipher cipher(GetTestKey().data());
 
   std::array<uint8_t, 16> src_block0 = {0xff, 0xce, 0x37, 0x7f, 0xe4, 0xef, 0xfc, 0xe8,
                                         0xaf, 0x73, 0x7f, 0x3d, 0x6a, 0xe9, 0x90, 0xf2};
@@ -128,7 +128,7 @@ TEST(CipherTest, AesKnownBlocks) {
 }
 
 TEST(CipherTest, TwofishRandomBlock) {
-  TwofishCipher cipher(GetRandomKey());
+  TwofishCipher cipher(GetRandomKey().data());
 
   std::array<uint8_t, 16> src_block = GetRandomBlock<16>();
   std::array<uint8_t, 16> dst_block{}, tst_block{};
@@ -138,7 +138,7 @@ TEST(CipherTest, TwofishRandomBlock) {
 }
 
 TEST(CipherTest, TwofishZeroBlock) {
-  TwofishCipher cipher(GetRandomKey());
+  TwofishCipher cipher(GetRandomKey().data());
 
   std::array<uint8_t, 16> src_block = {0};
   std::array<uint8_t, 16> dst_block{}, tst_block{};
@@ -148,7 +148,7 @@ TEST(CipherTest, TwofishZeroBlock) {
 }
 
 TEST(CipherTest, TwofishKnownBlocks) {
-  TwofishCipher cipher(GetTestKey());
+  TwofishCipher cipher(GetTestKey().data());
 
   std::array<uint8_t, 16> src_block0 = {0xff, 0xce, 0x37, 0x7f, 0xe4, 0xef, 0xfc, 0xe8,
                                         0xaf, 0x73, 0x7f, 0x3d, 0x6a, 0xe9, 0x90, 0xf2};
@@ -190,8 +190,8 @@ TEST(CipherTest, TwofishKnownBlocks) {
 
 TEST(CipherTest, Salsa20RandomBlock) {
   std::array<uint8_t, 32> key = GetRandomKey();
-  Salsa20Cipher src_cipher(key);
-  Salsa20Cipher dst_cipher(key);
+  Salsa20Cipher src_cipher(key.data());
+  Salsa20Cipher dst_cipher(key.data());
 
   std::array<uint8_t, 64> src_block = GetRandomBlock<64>();
   std::array<uint8_t, 64> dst_block{}, tst_block{};
@@ -202,8 +202,8 @@ TEST(CipherTest, Salsa20RandomBlock) {
 
 TEST(CipherTest, Salsa20ZeroBlock) {
   std::array<uint8_t, 32> key = GetRandomKey();
-  Salsa20Cipher src_cipher(key);
-  Salsa20Cipher dst_cipher(key);
+  Salsa20Cipher src_cipher(key.data());
+  Salsa20Cipher dst_cipher(key.data());
 
   std::array<uint8_t, 64> src_block = {0};
   std::array<uint8_t, 64> dst_block{}, tst_block{};
@@ -215,7 +215,7 @@ TEST(CipherTest, Salsa20ZeroBlock) {
 TEST(CipherTest, Salsa20KnownBlocks) {
   std::array<uint8_t, 8> iv = {0xe8, 0x30, 0x09, 0x4b, 0x97, 0x20, 0x5d, 0x2a};
 
-  Salsa20Cipher cipher0(GetTestKey(), iv);
+  Salsa20Cipher cipher0(GetTestKey().data(), iv);
   std::array<uint8_t, 64> src_block0 = {
       0xff, 0xce, 0x37, 0x7f, 0xe4, 0xef, 0xfc, 0xe8, 0xaf, 0x73, 0x7f, 0x3d, 0x6a,
       0xe9, 0x90, 0xf2, 0xff, 0xce, 0x37, 0x7f, 0xe4, 0xef, 0xfc, 0xe8, 0xaf, 0x73,
@@ -229,7 +229,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
       0xbd, 0x6d, 0xa9, 0x89, 0x7e, 0x5f, 0x67, 0x71, 0xcc, 0x15, 0x5e, 0xe5, 0x2f,
       0xa6, 0x05, 0x74, 0x31, 0x20, 0xe0, 0xbe, 0x5a, 0xdb, 0x88, 0x16, 0x22};
 
-  Salsa20Cipher cipher1(GetTestKey(), iv);
+  Salsa20Cipher cipher1(GetTestKey().data(), iv);
   std::array<uint8_t, 64> src_block1 = {
       0x2e, 0x28, 0xa8, 0x2d, 0x74, 0xc2, 0x90, 0xe7, 0xaa, 0x91, 0x4d, 0xb3, 0xcb,
       0xdf, 0x4a, 0x44, 0x2e, 0x28, 0xa8, 0x2d, 0x74, 0xc2, 0x90, 0xe7, 0xaa, 0x91,
@@ -243,7 +243,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
       0xb2, 0x68, 0x4b, 0xbb, 0xf0, 0xfe, 0x51, 0xab, 0x7a, 0xc4, 0xb8, 0x7a, 0x7d,
       0x36, 0x28, 0x18, 0x3e, 0x25, 0x02, 0x8c, 0xd4, 0x7a, 0xbe, 0xcc, 0x94};
 
-  Salsa20Cipher cipher2(GetTestKey(), iv);
+  Salsa20Cipher cipher2(GetTestKey().data(), iv);
   std::array<uint8_t, 64> src_block2 = {
       0x1d, 0xa6, 0x6b, 0xc3, 0x0a, 0x77, 0x61, 0xa0, 0x2c, 0x9a, 0x25, 0xa8, 0x83,
       0x47, 0x0b, 0x80, 0x1d, 0xa6, 0x6b, 0xc3, 0x0a, 0x77, 0x61, 0xa0, 0x2c, 0x9a,
@@ -257,7 +257,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
       0xf5, 0xee, 0x40, 0xd3, 0xeb, 0xb6, 0xc9, 0xea, 0xbe, 0xf7, 0x36, 0xb9, 0x93,
       0x48, 0x9d, 0xe9, 0x79, 0xa3, 0x09, 0xe4, 0xcf, 0x32, 0x26, 0x8d, 0x50};
 
-  Salsa20Cipher cipher3(GetTestKey(), iv);
+  Salsa20Cipher cipher3(GetTestKey().data(), iv);
   std::array<uint8_t, 64> src_block3 = {0};
   std::array<uint8_t, 64> exp_block3 = {
       0xec, 0x01, 0xfe, 0x6f, 0x4d, 0x9a, 0x1d, 0xab, 0xe5, 0xca, 0x1a, 0x28, 0x0f,
@@ -266,7 +266,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
       0x55, 0xc2, 0xda, 0xf6, 0x43, 0x35, 0x8e, 0xe1, 0x3e, 0xea, 0x90, 0xd2, 0x50,
       0x42, 0xea, 0x88, 0xd9, 0x8f, 0x93, 0xc1, 0x67, 0xb1, 0x61, 0x86, 0xd0};
 
-  Salsa20Cipher cipher4(GetTestKey(), iv);
+  Salsa20Cipher cipher4(GetTestKey().data(), iv);
   std::array<uint8_t, 64> src_block4 = {
       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -295,7 +295,7 @@ TEST(CipherTest, Salsa20KnownBlocks) {
 }
 
 TEST(CipherTest, Ecb) {
-  AesCipher cipher(GetRandomKey());
+  AesCipher cipher(GetRandomKey().data());
 
   std::array<uint8_t, 32> src_blocks = GetRandomBlock<32>();
   std::array<uint8_t, 32> dst_blocks{}, tst_blocks{};
@@ -305,7 +305,7 @@ TEST(CipherTest, Ecb) {
 }
 
 TEST(CipherTest, CbcWithFullPadding) {
-  AesCipher cipher(GetRandomKey());
+  AesCipher cipher(GetRandomKey().data());
 
   std::stringstream src, dst, tst;
   GetRandomStream(src, 128, 128);
@@ -324,7 +324,7 @@ TEST(CipherTest, CbcWithFullPadding) {
 }
 
 TEST(CipherTest, CbcWithRandomPadding) {
-  AesCipher cipher(GetRandomKey());
+  AesCipher cipher(GetRandomKey().data());
 
   std::stringstream src, dst, tst;
   GetRandomStream(src, 129, 143);

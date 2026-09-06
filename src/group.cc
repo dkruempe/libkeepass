@@ -79,7 +79,7 @@ std::vector<std::shared_ptr<Entry>> Group::FindEntries(const std::string& query,
 
   std::function<void(const Group&)> collect = [&](const Group& group) {
     for (const auto& entry : group.entries_) {
-      if (Matches(*entry->title(), query, regex))
+      if (Matches(entry->title()->str(), query, regex))
         result.push_back(entry);
     }
     if (recursive) {

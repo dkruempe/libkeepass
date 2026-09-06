@@ -32,8 +32,9 @@ namespace keepass {
  *
  * The wrapped value is stored in plaintext; protection here means that the
  * value is flagged as sensitive (e.g. a password) and is written to the KDBX
- * output obfuscated through the inner random stream (Salsa20/ChaCha20). The
- * item is not encrypted in heap memory.
+ * output obfuscated through the inner random stream (Salsa20/ChaCha20). For
+ * secret text fields prefer `protect<secure_string>`, which additionally keeps
+ * the value on a non-swappable, zeroized heap buffer.
  *
  * @tparam T The wrapped value type.
  */
@@ -52,6 +53,13 @@ public:
    * @param [in] prot Whether the value is sensitive.
    */
   protect(const T& val, bool prot) : value_(val), protected_(prot) {}
+
+  /**
+   * @brief Constructs a protected wrapper by moving a value in.
+   * @param [in,out] val Initial value (moved from).
+   * @param [in] prot Whether the value is sensitive.
+   */
+  protect(T&& val, bool prot) : value_(std::move(val)), protected_(prot) {}
 
   /**
    * @brief Copy-constructs from another protected wrapper.

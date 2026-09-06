@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pre-derived transformed key `Key(vector<uint8_t>)`
 - Visitor pattern (`libkeepass/visitor.hh`) with `Visit(Group&, Visitor&)`,
   `PrintVisitor` and `Database::Visit()`
+- Secure memory primitives in `libkeepass/secure.hh`: `secure_zero` volatile
+  byte wiping, `secure_alloc`/`secure_free` (best-effort `mlock`/
+  `VirtualLock` plus wipe-before-free) and the move-only, zeroized
+  `SecureBuffer<N>` container
+- `secure_string`: a wiped, best-effort locked string with no SSO that is
+  used for all secret entry fields and protected values
+- Dedicated `test/secure.cc` covering the secure primitives
 
 ### Changed
 
@@ -41,6 +48,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Database::NewEntry`/`NewGroup`/`AddEntry`/`AddGroup`/`MoveEntry`/`MoveGroup`
   are static members and take `std::shared_ptr` by `const&`; calls made on a
   `Database` instance keep working
+- Cipher constructors (`AesCipher`, `TwofishCipher`, `Salsa20Cipher`,
+  `ChaCha20Cipher`) now take the raw key as a `const uint8_t*` (null-safe)
+  and wipe the key state on destruction
+- `RandomObfuscator` wipes its buffered keystream and adds a `Process`
+  overload that returns a `secure_string`
+- `Key` subkey storage and the `Transform`/`TransformArgon2` results are kept
+  in `SecureBuffer<32>`; `Database` caches the transformed key in wiped,
+  best-effort locked memory
+- **Breaking:** entry string fields, `Binary` payloads and KDBX protected
+  strings now use `protect<secure_string>` instead of `protect<std::string>`;
+  callers must convert explicitly (e.g. via `value()->str()`)
+- KDBX 3/4 import and export zeroize transient transformed keys, HMAC keys,
+  master keys and inner random stream keys after their last use
+- The `kpx` CLI resolves the master password into a `secure_string` (`-p`,
+  `KEEPASS_PASSWORD` or interactive prompt) and feeds it to the `KeePass`
+  API through wiped memory
 
 ### Fixed
 
