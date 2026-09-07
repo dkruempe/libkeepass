@@ -60,11 +60,6 @@ std::string ReadFile(const std::string& path) {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
-void WriteFile(const std::string& path, const std::string& data) {
-  std::ofstream file(path, std::ios::out | std::ios::binary);
-  file.write(data.data(), static_cast<std::streamsize>(data.size()));
-}
-
 // Compacts JSON by removing all white space that is not inside a string
 // literal.
 std::string CompactJson(const std::string& json) {
