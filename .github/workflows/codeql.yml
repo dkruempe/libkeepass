@@ -25,7 +25,7 @@ jobs:
       CONAN_VERSION: "2.31.2"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: 'recursive'
 
@@ -38,7 +38,8 @@ jobs:
           conan profile detect --force
 
       - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+        id: cache-restore
+        uses: actions/cache/restore@v5
         with:
           path: ~/.conan2
           key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
@@ -47,7 +48,7 @@ jobs:
             conan-${{ runner.os }}-
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: cpp
           queries: security-and-quality
@@ -55,8 +56,13 @@ jobs:
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
 
+      # Save the cache immediately after dependency provisioning but before
+      # building the project, so that a later build failure does not lose the
+      # fetched/built dependencies. Skip saving when the restore hit the exact
+      # key, otherwise GitHub refuses to reserve the already-existing cache.
       - name: Cache Conan packages (save before build)
-        uses: actions/cache/save@v4
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
         with:
           path: ~/.conan2
           key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
@@ -65,6 +71,6 @@ jobs:
         run: cmake --build build -j $(nproc)
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:cpp"
