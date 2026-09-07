@@ -248,34 +248,34 @@ private:
 };
 
 /// Returns whether two secure strings hold the same bytes.
-bool operator==(const secure_string& lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator==(const secure_string& lhs, const secure_string& rhs);
 
 /// Returns whether two secure strings hold different bytes.
-bool operator!=(const secure_string& lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator!=(const secure_string& lhs, const secure_string& rhs);
 
 /// Returns whether a secure string matches a std::string.
-bool operator==(const secure_string& lhs, const std::string& rhs);
+LIBKEEPASS_API bool operator==(const secure_string& lhs, const std::string& rhs);
 
 /// Returns whether a std::string matches a secure string.
-bool operator==(const std::string& lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator==(const std::string& lhs, const secure_string& rhs);
 
 /// Returns whether a secure string differs from a std::string.
-bool operator!=(const secure_string& lhs, const std::string& rhs);
+LIBKEEPASS_API bool operator!=(const secure_string& lhs, const std::string& rhs);
 
 /// Returns whether a std::string differs from a secure string.
-bool operator!=(const std::string& lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator!=(const std::string& lhs, const secure_string& rhs);
 
 /// Returns whether a secure string matches a NUL-terminated C string.
-bool operator==(const secure_string& lhs, const char* rhs);
+LIBKEEPASS_API bool operator==(const secure_string& lhs, const char* rhs);
 
 /// Returns whether a NUL-terminated C string matches a secure string.
-bool operator==(const char* lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator==(const char* lhs, const secure_string& rhs);
 
 /// Returns whether a secure string differs from a NUL-terminated C string.
-bool operator!=(const secure_string& lhs, const char* rhs);
+LIBKEEPASS_API bool operator!=(const secure_string& lhs, const char* rhs);
 
 /// Returns whether a NUL-terminated C string differs from a secure string.
-bool operator!=(const char* lhs, const secure_string& rhs);
+LIBKEEPASS_API bool operator!=(const char* lhs, const secure_string& rhs);
 
 /// Writes the string content to a stream.
 LIBKEEPASS_API std::ostream& operator<<(std::ostream& os, const secure_string& str);

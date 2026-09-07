@@ -45,6 +45,11 @@ void* secure_alloc(std::size_t size) noexcept {
   if (data == nullptr)
     return nullptr;
 
+  // mlock()/VirtualLock() take a const pointer and may read the memory, so GCC
+  // flags the freshly allocated buffer as "maybe uninitialized". Zero it first
+  // to initialise the contents (and to avoid leaking stale heap bytes).
+  std::memset(data, 0, size);
+
 #ifdef _WIN32
   VirtualLock(data, size);
 #else

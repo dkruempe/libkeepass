@@ -143,7 +143,7 @@ private:
    * @param obfuscator The random stream obfuscator for decryption.
    * @return The decrypted protected string.
    */
-static protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
+  static protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
                                                      RandomObfuscator& obfuscator);
 
   /// Writes a protected string value to an XML node.
