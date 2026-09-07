@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `secure_string`: a wiped, best-effort locked string with no SSO that is
   used for all secret entry fields and protected values
 - Dedicated `test/secure.cc` covering the secure primitives
+- KDBX 4.1 support: `Group` tags (`Group::tags`/`set_tags`) and the entry
+  "password quality estimation" flag (`Entry::quality_check`/`set_quality_check`)
+  are parsed and written; the exporter writes version `0x00040001` only when
+  such 4.1-only features are used (mirroring KeePass' `GetMinKdbxVersion`)
 
 ### Changed
 

@@ -85,6 +85,7 @@ constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
 constexpr uint32_t kKdbxVersion3 = 0x00030000;
 constexpr uint32_t kKdbxVersionCriticalMin = 0x00030001;
 constexpr uint32_t kKdbxVersion4 = 0x00040000;
+constexpr uint32_t kKdbxVersion4_1 = 0x00040001;
 
 constexpr std::array<uint8_t, 16> kKdbxCipherAes = {{0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50,
                                                      0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a,
@@ -131,6 +132,30 @@ enum class kKdbxRandomStream : uint32_t {
 
   kCount
 };
+
+// Returns whether the group subtree contains KDBX 4.1-only features. Mirrors
+// KeePass' KdbxFile.GetMinKdbxVersion.
+bool RequiresKdbx41(const std::shared_ptr<Group>& group) {
+  if (!group->tags().empty())
+    return true;
+
+  for (const auto& entry : group->Entries()) {
+    if (!entry->quality_check())
+      return true;
+
+    for (const auto& history : entry->history()) {
+      if (!history->quality_check())
+        return true;
+    }
+  }
+
+  for (const auto& subgroup : group->Groups()) {
+    if (RequiresKdbx41(subgroup))
+      return true;
+  }
+
+  return false;
+}
 
 #pragma pack(push, 1)
 struct KdbxHeader {
@@ -610,6 +635,7 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
   entry->set_fg_color(entry_node.child_value("ForegroundColor"));
   entry->set_bg_color(entry_node.child_value("BackgroundColor"));
   entry->set_override_url(entry_node.child_value("OverrideURL"));
+  entry->set_quality_check(entry_node.child("QualityCheck").text().as_bool(true));
   entry->set_tags(entry_node.child_value("Tags"));
 
   if (entry_node.child("CustomIconUUID")) {
@@ -737,6 +763,8 @@ void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscat
   entry_node.append_child("ForegroundColor").text().set(entry->fg_color().c_str());
   entry_node.append_child("BackgroundColor").text().set(entry->bg_color().c_str());
   entry_node.append_child("OverrideURL").text().set(entry->override_url().c_str());
+  if (!entry->quality_check())
+    entry_node.append_child("QualityCheck").text().set(false);
   entry_node.append_child("Tags").text().set(entry->tags().c_str());
 
   if (auto icon = entry->custom_icon().lock()) {
@@ -842,6 +870,7 @@ std::shared_ptr<Group> KdbxFile::ParseGroup(const pugi::xml_node& group_node,
   group->set_uuid(uuid);
   group->set_name(group_node.child_value("Name"));
   group->set_notes(group_node.child_value("Notes"));
+  group->set_tags(group_node.child_value("Tags"));
   group->set_icon(group_node.child("IconID").text().as_uint());
 
   if (group_node.child("CustomIconUUID")) {
@@ -898,6 +927,8 @@ void KdbxFile::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscat
       base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
   group_node.append_child("Name").text().set(group->name().c_str());
   group_node.append_child("Notes").text().set(group->notes().c_str());
+  if (!group->tags().empty())
+    group_node.append_child("Tags").text().set(group->tags().c_str());
   group_node.append_child("IconID").text().set(group->icon());
 
   if (auto icon = group->custom_icon().lock()) {
@@ -1744,7 +1775,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   KdbxHeader header{};
   header.signature0 = kKdbxSignature0;
   header.signature1 = kKdbxSignature1;
-  header.version = kKdbxVersion4;
+  header.version = RequiresKdbx41(db.root()) ? kKdbxVersion4_1 : kKdbxVersion4;
 
   std::stringstream header_stream;
   conserve<KdbxHeader>(header_stream, header);

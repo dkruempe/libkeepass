@@ -230,12 +230,12 @@ bool Entry::operator==(const Entry& other) const {
   return uuid_ == other.uuid_ && icon_ == other.icon_ && same_custom_icon &&
          title_ == other.title_ && url_ == other.url_ && override_url_ == other.override_url_ &&
          username_ == other.username_ && password_ == other.password_ && notes_ == other.notes_ &&
-         tags_ == other.tags_ && creation_time_ == other.creation_time_ &&
-         modification_time_ == other.modification_time_ && access_time_ == other.access_time_ &&
-         expiry_time_ == other.expiry_time_ && move_time_ == other.move_time_ &&
-         expires_ == other.expires_ && usage_count_ == other.usage_count_ &&
-         bg_color_ == other.bg_color_ && fg_color_ == other.fg_color_ &&
-         auto_type_ == other.auto_type_ &&
+         tags_ == other.tags_ && quality_check_ == other.quality_check_ &&
+         creation_time_ == other.creation_time_ && modification_time_ == other.modification_time_ &&
+         access_time_ == other.access_time_ && expiry_time_ == other.expiry_time_ &&
+         move_time_ == other.move_time_ && expires_ == other.expires_ &&
+         usage_count_ == other.usage_count_ && bg_color_ == other.bg_color_ &&
+         fg_color_ == other.fg_color_ && auto_type_ == other.auto_type_ &&
          indirect_equal<std::shared_ptr<Attachment>>(attachments_, other.attachments_) &&
          indirect_equal<std::shared_ptr<Entry>>(history_, other.history_) &&
          custom_fields_ == other.custom_fields_;

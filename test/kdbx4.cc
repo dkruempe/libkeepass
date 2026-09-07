@@ -64,6 +64,7 @@ constexpr std::array<uint8_t, 16> kKdfArgon2id = {{0x9e, 0x29, 0x8b, 0x19, 0x56,
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
 constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
 constexpr uint32_t kKdbxVersion4 = 0x00040000;
+constexpr uint32_t kKdbxVersion4_1 = 0x00040001;
 constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
 
 std::string GetTestPath(const std::string& name) {
@@ -782,6 +783,66 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   EXPECT_EQ(custom_fields[0].value()->str(), "custom value");
   ASSERT_EQ(reimported_entry->history().size(), 1U);
   EXPECT_EQ(reimported_entry->history()[0]->password()->str(), "oldsecret");
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, Kdbx41Features) {
+  // Group tags and a disabled quality check are KDBX 4.1-only features. Their
+  // presence must trigger writing version 0x00040001 and survive a roundtrip.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  auto subgroup = db->root()->Groups().front();
+  subgroup->set_tags("finance banking");
+
+  auto entry = db->root()->Entries().front();
+  entry->set_quality_check(false);
+
+  // A group/entry pair without 4.1 features must not force the higher version.
+  auto plain_group = std::make_shared<Group>();
+  plain_group->set_name("Plain");
+  auto plain_entry = std::make_shared<Entry>();
+  plain_entry->set_title(protect<secure_string>("PlainEntry", false));
+  plain_group->AddEntry(plain_entry);
+  db->root()->AddGroup(plain_group);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-41.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4_1);
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
+  ASSERT_NE(reimported, nullptr);
+  ExpectSameDatabase(*db, *reimported);
+
+  EXPECT_EQ(reimported->root()->Groups().front()->tags(), "finance banking");
+  EXPECT_EQ(reimported->root()->Groups()[1]->tags(), "");
+  EXPECT_FALSE(reimported->root()->Entries().front()->quality_check());
+  EXPECT_TRUE(reimported->root()->Groups()[1]->Entries().front()->quality_check());
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, Kdbx40VersionWithout41Features) {
+  // Without any KDBX 4.1 features the exporter must keep writing 0x00040000.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-40.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4);
 
   std::remove(dst_path.c_str());
 }
