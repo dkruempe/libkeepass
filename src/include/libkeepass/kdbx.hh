@@ -68,6 +68,9 @@ private:
   /** True while reading or writing a KDBX 4 database. */
   bool kdbx4_ = false;
 
+  /** True while writing KDBX 4.1 (0x00040001). */
+  bool kdbx41_ = false;
+
   /** Force KDBX 4 output even if the database could be written as KDBX 3. */
   bool write_kdbx4_ = false;
 

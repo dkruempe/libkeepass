@@ -847,6 +847,73 @@ TEST(Kdbx4Test, Kdbx40VersionWithout41Features) {
   std::remove(dst_path.c_str());
 }
 
+TEST(Kdbx4Test, Kdbx41MetaAndTreeFeatures) {
+  // Covers the remaining KDBX 4.1 additions: entry/group PreviousParentGroup,
+  // custom icon Name and LastModificationTime, custom data item
+  // LastModificationTime and deleted-object tombstones.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  // Custom icon with a name and modification time.
+  std::array<uint8_t, 16> icon_uuid = {{0x41, 0x01}};
+  auto icon = std::make_shared<Icon>(icon_uuid, std::vector<uint8_t>{0x89, 0x50, 0x4e, 0x47});
+  icon->set_name("MyIcon");
+  icon->set_last_modification_time(1700000500);
+  db->meta()->AddIcon(icon);
+
+  // Custom data item with a modification time.
+  Metadata::Field field("kdbx41-key", "kdbx41-value");
+  field.set_last_modification_time(1700000600);
+  db->meta()->AddField(field);
+
+  // Deleted-object tombstone.
+  std::array<uint8_t, 16> deleted_uuid = {{0xde, 0xad, 0xbe, 0xef}};
+  db->meta()->AddDeletedObject(Metadata::DeletedObject(deleted_uuid, 1700000700));
+
+  // Previous parent groups on an entry and a group.
+  auto entry = db->root()->Entries().front();
+  entry->set_previous_parent_group(icon_uuid);
+  auto subgroup = db->root()->Groups().front();
+  subgroup->set_previous_parent_group(deleted_uuid);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-41-meta.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4_1);
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
+  ASSERT_NE(reimported, nullptr);
+  ExpectSameDatabase(*db, *reimported);
+
+  ASSERT_EQ(reimported->meta()->icons().size(), 1U);
+  EXPECT_EQ(reimported->meta()->icons()[0]->uuid(), icon_uuid);
+  EXPECT_EQ(reimported->meta()->icons()[0]->name(), "MyIcon");
+  EXPECT_EQ(reimported->meta()->icons()[0]->last_modification_time(), 1700000500);
+
+  ASSERT_EQ(reimported->meta()->fields().size(), 1U); // just kdbx41-key
+  const auto& field2 =
+      std::find_if(reimported->meta()->fields().begin(), reimported->meta()->fields().end(),
+                   [](const Metadata::Field& f) { return f.key() == "kdbx41-key"; });
+  ASSERT_NE(field2, reimported->meta()->fields().end());
+  EXPECT_EQ(field2->value(), "kdbx41-value");
+  EXPECT_EQ(field2->last_modification_time(), 1700000600);
+
+  ASSERT_EQ(reimported->meta()->deleted_objects().size(), 1U);
+  EXPECT_EQ(reimported->meta()->deleted_objects()[0].uuid(), deleted_uuid);
+  EXPECT_EQ(reimported->meta()->deleted_objects()[0].deletion_time(), 1700000700);
+
+  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group(), icon_uuid);
+  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group(), deleted_uuid);
+
+  std::remove(dst_path.c_str());
+}
+
 #if LIBKEEPASS_AES_NI
 
 TEST(KdbxAesNi, TransformMatchesEVPReference) {

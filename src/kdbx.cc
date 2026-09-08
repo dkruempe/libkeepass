@@ -135,23 +135,47 @@ enum class kKdbxRandomStream : uint32_t {
 
 // Returns whether the group subtree contains KDBX 4.1-only features. Mirrors
 // KeePass' KdbxFile.GetMinKdbxVersion.
-bool RequiresKdbx41(const std::shared_ptr<Group>& group) {
-  if (!group->tags().empty())
+bool IsZeroUuid(const std::array<uint8_t, 16>& uuid) {
+  return std::all_of(uuid.begin(), uuid.end(), [](uint8_t byte) { return byte == 0; });
+}
+
+bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
+  if (!group->tags().empty() || !IsZeroUuid(group->previous_parent_group()))
     return true;
 
   for (const auto& entry : group->Entries()) {
-    if (!entry->quality_check())
+    if (!entry->quality_check() || !IsZeroUuid(entry->previous_parent_group()))
       return true;
 
     for (const auto& history : entry->history()) {
-      if (!history->quality_check())
+      if (!history->quality_check() || !IsZeroUuid(history->previous_parent_group()))
         return true;
     }
   }
 
   for (const auto& subgroup : group->Groups()) {
-    if (RequiresKdbx41(subgroup))
+    if (GroupRequiresKdbx41(subgroup))
       return true;
+  }
+
+  return false;
+}
+
+// Returns whether the database uses any KDBX 4.1-only features.
+bool RequiresKdbx41(const Database& db) {
+  if (db.root() && GroupRequiresKdbx41(db.root()))
+    return true;
+
+  if (db.meta()) {
+    for (const auto& icon : db.meta()->icons()) {
+      if (!icon->name().empty() || icon->last_modification_time() != 0)
+        return true;
+    }
+
+    for (const auto& field : db.meta()->fields()) {
+      if (field.last_modification_time() != 0)
+        return true;
+    }
   }
 
   return false;
@@ -226,6 +250,7 @@ void KdbxFile::Reset() {
   icon_pool_.clear();
   group_pool_.clear();
   header_hash_ = {0};
+  kdbx41_ = false;
 }
 
 std::shared_ptr<Group> KdbxFile::GetGroup(const std::string& uuid_str) {
@@ -427,6 +452,9 @@ std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
           icon_node.child_value("UUID"), bounds_checked(uuid));
 
       std::shared_ptr<Icon> icon = std::make_shared<Icon>(uuid, data);
+      icon->set_name(icon_node.child_value("Name"));
+      icon->set_last_modification_time(
+          ParseDateTime(icon_node.child_value("LastModificationTime")));
       meta->AddIcon(icon);
 
       icon_pool_.insert(std::make_pair(icon_node.child_value("UUID"), icon));
@@ -479,7 +507,10 @@ std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
         continue;
       }
 
-      meta->AddField(key, value);
+      Metadata::Field field(key, value);
+      field.set_last_modification_time(
+          ParseDateTime(item_node.child_value("LastModificationTime")));
+      meta->AddField(field);
     }
   }
 
@@ -575,6 +606,15 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
         base64_encode(icon->uuid().begin(), icon->uuid().end()).c_str());
     icon_node.append_child("Data").text().set(
         base64_encode(icon->data().begin(), icon->data().end()).c_str());
+
+    if (kdbx41_) {
+      if (!icon->name().empty())
+        icon_node.append_child("Name").text().set(icon->name().c_str());
+      if (icon->last_modification_time() != 0)
+        icon_node.append_child("LastModificationTime")
+            .text()
+            .set(WriteDateTime(icon->last_modification_time()).c_str());
+    }
   }
 
   // In KDBX 4 the binary attachments are stored in the KDBX inner header
@@ -619,6 +659,11 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
     pugi::xml_node item_node = data_node.append_child("Item");
     item_node.append_child("Key").text().set(field.key().c_str());
     item_node.append_child("Value").text().set(field.value().c_str());
+
+    if (kdbx41_ && field.last_modification_time() != 0)
+      item_node.append_child("LastModificationTime")
+          .text()
+          .set(WriteDateTime(field.last_modification_time()).c_str());
   }
 }
 
@@ -637,6 +682,13 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
   entry->set_override_url(entry_node.child_value("OverrideURL"));
   entry->set_quality_check(entry_node.child("QualityCheck").text().as_bool(true));
   entry->set_tags(entry_node.child_value("Tags"));
+
+  if (entry_node.child("PreviousParentGroup")) {
+    std::array<uint8_t, 16> prev_parent = {{0}};
+    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
+        entry_node.child_value("PreviousParentGroup"), bounds_checked(prev_parent));
+    entry->set_previous_parent_group(prev_parent);
+  }
 
   if (entry_node.child("CustomIconUUID")) {
     auto it = icon_pool_.find(entry_node.child_value("CustomIconUUID"));
@@ -766,6 +818,12 @@ void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscat
   if (!entry->quality_check())
     entry_node.append_child("QualityCheck").text().set(false);
   entry_node.append_child("Tags").text().set(entry->tags().c_str());
+  if (kdbx41_ && !IsZeroUuid(entry->previous_parent_group()))
+    entry_node.append_child("PreviousParentGroup")
+        .text()
+        .set(base64_encode(entry->previous_parent_group().begin(),
+                           entry->previous_parent_group().end())
+                 .c_str());
 
   if (auto icon = entry->custom_icon().lock()) {
     entry_node.append_child("CustomIconUUID")
@@ -871,6 +929,14 @@ std::shared_ptr<Group> KdbxFile::ParseGroup(const pugi::xml_node& group_node,
   group->set_name(group_node.child_value("Name"));
   group->set_notes(group_node.child_value("Notes"));
   group->set_tags(group_node.child_value("Tags"));
+
+  if (group_node.child("PreviousParentGroup")) {
+    std::array<uint8_t, 16> prev_parent = {{0}};
+    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
+        group_node.child_value("PreviousParentGroup"), bounds_checked(prev_parent));
+    group->set_previous_parent_group(prev_parent);
+  }
+
   group->set_icon(group_node.child("IconID").text().as_uint());
 
   if (group_node.child("CustomIconUUID")) {
@@ -927,6 +993,12 @@ void KdbxFile::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscat
       base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
   group_node.append_child("Name").text().set(group->name().c_str());
   group_node.append_child("Notes").text().set(group->notes().c_str());
+  if (kdbx41_ && !IsZeroUuid(group->previous_parent_group()))
+    group_node.append_child("PreviousParentGroup")
+        .text()
+        .set(base64_encode(group->previous_parent_group().begin(),
+                           group->previous_parent_group().end())
+                 .c_str());
   if (!group->tags().empty())
     group_node.append_child("Tags").text().set(group->tags().c_str());
   group_node.append_child("IconID").text().set(group->icon());
@@ -992,6 +1064,16 @@ void KdbxFile::ParseXml(std::istream& src, RandomObfuscator& obfuscator, Databas
   std::shared_ptr<Metadata> meta = ParseMeta(meta_node, obfuscator);
   std::shared_ptr<Group> root = ParseGroup(group_node, obfuscator);
 
+  for (pugi::xml_node object_node =
+           kpf_node.child("Root").child("DeletedObjects").child("DeletedObject");
+       object_node; object_node = object_node.next_sibling("DeletedObject")) {
+    std::array<uint8_t, 16> uuid = {{0}};
+    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
+        object_node.child_value("UUID"), bounds_checked(uuid));
+    meta->AddDeletedObject(
+        Metadata::DeletedObject(uuid, ParseDateTime(object_node.child_value("DeletionTime"))));
+  }
+
   db.set_meta(meta);
   db.set_root(root);
 
@@ -1036,7 +1118,8 @@ void KdbxFile::WriteXml(std::ostream& dst, RandomObfuscator& obfuscator, const D
 
   pugi::xml_node kpf_node = doc.append_child("KeePassFile");
   pugi::xml_node meta_node = kpf_node.append_child("Meta");
-  pugi::xml_node group_node = kpf_node.append_child("Root").append_child("Group");
+  pugi::xml_node root_node = kpf_node.append_child("Root");
+  pugi::xml_node group_node = root_node.append_child("Group");
 
   // A freshly created database may lack metadata or a root group; export a
   // default placeholder in that case instead of dereferencing a null pointer.
@@ -1045,6 +1128,18 @@ void KdbxFile::WriteXml(std::ostream& dst, RandomObfuscator& obfuscator, const D
     WriteMeta(meta_node, obfuscator, empty_meta);
   } else {
     WriteMeta(meta_node, obfuscator, db.meta());
+
+    if (!db.meta()->deleted_objects().empty()) {
+      pugi::xml_node del_node = root_node.append_child("DeletedObjects");
+      for (const auto& object : db.meta()->deleted_objects()) {
+        pugi::xml_node object_node = del_node.append_child("DeletedObject");
+        object_node.append_child("UUID").text().set(
+            base64_encode(object.uuid().begin(), object.uuid().end()).c_str());
+        object_node.append_child("DeletionTime")
+            .text()
+            .set(WriteDateTime(object.deletion_time()).c_str());
+      }
+    }
   }
 
   static const std::shared_ptr<Group> empty_root = std::make_shared<Group>();
@@ -1594,11 +1689,13 @@ void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
 
   if (write_kdbx4_ || db.kdf() != Database::Kdf::kAes) {
     kdbx4_ = true;
+    kdbx41_ = RequiresKdbx41(db);
     Export4(dst, db, key);
     return;
   }
 
   kdbx4_ = false;
+  kdbx41_ = false;
   Export3(dst, db, key);
 }
 
@@ -1775,7 +1872,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   KdbxHeader header{};
   header.signature0 = kKdbxSignature0;
   header.signature1 = kKdbxSignature1;
-  header.version = RequiresKdbx41(db.root()) ? kKdbxVersion4_1 : kKdbxVersion4;
+  header.version = kdbx41_ ? kKdbxVersion4_1 : kKdbxVersion4;
 
   std::stringstream header_stream;
   conserve<KdbxHeader>(header_stream, header);

@@ -21,6 +21,8 @@
 
 #pragma once
 #include <array>
+#include <ctime>
+#include <string>
 #include <vector>
 
 namespace keepass {
@@ -35,6 +37,8 @@ class Icon final {
 private:
   std::array<uint8_t, 16> uuid_;
   std::vector<uint8_t> data_;
+  std::string name_;
+  std::time_t last_modification_time_ = 0;
 
 public:
   /// Creates an icon with the given UUID and raw data.
@@ -50,8 +54,23 @@ public:
   /// Sets the raw icon data.
   void set_data(const std::vector<uint8_t>& data) { data_ = data; }
 
+  /// Returns the icon name (KDBX 4.1).
+  const std::string& name() const { return name_; }
+
+  /// Sets the icon name (KDBX 4.1).
+  void set_name(const std::string& name) { name_ = name; }
+
+  /// Returns the icon last modification time (KDBX 4.1); 0 if unset.
+  std::time_t last_modification_time() const { return last_modification_time_; }
+
+  /// Sets the icon last modification time (KDBX 4.1); 0 to unset.
+  void set_last_modification_time(std::time_t time) { last_modification_time_ = time; }
+
   /// Equality comparison (based on data).
-  bool operator==(const Icon& other) const { return data_ == other.data_; }
+  bool operator==(const Icon& other) const {
+    return data_ == other.data_ && name_ == other.name_ &&
+           last_modification_time_ == other.last_modification_time_;
+  }
 
   /// Inequality comparison.
   bool operator!=(const Icon& other) const { return !(*this == other); }

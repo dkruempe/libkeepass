@@ -97,28 +97,33 @@ public:
   private:
     std::string key_;
     std::string value_;
+    std::time_t last_modification_time_ = 0;
 
   public:
     /// Creates a metadata field with the given key and value.
     Field(std::string key, std::string value) : key_(std::move(key)), value_(std::move(value)) {}
 
     /// Copy constructor.
-    Field(const Field& other) {
-      key_ = other.key_;
-      value_ = other.value_;
-    }
+    Field(const Field& other)
+        : key_(other.key_), value_(other.value_),
+          last_modification_time_(other.last_modification_time_) {}
 
     /// Move constructor.
-    Field(Field&& other) noexcept {
-      key_ = std::move(other.key_);
-      value_ = std::move(other.value_);
-    }
+    Field(Field&& other) noexcept
+        : key_(std::move(other.key_)), value_(std::move(other.value_)),
+          last_modification_time_(other.last_modification_time_) {}
 
     /// Returns the field key.
     const std::string& key() const { return key_; }
 
     /// Returns the field value.
     const std::string& value() const { return value_; }
+
+    /// Returns the field last modification time (KDBX 4.1); 0 if unset.
+    std::time_t last_modification_time() const { return last_modification_time_; }
+
+    /// Sets the field last modification time (KDBX 4.1); 0 to unset.
+    void set_last_modification_time(std::time_t time) { last_modification_time_ = time; }
 
     /// Copy assignment.
     Field& operator=(const Field& other) = default;
@@ -127,8 +132,48 @@ public:
     Field& operator=(Field&& other) noexcept {
       key_ = std::move(other.key_);
       value_ = std::move(other.value_);
+      last_modification_time_ = other.last_modification_time_;
       return *this;
     }
+  };
+
+  /**
+   * @brief A tombstone for a deleted group, entry or icon.
+   *
+   * KDBX records deletions of groups, entries and (since KDBX 4.1) custom
+   * icons in a "DeletedObjects" list, so that synchronized clients can delete
+   * the same objects. A DeletedObject consists of the deleted entity's UUID
+   * and the time of its deletion.
+   */
+  class DeletedObject final {
+  private:
+    std::array<uint8_t, 16> uuid_;
+    std::time_t deletion_time_ = 0;
+
+  public:
+    /// Creates a deletion tombstone with the given UUID and deletion time.
+    DeletedObject(const std::array<uint8_t, 16>& uuid, std::time_t deletion_time)
+        : uuid_(uuid), deletion_time_(deletion_time) {}
+
+    /// Returns the UUID of the deleted object.
+    const std::array<uint8_t, 16>& uuid() const { return uuid_; }
+
+    /// Sets the UUID of the deleted object.
+    void set_uuid(const std::array<uint8_t, 16>& uuid) { uuid_ = uuid; }
+
+    /// Returns the deletion time.
+    std::time_t deletion_time() const { return deletion_time_; }
+
+    /// Sets the deletion time.
+    void set_deletion_time(std::time_t time) { deletion_time_ = time; }
+
+    /// Equality comparison.
+    bool operator==(const DeletedObject& other) const {
+      return uuid_ == other.uuid_ && deletion_time_ == other.deletion_time_;
+    }
+
+    /// Inequality comparison.
+    bool operator!=(const DeletedObject& other) const { return !(*this == other); }
   };
 
 private:
@@ -154,6 +199,7 @@ private:
   std::vector<std::shared_ptr<Binary>> binaries_;
   std::vector<std::shared_ptr<Icon>> icons_;
   std::vector<Field> fields_;
+  std::vector<DeletedObject> deleted_objects_;
 
 public:
   /// Returns the name of the application that generated the database.
@@ -276,6 +322,9 @@ public:
   /// Returns the list of arbitrary metadata fields.
   const std::vector<Field>& fields() const { return fields_; }
 
+  /// Returns the list of deletion tombstones (deleted groups/entries/icons).
+  const std::vector<DeletedObject>& deleted_objects() const { return deleted_objects_; }
+
   /// Adds a custom binary to the metadata.
   void AddBinary(const std::shared_ptr<Binary>& binary);
 
@@ -284,6 +333,12 @@ public:
 
   /// Adds an arbitrary metadata field.
   void AddField(const std::string& key, const std::string& value);
+
+  /// Adds a metadata field with an explicit last modification time (KDBX 4.1).
+  void AddField(const Field& field);
+
+  /// Adds a deletion tombstone to the metadata.
+  void AddDeletedObject(const DeletedObject& object) { deleted_objects_.push_back(object); }
 };
 
 } // namespace keepass

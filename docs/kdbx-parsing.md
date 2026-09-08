@@ -160,9 +160,15 @@ Only the XML body schema is extended (`src/kdbx.cc:615`, `:733`, `:845`,
 *   `<Group><Tags>` — space-separated group tags (`Group::tags`).
 *   `<Entry><QualityCheck>` — "false" disables the password quality warning
     (`Entry::quality_check`).
-*   `<PreviousParentGroup>`, CustomIcon `Name`/`LastModificationTime`,
-    CustomData `LastModificationTime` and deleted-icon tombstones are not yet
-    parsed/serialized.
+*   `<Entry>`/`<Group><PreviousParentGroup>` — UUID of the previous parent
+    group (`Entry::previous_parent_group`/`Group::previous_parent_group`).
+*   `<Icon><Name>`/`<LastModificationTime>` — custom icon metadata
+    (`Icon::name`/`Icon::last_modification_time`).
+*   `<CustomData><Item><LastModificationTime>` — per-item modification time
+    (`Metadata::Field::last_modification_time`).
+*   `<Root><DeletedObjects><DeletedObject>` (UUID + DeletionTime) — deletion
+    tombstones for groups, entries and (since 4.1) icons
+    (`Metadata::DeletedObject`).
 
 `Export4` writes `0x00040001` only when the database uses 4.1-only features,
 otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`).
