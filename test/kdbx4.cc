@@ -914,6 +914,147 @@ TEST(Kdbx4Test, Kdbx41MetaAndTreeFeatures) {
   std::remove(dst_path.c_str());
 }
 
+// Locates the first byte after the KDBX 4 header fields, i.e. the start of
+// the stored header hash and the HMAC blocks.
+size_t FindKdbx4HeaderEnd(const std::string& data) {
+  size_t off = 12;
+  while (off + 5 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint32_t size = ReadU32(data.data() + off + 1);
+    off += 5;
+    if (size > data.size() - off)
+      break;
+    off += size;
+    if (id == 0)
+      break; // EndOfHeader.
+  }
+  return off;
+}
+
+// Returns the offset of the value bytes of the first header field with the
+// given id, or data.size() if no such field is present.
+size_t FindKdbx4FieldData(const std::string& data, uint8_t wanted_id) {
+  size_t off = 12;
+  while (off + 5 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint32_t size = ReadU32(data.data() + off + 1);
+    off += 5;
+    if (id == 0)
+      return data.size();
+    if (size > data.size() - off)
+      break;
+    if (id == wanted_id)
+      return off;
+    off += size;
+  }
+  return data.size();
+}
+
+TEST(Kdbx4Test, CorruptionDetected) {
+  // Export a deterministic, uncompressed database: header_end + 64 + 32 + 4
+  // must point inside the first content block.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+  std::string dst_path = GetTmpPath("kdbx4-integrity.kdbx");
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  ASSERT_NO_THROW(exporter.Export(dst_path, *db, Key("password")));
+
+  const std::string data = ReadFile(dst_path);
+  const size_t header_end = FindKdbx4HeaderEnd(data);
+  ASSERT_GE(header_end, 12U);
+  ASSERT_LE(header_end + 100, data.size()) << "file too short for a content block";
+
+  Key key("password");
+
+  // A flipped header field byte changes the computed header hash. The master
+  // seed is chosen because flipping it does not break later field parsing.
+  {
+    const size_t seed_off = FindKdbx4FieldData(data, 4);
+    ASSERT_LT(seed_off, data.size()) << "master seed field missing";
+    std::string corrupt = data;
+    corrupt[seed_off] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-header.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-header.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx4-corrupt-header.kdbx").c_str());
+  }
+
+  // The stored header hash is verified before any decryption.
+  {
+    std::string corrupt = data;
+    corrupt[header_end] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-headerhash.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-headerhash.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx4-corrupt-headerhash.kdbx").c_str());
+  }
+
+  // The stored header HMAC authenticates the header with the password.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 32] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx"), key), PasswordError);
+    std::remove(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx").c_str());
+  }
+
+  // A flipped HMAC over the first content block fails block verification.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 64] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx"), key), IoError);
+    std::remove(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx").c_str());
+  }
+
+  // A flipped ciphertext byte in the first content block must also be caught
+  // by the per-block HMAC.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 72] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-blockdata.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-blockdata.kdbx"), key), IoError);
+    std::remove(GetTmpPath("kdbx4-corrupt-blockdata.kdbx").c_str());
+  }
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, AttachmentRoundtripPreservesPayload) {
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  const std::string payload("binary\x00\x01\xfe\xff payload", 22);
+  auto binary = std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true));
+  auto attachment = std::make_shared<Entry::Attachment>();
+  attachment->set_name("secret.bin");
+  attachment->set_binary(binary);
+  db->root()->Entries().front()->AddAttachment(attachment);
+
+  const std::string dst_path = GetTmpPath("kdbx4-attachment.kdbx");
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  ASSERT_NO_THROW(exporter.Export(dst_path, *db, Key("password")));
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  ASSERT_NO_THROW({ reimported = importer.Import(dst_path, Key("password")); });
+  ASSERT_NE(reimported, nullptr);
+
+  const auto& attachments = reimported->root()->Entries().front()->attachments();
+  ASSERT_EQ(attachments.size(), 1U);
+  EXPECT_EQ(attachments[0]->name(), "secret.bin");
+  ASSERT_NE(attachments[0]->binary(), nullptr);
+  EXPECT_EQ(attachments[0]->binary()->data().value(), payload);
+  EXPECT_TRUE(attachments[0]->binary()->data().is_protected());
+
+  std::remove(dst_path.c_str());
+}
+
 #if LIBKEEPASS_AES_NI
 
 TEST(KdbxAesNi, TransformMatchesEVPReference) {

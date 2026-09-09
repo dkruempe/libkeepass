@@ -50,6 +50,12 @@ std::array<uint8_t, 32> hashed_basic_streambuf::GetBlockHash() const {
   return block_hash;
 }
 
+hashed_basic_streambuf::~hashed_basic_streambuf() {
+  // The block buffer transiently holds decrypted (or to-be-encrypted)
+  // content, so zeroize it before the streambuf is destroyed.
+  secure_zero(block_.data(), block_.size());
+}
+
 int hashed_istreambuf::underflow() {
   static constexpr std::array<uint8_t, 32> kEmptyHash = {{0}};
 
@@ -320,7 +326,12 @@ gzip_istreambuf::gzip_istreambuf(std::istream& src) : src_(src) {
   }
 }
 
-gzip_istreambuf::~gzip_istreambuf() { inflateEnd(&z_stream_); }
+gzip_istreambuf::~gzip_istreambuf() {
+  inflateEnd(&z_stream_);
+  // The buffers transiently hold decompressed (and compressed) data.
+  secure_zero(input_.data(), input_.size());
+  secure_zero(output_.data(), output_.size());
+}
 
 int gzip_istreambuf::underflow() {
   if (gptr() == egptr()) {
@@ -371,7 +382,11 @@ gzip_ostreambuf::gzip_ostreambuf(std::ostream& dst) : dst_(dst) {
   }
 }
 
-gzip_ostreambuf::~gzip_ostreambuf() { deflateEnd(&z_stream_); }
+gzip_ostreambuf::~gzip_ostreambuf() {
+  deflateEnd(&z_stream_);
+  // The buffer transiently holds uncompressed plaintext.
+  secure_zero(buffer_.data(), buffer_.size());
+}
 
 bool gzip_ostreambuf::WriteOutput(bool flush) {
   std::array<char, kBufferSize> out{};

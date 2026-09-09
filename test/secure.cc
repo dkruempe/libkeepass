@@ -21,11 +21,13 @@
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "libkeepass/secure.hh"
+#include "libkeepass/security.hh"
 
 using namespace keepass;
 
@@ -163,4 +165,50 @@ TEST(SecureBufferTest, SizeConsistency) {
   SecureBuffer<32> buf;
   EXPECT_EQ(buf.size(), 32U);
   EXPECT_EQ(static_cast<std::size_t>(buf.end() - buf.begin()), buf.size());
+}
+
+TEST(SecureBufferTest, MoveConstructionWipesSource) {
+  SecureBuffer<32> a;
+  a.fill(0x7F);
+  SecureBuffer<32> b(std::move(a));
+  EXPECT_EQ(b[0], 0x7FU);
+  for (uint8_t byte : a)
+    EXPECT_EQ(byte, 0U);
+}
+
+TEST(SecureBufferTest, MoveAssignmentWipesSource) {
+  SecureBuffer<32> a;
+  a.fill(0x5A);
+  SecureBuffer<32> b;
+  b.fill(0xFF);
+  b = std::move(a);
+  EXPECT_EQ(b[0], 0x5AU);
+  for (uint8_t byte : a)
+    EXPECT_EQ(byte, 0U);
+}
+
+TEST(SecureStringTest, MoveWipesSource) {
+  secure_string a("sensitive-value");
+  secure_string b(std::move(a));
+  EXPECT_EQ(b, "sensitive-value");
+  EXPECT_TRUE(a.empty());
+}
+
+TEST(SecureStringTest, ClearWipesContent) {
+  secure_string s("top-secret");
+  s.clear();
+  EXPECT_TRUE(s.empty());
+}
+
+TEST(ProtectTest, FlagAndValueRoundtrip) {
+  protect<secure_string> p(secure_string("secret"), true);
+  EXPECT_TRUE(p.is_protected());
+  EXPECT_EQ(p.value(), "secret");
+
+  p.set_value(secure_string("other"));
+  EXPECT_EQ(p.value(), "other");
+  EXPECT_TRUE(p.is_protected());
+
+  p.set_protected(false);
+  EXPECT_FALSE(p.is_protected());
 }

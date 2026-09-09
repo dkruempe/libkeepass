@@ -79,6 +79,34 @@ char* portable_strptime(const char* buf, const char* /*format*/, std::tm* tm) {
 
 namespace keepass {
 
+namespace {
+
+// Zeroizes the buffered content of a stringstream in place, so that
+// decrypted plaintext does not linger in the heap after parsing.
+void WipeStream(std::stringstream& stream) {
+  std::streambuf* buffer = stream.rdbuf();
+  std::streamsize size =
+      buffer->pubseekoff(0, std::ios_base::end, std::ios_base::in | std::ios_base::out);
+  buffer->pubseekoff(0, std::ios_base::beg, std::ios_base::in | std::ios_base::out);
+
+  static constexpr std::streamsize kChunkSize = 4096;
+  char zeros[kChunkSize] = {};
+  while (size > 0) {
+    std::streamsize chunk = size < kChunkSize ? size : kChunkSize;
+    if (buffer->sputn(zeros, chunk) != chunk)
+      return;
+    size -= chunk;
+  }
+}
+
+// Zeroizes the contents of a string in place.
+void WipeBuffer(std::string* buffer) {
+  if (buffer != nullptr && !buffer->empty())
+    secure_zero(buffer->data(), buffer->size());
+}
+
+} // namespace
+
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
 constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
 constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
@@ -1340,6 +1368,9 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
     ParseXml(hashed_stream, obfuscator, *db);
   }
 
+  // The content stream still holds the decrypted payload.
+  WipeStream(content);
+
   // Validate header hash.
   if (header_hash_ != header_hash)
     throw FormatError("Header checksum error in KDBX.");
@@ -1673,6 +1704,11 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   for (const auto& binary : inner_binaries)
     db->meta()->AddBinary(binary);
 
+  // The streams still hold the decrypted payload and the raw ciphertext.
+  WipeStream(plain);
+  WipeStream(content);
+  WipeBuffer(&ciphertext);
+
   return db;
 }
 
@@ -1816,6 +1852,9 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
 
   // Encrypt content.
   encrypt_cbc(content_stream, dst, *cipher);
+
+  // The content stream still holds the plaintext payload.
+  WipeStream(content_stream);
 }
 
 void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
@@ -2084,6 +2123,10 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
     conserve<uint32_t>(inner_header_stream, static_cast<uint32_t>(bin_data.size()));
     std::copy(bin_data.begin(), bin_data.end(),
               std::ostreambuf_iterator<char>(inner_header_stream));
+
+    // Attachment data is sensitive; wipe the transient copies.
+    WipeBuffer(&bin_data);
+    WipeStream(bin_stream);
   }
 
   conserve<uint8_t>(inner_header_stream, static_cast<uint8_t>(kKdbxInnerHeader::kEnd));
@@ -2125,6 +2168,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
       hmac_input.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(n));
       offset += n;
     }
+    WipeBuffer(&plain);
   }
 
   // ... and then wrap the ciphertext in HMAC protected blocks. In KDBX 4 the
@@ -2136,6 +2180,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   std::copy(std::istreambuf_iterator<char>(hmac_input), std::istreambuf_iterator<char>(),
             std::ostreambuf_iterator<char>(hmac_stream));
   hmac_stream.flush();
+
+  // The streams still hold the plaintext payload (and copies of it).
+  WipeStream(plain_stream);
+  WipeStream(inner_header_stream);
+  WipeStream(cipher_input);
 
   secure_zero(hmac_key.data(), hmac_key.size());
 }

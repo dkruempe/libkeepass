@@ -134,7 +134,8 @@ protected:
   std::array<uint8_t, 32> GetBlockHash() const;
 
 public:
-  virtual ~hashed_basic_streambuf() = default;
+  /// Destroys the streambuf, zeroizing any buffered block bytes.
+  virtual ~hashed_basic_streambuf();
 };
 
 /**
