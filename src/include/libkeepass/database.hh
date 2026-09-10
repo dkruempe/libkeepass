@@ -59,14 +59,14 @@ public:
   /// input. The key transform costs O(rounds), so an unbounded value lets a
   /// malformed file stall the importer (CPU-burn DoS). Legitimate databases
   /// stay far below this limit.
-  static constexpr uint64_t kMaxTransformRounds = 1u << 28;
+  static constexpr uint64_t kMaxTransformRounds = 1U << 28;
 
   /// Upper bounds on Argon2 key-derivation parameters accepted from untrusted
   /// input (memory is in KiB, matching the format). Argon2 costs
   /// O(iterations * memory), so unbounded values would allow CPU-burn and
   /// memory-exhaustion attacks from a malformed file.
-  static constexpr uint64_t kMaxArgon2MemoryKiB = 1u << 20;   // 1 GiB
-  static constexpr uint64_t kMaxArgon2Iterations = 1u << 20;
+  static constexpr uint64_t kMaxArgon2MemoryKiB = 1U << 20; // 1 GiB
+  static constexpr uint64_t kMaxArgon2Iterations = 1U << 20;
 
 private:
   std::shared_ptr<Group> root_;

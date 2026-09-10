@@ -172,7 +172,7 @@ TEST(SecureBufferTest, MoveConstructionWipesSource) {
   a.fill(0x7F);
   SecureBuffer<32> b(std::move(a));
   EXPECT_EQ(b[0], 0x7FU);
-  for (uint8_t byte : a)
+  for (uint8_t byte : a) // NOLINT(bugprone-use-after-move, clang-analyzer-cplusplus.Move)
     EXPECT_EQ(byte, 0U);
 }
 
@@ -183,7 +183,7 @@ TEST(SecureBufferTest, MoveAssignmentWipesSource) {
   b.fill(0xFF);
   b = std::move(a);
   EXPECT_EQ(b[0], 0x5AU);
-  for (uint8_t byte : a)
+  for (uint8_t byte : a) // NOLINT(bugprone-use-after-move, clang-analyzer-cplusplus.Move)
     EXPECT_EQ(byte, 0U);
 }
 
@@ -191,7 +191,7 @@ TEST(SecureStringTest, MoveWipesSource) {
   secure_string a("sensitive-value");
   secure_string b(std::move(a));
   EXPECT_EQ(b, "sensitive-value");
-  EXPECT_TRUE(a.empty());
+  EXPECT_TRUE(a.empty()); // NOLINT(bugprone-use-after-move)
 }
 
 TEST(SecureStringTest, ClearWipesContent) {

@@ -1028,7 +1028,7 @@ TEST(Kdbx4Test, AttachmentRoundtripPreservesPayload) {
   std::unique_ptr<Database> db =
       MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
 
-  const std::string payload("binary\x00\x01\xfe\xff payload", 22);
+  const std::string payload("binary\x00\x01\xfe\xff payload", 18);
   auto binary = std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true));
   auto attachment = std::make_shared<Entry::Attachment>();
   attachment->set_name("secret.bin");
