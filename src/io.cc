@@ -71,6 +71,20 @@ template <> std::vector<uint8_t> consume<std::vector<uint8_t>>(std::istream& src
   return data;
 }
 
+std::streamsize RemainingBytes(std::istream& src) {
+  std::streampos pos = src.tellg();
+  if (pos == std::streampos(-1))
+    return -1;
+  src.seekg(0, std::ios::end);
+  std::streampos end = src.tellg();
+  src.seekg(pos, std::ios::beg);
+
+  if (end == std::streampos(-1) || end < pos)
+    return -1;
+
+  return end - pos;
+}
+
 template <> void conserve<std::string>(std::ostream& dst, const std::string& val) {
   // KDB strings are NUL-terminated: consumers read up to (but not including)
   // the first NUL, so embedded NUL bytes cannot round-trip. Reject them

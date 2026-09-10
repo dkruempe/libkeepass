@@ -99,10 +99,17 @@ void WipeStream(std::stringstream& stream) {
   }
 }
 
-// Zeroizes the contents of a string in place.
-void WipeBuffer(std::string* buffer) {
-  if (buffer != nullptr && !buffer->empty())
-    secure_zero(buffer->data(), buffer->size());
+// Zeroizes the contents of a contiguous container (std::string, std::string
+// view or std::vector<char/uint8_t>) in place.
+// std::string::data() returns a const pointer in C++11, so cast it away for
+// the wipe; writing zeros never invalidates the container invariants.
+template <typename Container>
+void WipeBuffer(Container* buffer) {
+  if (buffer != nullptr && !buffer->empty()) {
+    secure_zero(
+        const_cast<typename Container::value_type*>(buffer->data()),
+        buffer->size() * sizeof(typename Container::value_type));
+  }
 }
 
 } // namespace
@@ -145,6 +152,14 @@ constexpr std::array<uint8_t, 8> kKdbxInnerRandomStreamInitVec = {0xe8, 0x30, 0x
 
 /** Seconds between 0001-01-01 and the Unix epoch (1970-01-01). */
 constexpr int64_t kKdbxEpochBias = 62135596800LL;
+
+/**
+ * Upper bound for a single outer header field. Real KDBX headers only contain
+ * short fields (cipher id, seeds, KDF parameters); the cap exists to reject
+ * crafted files whose declared field lengths would trigger unbounded
+ * allocations or reads before the header integrity check runs.
+ */
+constexpr uint32_t kMaxOuterHeaderFieldSize = 1U << 20;
 
 enum class kKdbxCompressionFlags : uint32_t {
   kNone,
@@ -1223,6 +1238,10 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
     // Read the header field into a separate buffer before parsing. This is to
     // guard against reading outside the field as well as for making sure to
     // read the complete field regardless of how much of it that we parse.
+    // KDBX 3 field sizes are 16 bit and thus always below the cap.
+    if (static_cast<uint64_t>(header_field.size) >
+        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
+      throw FormatError("Corrupt header field size in KDBX.");
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
                     [&src]() { return static_cast<char>(src.get()); });
@@ -1255,9 +1274,13 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
         throw FormatError("Illegal transform seed size in KDBX.");
       db->set_transform_seed(consume<std::array<uint8_t, 32>>(field));
       break;
-    case KdbxHeaderField::kTransformRounds:
-      db->set_transform_rounds(consume<uint32_t>(field));
+    case KdbxHeaderField::kTransformRounds: {
+      const uint32_t transform_rounds = consume<uint32_t>(field);
+      if (transform_rounds > Database::kMaxTransformRounds)
+        throw FormatError("KDBX header declares too many transform rounds.");
+      db->set_transform_rounds(transform_rounds);
       break;
+    }
     case KdbxHeaderField::kExcryptionInitVec:
       if (header_field.size != 16)
         throw FormatError("Illegal initialization vector size in KDBX.");
@@ -1284,6 +1307,10 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
       throw FormatError("Illegal header field in KDBX.");
       break;
     }
+
+    // The field stream transiently holds header material (master seed, key
+    // material) that is not part of the exported database object.
+    WipeStream(field);
   }
 
   // Compute the header hash.
@@ -1300,6 +1327,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   unsigned int out_len = 0;
   EVP_DigestFinal_ex(mdctx, header_hash.data(), &out_len);
   EVP_MD_CTX_free(mdctx);
+  WipeBuffer(&header_data);
 
   // Produce the final key used for encrypting the contents.
   SecureBuffer<32> transformed_key = key.Transform(db->transform_seed(), db->transform_rounds(),
@@ -1399,13 +1427,21 @@ void KdbxFile::ParseKdfParameters(std::istream& field, Database& db) {
     std::array<uint8_t, 32> seed_arr{};
     std::copy(seed.begin(), seed.end(), seed_arr.begin());
     db.set_transform_seed(seed_arr);
-    db.set_transform_rounds(vdict.GetUInt64("R"));
+    const uint64_t transform_rounds = vdict.GetUInt64("R");
+    if (transform_rounds > Database::kMaxTransformRounds)
+      throw FormatError("KDF parameters declare too many transform rounds.");
+    db.set_transform_rounds(transform_rounds);
   } else if (uuid == kKdbxKdfArgon2d || uuid == kKdbxKdfArgon2id) {
     db.set_kdf(uuid == kKdbxKdfArgon2d ? Database::Kdf::kArgon2d : Database::Kdf::kArgon2id);
 
     db.set_argon2_salt(vdict.GetBytes("S"));
-    db.set_argon2_iterations(vdict.GetUInt64("I"));
-    db.set_argon2_memory(vdict.GetUInt64("M"));
+    const uint64_t argon2_iterations = vdict.GetUInt64("I");
+    const uint64_t argon2_memory = vdict.GetUInt64("M");
+    if (argon2_iterations > Database::kMaxArgon2Iterations ||
+        argon2_memory > (Database::kMaxArgon2MemoryKiB << 10))
+      throw FormatError("Argon2 KDF parameters are out of bounds.");
+    db.set_argon2_iterations(argon2_iterations);
+    db.set_argon2_memory(argon2_memory);
     db.set_argon2_parallelism(vdict.GetUInt32("P"));
     db.set_argon2_version(vdict.GetUInt32("V"));
   } else {
@@ -1422,6 +1458,10 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     auto header_field = consume<Kdbx4HeaderField>(src);
 
     // Read the header field into a separate buffer before parsing.
+    if (header_field.size > kMaxOuterHeaderFieldSize ||
+        static_cast<uint64_t>(header_field.size) >
+            static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
+      throw FormatError("Corrupt header field size in KDBX 4 database.");
     std::stringstream field;
     std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
                     [&src]() { return static_cast<char>(src.get()); });
@@ -1474,6 +1514,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     default:
       throw FormatError("Illegal header field in KDBX.");
     }
+
+    // The field stream transiently holds header material (KDF salt, seed).
+    WipeStream(field);
   }
 
   // Compute the header hash over all bytes up to (but not including) the
@@ -1548,6 +1591,11 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     throw PasswordError();
   }
 
+  // The header buffer transiently holds key material (master seed, KDF salt,
+  // seed) and is no longer needed; zeroize it now that the hash and the HMAC
+  // have been verified.
+  WipeBuffer(&header_data);
+
   secure_zero(header_hmac_key.data(), header_hmac_key.size());
   secure_zero(computed_hmac, sizeof(computed_hmac));
 
@@ -1582,8 +1630,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   secure_zero(hmac_key.data(), hmac_key.size());
 
-  std::string ciphertext((std::istreambuf_iterator<char>(hmac_stream)),
-                         std::istreambuf_iterator<char>());
+  std::string ciphertext;
+  std::copy(std::istreambuf_iterator<char>(hmac_stream), std::istreambuf_iterator<char>(),
+            std::back_inserter(ciphertext));
 
   std::stringstream content;
   try {
@@ -1593,7 +1642,6 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     } else if (db->cipher() == Database::Cipher::kChaCha20) {
       // ChaCha20 is a stream cipher: the ciphertext is XORed with the
       // keystream (RFC 8439, 96-bit nonce) and needs no padding.
-      std::stringstream plaintext;
       std::array<uint8_t, 64> keystream{}, data{};
       size_t offset = 0;
       while (offset < ciphertext.size()) {
@@ -1602,11 +1650,13 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
         size_t n = std::min<size_t>(64, ciphertext.size() - offset);
         for (size_t i = 0; i < n; ++i)
           data[i] = static_cast<uint8_t>(ciphertext[offset + i]) ^ keystream[i];
-        plaintext.write(reinterpret_cast<const char*>(data.data()),
-                        static_cast<std::streamsize>(n));
+        content.write(reinterpret_cast<const char*>(data.data()),
+                      static_cast<std::streamsize>(n));
         offset += n;
       }
-      content.str(plaintext.str());
+      // The block buffers transiently hold the decrypted payload.
+      secure_zero(data.data(), data.size());
+      secure_zero(keystream.data(), keystream.size());
     } else {
       throw FormatError("Unknown cipher in KDBX 4 database.");
     }
@@ -1623,7 +1673,10 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     std::copy(std::istreambuf_iterator<char>(gzip_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain));
   } else {
-    plain.str(content.str());
+    // Move the data instead of copying through str(), which would leave an
+    // un-wipeable temporary copy of the decrypted payload behind.
+    std::copy(std::istreambuf_iterator<char>(content), std::istreambuf_iterator<char>(),
+              std::ostreambuf_iterator<char>(plain));
   }
   std::stringstream& xml_source = plain;
 
@@ -1637,6 +1690,12 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   while (!inner_done && xml_source.good()) {
     auto inner_id = static_cast<kKdbxInnerHeader>(consume<uint8_t>(xml_source));
     uint32_t inner_size = consume<uint32_t>(xml_source);
+
+    // Reject field sizes that cannot possibly fit into the remaining payload
+    // instead of looping/allocating up to the declared length.
+    if (static_cast<uint64_t>(inner_size) >
+        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(xml_source))))
+      throw FormatError("Corrupt inner header field size in KDBX 4 database.");
 
     switch (inner_id) {
     case kKdbxInnerHeader::kEnd:
@@ -1671,6 +1730,8 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
       inner_binaries.push_back(binary);
 
       secure_zero(data.data(), data.size());
+      // The stream buffer transiently holds the raw attachment payload.
+      WipeStream(raw_stream);
 
       binary_pool_.insert(std::make_pair(std::to_string(binary_pool_.size()), binary));
       break;
@@ -1818,6 +1879,11 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   // Write header to file.
   std::copy(std::istreambuf_iterator<char>(header_stream), std::istreambuf_iterator<char>(),
             std::ostreambuf_iterator<char>(dst));
+
+  // The header buffers transiently hold key material (master seed, transform
+  // seed, inner random stream key).
+  WipeBuffer(&header_data);
+  WipeStream(header_stream);
 
   // Prepare deobfuscation stream.
   std::array<uint8_t, 32> final_inner_random_stream_key{};
@@ -1999,6 +2065,10 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
       Kdbx4HeaderField(Kdbx4HeaderField::kKdfParameters, static_cast<uint32_t>(kdf_data.size())));
   std::copy(kdf_data.begin(), kdf_data.end(), std::ostreambuf_iterator<char>(header_stream));
 
+  // The KDF serialization transiently holds the salt/seed material.
+  WipeBuffer(&kdf_data);
+  WipeStream(kdf_stream);
+
   conserve<Kdbx4HeaderField>(
       header_stream, Kdbx4HeaderField(Kdbx4HeaderField::kEncryptionIv,
                                       db.cipher() == Database::Cipher::kChaCha20 ? 12 : 16));
@@ -2056,6 +2126,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
             std::ostreambuf_iterator<char>(dst));
   conserve<std::array<uint8_t, 32>>(dst, header_hash_);
   conserve<std::array<uint8_t, 32>>(dst, header_hmac);
+
+  // The header buffers transiently hold key material (master seed, KDF salt).
+  WipeBuffer(&header_data);
+  secure_zero(header_hmac.data(), header_hmac.size());
+  WipeStream(header_stream);
 
   // Prepare deobfuscation stream using a freshly generated inner random
   // stream key. KDBX 4 uses ChaCha20 for the inner random stream.
@@ -2118,7 +2193,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
       bin_stream.write(raw.data(), static_cast<std::streamsize>(raw.size()));
     }
 
-    std::string bin_data = bin_stream.str();
+    // Build the payload copy incrementally so that every copy that exists is
+    // reachable for wiping later on.
+    std::string bin_data;
+    std::copy(std::istreambuf_iterator<char>(bin_stream), std::istreambuf_iterator<char>(),
+              std::back_inserter(bin_data));
     conserve<uint8_t>(inner_header_stream, static_cast<uint8_t>(kKdbxInnerHeader::kBinaries));
     conserve<uint32_t>(inner_header_stream, static_cast<uint32_t>(bin_data.size()));
     std::copy(bin_data.begin(), bin_data.end(),
@@ -2151,12 +2230,18 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   }
 
   // Encrypt the plaintext payload first ...
-  std::stringstream cipher_input(plain_stream.str());
+  std::stringstream cipher_input;
   std::stringstream hmac_input;
   if (db.cipher() == Database::Cipher::kAes || db.cipher() == Database::Cipher::kTwofish) {
+    // Copy the plaintext into the input stream incrementally so that the copy
+    // lives in a stream buffer that can be wiped afterwards.
+    std::copy(std::istreambuf_iterator<char>(plain_stream), std::istreambuf_iterator<char>(),
+              std::ostreambuf_iterator<char>(cipher_input));
     encrypt_cbc(cipher_input, hmac_input, *cipher);
   } else {
-    std::string plain = plain_stream.str();
+    std::string plain;
+    std::copy(std::istreambuf_iterator<char>(plain_stream), std::istreambuf_iterator<char>(),
+              std::back_inserter(plain));
     std::array<uint8_t, 64> keystream{}, data{};
     size_t offset = 0;
     while (offset < plain.size()) {
@@ -2169,6 +2254,9 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
       offset += n;
     }
     WipeBuffer(&plain);
+    // The block buffers transiently hold the plaintext payload.
+    secure_zero(data.data(), data.size());
+    secure_zero(keystream.data(), keystream.size());
   }
 
   // ... and then wrap the ciphertext in HMAC protected blocks. In KDBX 4 the
@@ -2185,6 +2273,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   WipeStream(plain_stream);
   WipeStream(inner_header_stream);
   WipeStream(cipher_input);
+  WipeStream(hmac_input);
 
   secure_zero(hmac_key.data(), hmac_key.size());
 }

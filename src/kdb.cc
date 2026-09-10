@@ -199,6 +199,12 @@ std::shared_ptr<Group> KdbFile::ReadGroup(std::istream& src, uint32_t& id, uint1
     auto field_type = consume<uint16_t>(src);
     auto field_size = consume<uint32_t>(src);
 
+    // Reject field sizes that cannot fit into the remaining stream instead of
+    // looping up to the declared length.
+    if (static_cast<uint64_t>(field_size) >
+        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
+      throw FormatError("Corrupt group field size in KDB database.");
+
     // Read the complete group field into a separate buffer before parsing.
     // This is to guard against reading outside the field as well as for making
     // sure to read the complete field regardless of how much of it that we
@@ -307,6 +313,12 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
   while (src.good()) {
     auto field_type = consume<uint16_t>(src);
     auto field_size = consume<uint32_t>(src);
+
+    // Reject field sizes that cannot fit into the remaining stream instead of
+    // looping up to the declared length.
+    if (static_cast<uint64_t>(field_size) >
+        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
+      throw FormatError("Corrupt entry field size in KDB database.");
 
     // Read the complete entry field into a separate buffer before parsing.
     // This is to guard against reading outside the field as well as for making
@@ -519,6 +531,8 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   db->set_master_seed(header.master_seed);
   db->set_init_vector(header.init_vector);
   db->set_transform_seed(header.transform_seed);
+  if (header.transform_rounds > Database::kMaxTransformRounds)
+    throw FormatError("KDB header declares too many transform rounds.");
   db->set_transform_rounds(header.transform_rounds);
 
   // Produce the final key used for decrypting the contents.

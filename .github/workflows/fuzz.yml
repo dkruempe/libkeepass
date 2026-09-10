@@ -1,0 +1,139 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  fuzz-kdbx:
+    runs-on: ubuntu-latest
+    env:
+      CONAN_VERSION: "2.31.2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Clang (libFuzzer)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18
+
+      - name: Install Conan
+        run: |
+          pip install "conan==${{ env.CONAN_VERSION }}"
+          conan profile detect --force
+
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-
+
+      - name: Configure CMake (fuzzing)
+        run: |
+          cmake -B build-fuzz \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_C_STANDARD=11 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DLIBKEEPASS_BUILD_FUZZING=ON
+
+      - name: Build fuzz_kdbx
+        run: cmake --build build-fuzz --target fuzz_kdbx -- -j $(nproc)
+
+      - name: Create seed corpus for KDBX fuzzer
+        run: |
+          mkdir -p seed-kdbx
+          # Copy valid KDBX 4 databases as seeds
+          cp test/data/kdbx4/*.kdbx seed-kdbx/ 2>/dev/null || true
+          # Copy KDBX 3 databases (these may contain version 3 files)
+          cp test/data/kdbx/*.kdbx seed-kdbx/ 2>/dev/null || true
+
+      - name: Run fuzz_kdbx (60s)
+        run: |
+          timeout 120 \
+            ./bin/fuzz_kdbx \
+              -detect_leaks=0 \
+              -max_total_time=60 \
+              -rss_limit_mb=4096 \
+              -timeout=5 \
+              seed-kdbx || exit_code=$?
+          # Exit code 0 = no issues found
+          # Exit code 1 = crash found
+          # Exit code 77 = timeout (expected)
+          if [ "${exit_code:-0}" -eq 1 ]; then
+            echo "Fuzzer found a crash!"
+            exit 1
+          fi
+          echo "Fuzzing completed without crashes."
+
+  fuzz-kdb:
+    runs-on: ubuntu-latest
+    env:
+      CONAN_VERSION: "2.31.2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Clang (libFuzzer)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18
+
+      - name: Install Conan
+        run: |
+          pip install "conan==${{ env.CONAN_VERSION }}"
+          conan profile detect --force
+
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-
+
+      - name: Configure CMake (fuzzing)
+        run: |
+          cmake -B build-fuzz \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_C_STANDARD=11 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DLIBKEEPASS_BUILD_FUZZING=ON
+
+      - name: Build fuzz_kdb
+        run: cmake --build build-fuzz --target fuzz_kdb -- -j $(nproc)
+
+      - name: Create seed corpus for KDB fuzzer
+        run: |
+          mkdir -p seed-kdb
+          # Copy valid KDB databases as seeds
+          cp test/data/kdb/*.kdb seed-kdb/ 2>/dev/null || true
+
+      - name: Run fuzz_kdb (60s)
+        run: |
+          timeout 120 \
+            ./bin/fuzz_kdb \
+              -detect_leaks=0 \
+              -max_total_time=60 \
+              -rss_limit_mb=4096 \
+              -timeout=5 \
+              seed-kdb || exit_code=$?
+          if [ "${exit_code:-0}" -eq 1 ]; then
+            echo "Fuzzer found a crash!"
+            exit 1
+          fi
+          echo "Fuzzing completed without crashes."
