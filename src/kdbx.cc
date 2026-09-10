@@ -194,12 +194,7 @@ bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
     }
   }
 
-  for (const auto& subgroup : group->Groups()) {
-    if (GroupRequiresKdbx41(subgroup))
-      return true;
-  }
-
-  return false;
+  return std::any_of(group->Groups().begin(), group->Groups().end(), GroupRequiresKdbx41);
 }
 
 // Returns whether the database uses any KDBX 4.1-only features.

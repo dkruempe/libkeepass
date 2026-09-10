@@ -47,14 +47,13 @@ std::vector<uint8_t> ReadFileBytes(const std::string& path) {
   std::ifstream file(path, std::ios::binary);
   if (!file.is_open())
     throw std::runtime_error("cannot open test fixture: " + path);
-  return std::vector<uint8_t>(std::istreambuf_iterator<char>(file),
-                              std::istreambuf_iterator<char>());
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
 template <typename T> std::string ToBytesLE(T value) {
   std::string out(sizeof(T), '\0');
-  for (std::size_t i = 0; i < out.size(); ++i) {
-    out[i] = static_cast<char>(value & 0xff);
+  for (auto& byte : out) {
+    byte = static_cast<char>(value & 0xff);
     value >>= 8;
   }
   return out;
@@ -63,7 +62,8 @@ template <typename T> std::string ToBytesLE(T value) {
 // Locates the first occurrence of needle in haystack starting at begin.
 std::size_t Find(const std::vector<uint8_t>& haystack, const std::string& needle,
                  std::size_t begin = 0) {
-  auto it = std::search(haystack.begin() + begin, haystack.end(), needle.begin(), needle.end());
+  auto it = std::search(haystack.begin() + static_cast<std::ptrdiff_t>(begin), haystack.end(),
+                        needle.begin(), needle.end());
   if (it == haystack.end())
     throw std::runtime_error("pattern not found in fixture: " + needle);
   return static_cast<std::size_t>(it - haystack.begin());
@@ -82,7 +82,8 @@ template <typename Importer, typename... Args>
 std::unique_ptr<Database> ImportBytes(Importer& importer, const std::vector<uint8_t>& data,
                                       const Args&... args) {
   std::stringstream stream(std::ios::in | std::ios::out | std::ios::binary);
-  stream.write(reinterpret_cast<const char*>(data.data()), data.size());
+  stream.write(reinterpret_cast<const char*>(data.data()),
+               static_cast<std::streamsize>(data.size()));
   return importer.Import(stream, args...);
 }
 
@@ -140,7 +141,8 @@ TEST(RobustnessTest, Kdbx4TruncatedCiphertext) {
   Key key("password");
 
   const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
-  const std::vector<uint8_t> truncated(good.begin(), good.begin() + good.size() / 2);
+  const std::vector<uint8_t> truncated(good.begin(),
+                                       good.begin() + static_cast<std::ptrdiff_t>(good.size() / 2));
   EXPECT_THROW(ImportBytes(file, truncated, key), std::exception);
 }
 
