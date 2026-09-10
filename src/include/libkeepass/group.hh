@@ -48,6 +48,8 @@ private:
   std::weak_ptr<Group> parent_;
   std::string name_;
   std::string notes_;
+  std::string tags_;
+  std::array<uint8_t, 16> previous_parent_group_ = {{0}};
   std::time_t creation_time_ = 0;
   std::time_t modification_time_ = 0;
   std::time_t access_time_ = 0;
@@ -98,6 +100,20 @@ public:
 
   /// Sets the group notes.
   void set_notes(const std::string& notes) { notes_ = notes; }
+
+  /// Returns the tags (space-separated).
+  const std::string& tags() const { return tags_; }
+
+  /// Sets the tags (space-separated).
+  void set_tags(const std::string& tags) { tags_ = tags; }
+
+  /// Returns the UUID of the previous parent group (all-zero if unset).
+  const std::array<uint8_t, 16>& previous_parent_group() const { return previous_parent_group_; }
+
+  /// Sets the UUID of the previous parent group (KDBX 4.1); all-zero to unset.
+  void set_previous_parent_group(const std::array<uint8_t, 16>& uuid) {
+    previous_parent_group_ = uuid;
+  }
 
   /// Returns the creation time.
   std::time_t creation_time() const { return creation_time_; }

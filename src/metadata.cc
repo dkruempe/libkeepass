@@ -29,4 +29,6 @@ void Metadata::AddField(const std::string& key, const std::string& value) {
   fields_.emplace_back(key, value);
 }
 
+void Metadata::AddField(const Field& field) { fields_.push_back(field); }
+
 } // namespace keepass

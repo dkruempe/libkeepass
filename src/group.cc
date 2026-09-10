@@ -202,11 +202,12 @@ std::string Group::ToJson() const {
 bool Group::operator==(const Group& other) const {
   return uuid_ == other.uuid_ && icon_ == other.icon_ &&
          custom_icon_.lock() == other.custom_icon_.lock() && name_ == other.name_ &&
-         notes_ == other.notes_ && creation_time_ == other.creation_time_ &&
-         modification_time_ == other.modification_time_ && access_time_ == other.access_time_ &&
-         expiry_time_ == other.expiry_time_ && move_time_ == other.move_time_ &&
-         flags_ == other.flags_ && expires_ == other.expires_ && expanded_ == other.expanded_ &&
-         usage_count_ == other.usage_count_ &&
+         notes_ == other.notes_ && tags_ == other.tags_ &&
+         previous_parent_group_ == other.previous_parent_group_ &&
+         creation_time_ == other.creation_time_ && modification_time_ == other.modification_time_ &&
+         access_time_ == other.access_time_ && expiry_time_ == other.expiry_time_ &&
+         move_time_ == other.move_time_ && flags_ == other.flags_ && expires_ == other.expires_ &&
+         expanded_ == other.expanded_ && usage_count_ == other.usage_count_ &&
          default_autotype_sequence_ == other.default_autotype_sequence_ &&
          autotype_ == other.autotype_ && search_ == other.search_ &&
          last_visible_entry_.lock() == other.last_visible_entry_.lock() &&

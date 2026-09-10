@@ -39,6 +39,11 @@ void VariantDictionary::Parse(std::istream& src) {
 
   entries_.clear();
 
+  constexpr uint32_t kMaxKeyLength = 256;
+  constexpr uint32_t kMaxValueLength = 1U << 20;  // 1 MiB
+  constexpr uint32_t kMaxTotalLength = 16U << 20; // 16 MiB
+  uint64_t total_length = 0;
+
   while (src.good()) {
     uint8_t type_byte = 0;
     src.read(reinterpret_cast<char*>(&type_byte), 1);
@@ -52,23 +57,29 @@ void VariantDictionary::Parse(std::istream& src) {
     src.read(reinterpret_cast<char*>(&key_len), sizeof(key_len));
     if (src.gcount() != sizeof(key_len))
       throw FormatError("Corrupt variant dictionary key length.");
+    if (key_len > kMaxKeyLength || key_len > kMaxTotalLength - total_length)
+      throw FormatError("Excessive variant dictionary key length.");
 
     std::string key(key_len, '\0');
     if (key_len > 0)
       src.read(key.data(), key_len);
     if (src.gcount() != static_cast<std::streamsize>(key_len))
       throw FormatError("Corrupt variant dictionary key.");
+    total_length += key_len;
 
     uint32_t value_len = 0;
     src.read(reinterpret_cast<char*>(&value_len), sizeof(value_len));
     if (src.gcount() != sizeof(value_len))
       throw FormatError("Corrupt variant dictionary value length.");
+    if (value_len > kMaxValueLength || value_len > kMaxTotalLength - total_length)
+      throw FormatError("Excessive variant dictionary value length.");
 
     std::vector<uint8_t> value(value_len, 0);
     if (value_len > 0)
       src.read(reinterpret_cast<char*>(value.data()), value_len);
     if (src.gcount() != static_cast<std::streamsize>(value_len))
       throw FormatError("Corrupt variant dictionary value.");
+    total_length += value_len;
 
     Entry entry;
     entry.type = static_cast<Type>(type_byte);

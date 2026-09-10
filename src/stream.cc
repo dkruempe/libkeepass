@@ -17,6 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "libkeepass/io.hh"
+
 #include "libkeepass/stream.hh"
 
 #include <cassert>
@@ -50,6 +52,12 @@ std::array<uint8_t, 32> hashed_basic_streambuf::GetBlockHash() const {
   return block_hash;
 }
 
+hashed_basic_streambuf::~hashed_basic_streambuf() {
+  // The block buffer transiently holds decrypted (or to-be-encrypted)
+  // content, so zeroize it before the streambuf is destroyed.
+  secure_zero(block_.data(), block_.size());
+}
+
 int hashed_istreambuf::underflow() {
   static constexpr std::array<uint8_t, 32> kEmptyHash = {{0}};
 
@@ -60,6 +68,10 @@ int hashed_istreambuf::underflow() {
     if (header.block_index != block_index_)
       throw IoError("Block index mismatch.");
     block_index_++;
+
+    const std::streamsize remaining = RemainingBytes(src_);
+    if (remaining >= 0 && header.block_size > static_cast<uint64_t>(remaining))
+      throw IoError("Block read error.");
 
     block_.clear();
     block_.resize(header.block_size);
@@ -152,7 +164,12 @@ std::array<uint8_t, 64> hmac_istreambuf::GetCurrentHmacKey() const {
   return hmac_key;
 }
 
-hmac_istreambuf::~hmac_istreambuf() { secure_zero(hmac_key_.data(), hmac_key_.size()); }
+hmac_istreambuf::~hmac_istreambuf() {
+  secure_zero(hmac_key_.data(), hmac_key_.size());
+  // The block buffer transiently holds the (encrypted) payload bytes that are
+  // covered by the HMAC; zeroize it along with the key material.
+  secure_zero(block_.data(), block_.size());
+}
 
 int hmac_istreambuf::underflow() {
   if (gptr() == egptr()) {
@@ -182,6 +199,10 @@ int hmac_istreambuf::underflow() {
     mac_input.insert(mac_input.end(), reinterpret_cast<uint8_t*>(&block_size),
                      reinterpret_cast<uint8_t*>(&block_size) + 4);
     if (block_size > 0) {
+      const std::streamsize remaining = RemainingBytes(src_);
+      if (remaining >= 0 && block_size > static_cast<uint64_t>(remaining))
+        throw IoError("Block read error.");
+
       block_.clear();
       block_.resize(block_size);
       src_.read(block_.data(), static_cast<std::streamsize>(block_size));
@@ -202,6 +223,9 @@ int hmac_istreambuf::underflow() {
 
     secure_zero(key_64.data(), key_64.size());
     secure_zero(digest, sizeof(digest));
+
+    // The MAC input is a transient copy of the (encrypted) block payload.
+    secure_zero(mac_input.data(), mac_input.size());
 
     ++block_index_;
 
@@ -235,7 +259,12 @@ std::array<uint8_t, 64> hmac_ostreambuf::GetCurrentHmacKey() const {
   return hmac_key;
 }
 
-hmac_ostreambuf::~hmac_ostreambuf() { secure_zero(hmac_key_.data(), hmac_key_.size()); }
+hmac_ostreambuf::~hmac_ostreambuf() {
+  secure_zero(hmac_key_.data(), hmac_key_.size());
+  // The block buffer transiently holds the (encrypted) payload bytes that are
+  // covered by the HMAC; zeroize it along with the key material.
+  secure_zero(block_.data(), block_.size());
+}
 
 bool hmac_ostreambuf::FlushBlock() {
   std::array<uint8_t, 64> key_64 = GetCurrentHmacKey();
@@ -261,6 +290,9 @@ bool hmac_ostreambuf::FlushBlock() {
        KEEPASS_HMAC_DATA_LEN(mac_input.size()), digest, &digest_len);
 
   secure_zero(key_64.data(), key_64.size());
+
+  // The MAC input is a transient copy of the (encrypted) block payload.
+  secure_zero(mac_input.data(), mac_input.size());
 
   dst_.write(reinterpret_cast<const char*>(digest), 32);
   dst_.write(reinterpret_cast<const char*>(&block_size), 4);
@@ -320,7 +352,12 @@ gzip_istreambuf::gzip_istreambuf(std::istream& src) : src_(src) {
   }
 }
 
-gzip_istreambuf::~gzip_istreambuf() { inflateEnd(&z_stream_); }
+gzip_istreambuf::~gzip_istreambuf() {
+  inflateEnd(&z_stream_);
+  // The buffers transiently hold decompressed (and compressed) data.
+  secure_zero(input_.data(), input_.size());
+  secure_zero(output_.data(), output_.size());
+}
 
 int gzip_istreambuf::underflow() {
   if (gptr() == egptr()) {
@@ -371,7 +408,11 @@ gzip_ostreambuf::gzip_ostreambuf(std::ostream& dst) : dst_(dst) {
   }
 }
 
-gzip_ostreambuf::~gzip_ostreambuf() { deflateEnd(&z_stream_); }
+gzip_ostreambuf::~gzip_ostreambuf() {
+  deflateEnd(&z_stream_);
+  // The buffer transiently holds uncompressed plaintext.
+  secure_zero(buffer_.data(), buffer_.size());
+}
 
 bool gzip_ostreambuf::WriteOutput(bool flush) {
   std::array<char, kBufferSize> out{};

@@ -223,6 +223,8 @@ private:
   protect<secure_string> password_;
   protect<secure_string> notes_;
   std::string tags_;
+  bool quality_check_ = true;
+  std::array<uint8_t, 16> previous_parent_group_ = {{0}};
   std::time_t creation_time_ = 0;
   std::time_t modification_time_ = 0;
   std::time_t access_time_ = 0;
@@ -300,6 +302,20 @@ public:
 
   /// Sets the tags (space-separated).
   void set_tags(const std::string& tags) { tags_ = tags; }
+
+  /// Returns whether the password quality warning is enabled for this entry.
+  bool quality_check() const { return quality_check_; }
+
+  /// Sets whether the password quality warning is enabled for this entry.
+  void set_quality_check(bool quality_check) { quality_check_ = quality_check; }
+
+  /// Returns the UUID of the previous parent group (all-zero if unset).
+  const std::array<uint8_t, 16>& previous_parent_group() const { return previous_parent_group_; }
+
+  /// Sets the UUID of the previous parent group (KDBX 4.1); all-zero to unset.
+  void set_previous_parent_group(const std::array<uint8_t, 16>& uuid) {
+    previous_parent_group_ = uuid;
+  }
 
   /// Returns the creation time.
   std::time_t creation_time() const { return creation_time_; }

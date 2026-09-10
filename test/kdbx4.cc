@@ -64,6 +64,7 @@ constexpr std::array<uint8_t, 16> kKdfArgon2id = {{0x9e, 0x29, 0x8b, 0x19, 0x56,
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
 constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
 constexpr uint32_t kKdbxVersion4 = 0x00040000;
+constexpr uint32_t kKdbxVersion4_1 = 0x00040001;
 constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
 
 std::string GetTestPath(const std::string& name) {
@@ -782,6 +783,274 @@ TEST(Kdbx4Test, ComplexStructureRoundtrip) {
   EXPECT_EQ(custom_fields[0].value()->str(), "custom value");
   ASSERT_EQ(reimported_entry->history().size(), 1U);
   EXPECT_EQ(reimported_entry->history()[0]->password()->str(), "oldsecret");
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, Kdbx41Features) {
+  // Group tags and a disabled quality check are KDBX 4.1-only features. Their
+  // presence must trigger writing version 0x00040001 and survive a roundtrip.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  auto subgroup = db->root()->Groups().front();
+  subgroup->set_tags("finance banking");
+
+  auto entry = db->root()->Entries().front();
+  entry->set_quality_check(false);
+
+  // A group/entry pair without 4.1 features must not force the higher version.
+  auto plain_group = std::make_shared<Group>();
+  plain_group->set_name("Plain");
+  auto plain_entry = std::make_shared<Entry>();
+  plain_entry->set_title(protect<secure_string>("PlainEntry", false));
+  plain_group->AddEntry(plain_entry);
+  db->root()->AddGroup(plain_group);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-41.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4_1);
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
+  ASSERT_NE(reimported, nullptr);
+  ExpectSameDatabase(*db, *reimported);
+
+  EXPECT_EQ(reimported->root()->Groups().front()->tags(), "finance banking");
+  EXPECT_EQ(reimported->root()->Groups()[1]->tags(), "");
+  EXPECT_FALSE(reimported->root()->Entries().front()->quality_check());
+  EXPECT_TRUE(reimported->root()->Groups()[1]->Entries().front()->quality_check());
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, Kdbx40VersionWithout41Features) {
+  // Without any KDBX 4.1 features the exporter must keep writing 0x00040000.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-40.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4);
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, Kdbx41MetaAndTreeFeatures) {
+  // Covers the remaining KDBX 4.1 additions: entry/group PreviousParentGroup,
+  // custom icon Name and LastModificationTime, custom data item
+  // LastModificationTime and deleted-object tombstones.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  // Custom icon with a name and modification time.
+  std::array<uint8_t, 16> icon_uuid = {{0x41, 0x01}};
+  auto icon = std::make_shared<Icon>(icon_uuid, std::vector<uint8_t>{0x89, 0x50, 0x4e, 0x47});
+  icon->set_name("MyIcon");
+  icon->set_last_modification_time(1700000500);
+  db->meta()->AddIcon(icon);
+
+  // Custom data item with a modification time.
+  Metadata::Field field("kdbx41-key", "kdbx41-value");
+  field.set_last_modification_time(1700000600);
+  db->meta()->AddField(field);
+
+  // Deleted-object tombstone.
+  std::array<uint8_t, 16> deleted_uuid = {{0xde, 0xad, 0xbe, 0xef}};
+  db->meta()->AddDeletedObject(Metadata::DeletedObject(deleted_uuid, 1700000700));
+
+  // Previous parent groups on an entry and a group.
+  auto entry = db->root()->Entries().front();
+  entry->set_previous_parent_group(icon_uuid);
+  auto subgroup = db->root()->Groups().front();
+  subgroup->set_previous_parent_group(deleted_uuid);
+
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  Key key("password");
+  std::string dst_path = GetTmpPath("kdbx4-41-meta.kdbx");
+
+  EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+  HeaderInfo header = ReadHeader(ReadFile(dst_path));
+  EXPECT_EQ(header.version, kKdbxVersion4_1);
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
+  ASSERT_NE(reimported, nullptr);
+  ExpectSameDatabase(*db, *reimported);
+
+  ASSERT_EQ(reimported->meta()->icons().size(), 1U);
+  EXPECT_EQ(reimported->meta()->icons()[0]->uuid(), icon_uuid);
+  EXPECT_EQ(reimported->meta()->icons()[0]->name(), "MyIcon");
+  EXPECT_EQ(reimported->meta()->icons()[0]->last_modification_time(), 1700000500);
+
+  ASSERT_EQ(reimported->meta()->fields().size(), 1U); // just kdbx41-key
+  const auto& field2 =
+      std::find_if(reimported->meta()->fields().begin(), reimported->meta()->fields().end(),
+                   [](const Metadata::Field& f) { return f.key() == "kdbx41-key"; });
+  ASSERT_NE(field2, reimported->meta()->fields().end());
+  EXPECT_EQ(field2->value(), "kdbx41-value");
+  EXPECT_EQ(field2->last_modification_time(), 1700000600);
+
+  ASSERT_EQ(reimported->meta()->deleted_objects().size(), 1U);
+  EXPECT_EQ(reimported->meta()->deleted_objects()[0].uuid(), deleted_uuid);
+  EXPECT_EQ(reimported->meta()->deleted_objects()[0].deletion_time(), 1700000700);
+
+  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group(), icon_uuid);
+  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group(), deleted_uuid);
+
+  std::remove(dst_path.c_str());
+}
+
+// Locates the first byte after the KDBX 4 header fields, i.e. the start of
+// the stored header hash and the HMAC blocks.
+size_t FindKdbx4HeaderEnd(const std::string& data) {
+  size_t off = 12;
+  while (off + 5 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint32_t size = ReadU32(data.data() + off + 1);
+    off += 5;
+    if (size > data.size() - off)
+      break;
+    off += size;
+    if (id == 0)
+      break; // EndOfHeader.
+  }
+  return off;
+}
+
+// Returns the offset of the value bytes of the first header field with the
+// given id, or data.size() if no such field is present.
+size_t FindKdbx4FieldData(const std::string& data, uint8_t wanted_id) {
+  size_t off = 12;
+  while (off + 5 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint32_t size = ReadU32(data.data() + off + 1);
+    off += 5;
+    if (id == 0)
+      return data.size();
+    if (size > data.size() - off)
+      break;
+    if (id == wanted_id)
+      return off;
+    off += size;
+  }
+  return data.size();
+}
+
+TEST(Kdbx4Test, CorruptionDetected) {
+  // Export a deterministic, uncompressed database: header_end + 64 + 32 + 4
+  // must point inside the first content block.
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+  std::string dst_path = GetTmpPath("kdbx4-integrity.kdbx");
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  ASSERT_NO_THROW(exporter.Export(dst_path, *db, Key("password")));
+
+  const std::string data = ReadFile(dst_path);
+  const size_t header_end = FindKdbx4HeaderEnd(data);
+  ASSERT_GE(header_end, 12U);
+  ASSERT_LE(header_end + 100, data.size()) << "file too short for a content block";
+
+  Key key("password");
+
+  // A flipped header field byte changes the computed header hash. The master
+  // seed is chosen because flipping it does not break later field parsing.
+  {
+    const size_t seed_off = FindKdbx4FieldData(data, 4);
+    ASSERT_LT(seed_off, data.size()) << "master seed field missing";
+    std::string corrupt = data;
+    corrupt[seed_off] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-header.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-header.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx4-corrupt-header.kdbx").c_str());
+  }
+
+  // The stored header hash is verified before any decryption.
+  {
+    std::string corrupt = data;
+    corrupt[header_end] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-headerhash.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-headerhash.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx4-corrupt-headerhash.kdbx").c_str());
+  }
+
+  // The stored header HMAC authenticates the header with the password.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 32] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx"), key), PasswordError);
+    std::remove(GetTmpPath("kdbx4-corrupt-headerhmac.kdbx").c_str());
+  }
+
+  // A flipped HMAC over the first content block fails block verification.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 64] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx"), key), IoError);
+    std::remove(GetTmpPath("kdbx4-corrupt-blockhmac.kdbx").c_str());
+  }
+
+  // A flipped ciphertext byte in the first content block must also be caught
+  // by the per-block HMAC.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 72] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx4-corrupt-blockdata.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx4-corrupt-blockdata.kdbx"), key), IoError);
+    std::remove(GetTmpPath("kdbx4-corrupt-blockdata.kdbx").c_str());
+  }
+
+  std::remove(dst_path.c_str());
+}
+
+TEST(Kdbx4Test, AttachmentRoundtripPreservesPayload) {
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2d, false);
+
+  const std::string payload("binary\x00\x01\xfe\xff payload", 22);
+  auto binary = std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true));
+  auto attachment = std::make_shared<Entry::Attachment>();
+  attachment->set_name("secret.bin");
+  attachment->set_binary(binary);
+  db->root()->Entries().front()->AddAttachment(attachment);
+
+  const std::string dst_path = GetTmpPath("kdbx4-attachment.kdbx");
+  KdbxFile exporter;
+  exporter.set_write_kdbx4(true);
+  ASSERT_NO_THROW(exporter.Export(dst_path, *db, Key("password")));
+
+  KdbxFile importer;
+  std::unique_ptr<Database> reimported;
+  ASSERT_NO_THROW({ reimported = importer.Import(dst_path, Key("password")); });
+  ASSERT_NE(reimported, nullptr);
+
+  const auto& attachments = reimported->root()->Entries().front()->attachments();
+  ASSERT_EQ(attachments.size(), 1U);
+  EXPECT_EQ(attachments[0]->name(), "secret.bin");
+  ASSERT_NE(attachments[0]->binary(), nullptr);
+  EXPECT_EQ(attachments[0]->binary()->data().value(), payload);
+  EXPECT_TRUE(attachments[0]->binary()->data().is_protected());
 
   std::remove(dst_path.c_str());
 }

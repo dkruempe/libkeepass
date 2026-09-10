@@ -50,6 +50,16 @@ template <typename T> inline T consume(std::istream& src) {
   return val;
 }
 
+/**
+ * @brief Returns the number of bytes available from the current position of
+ *        the stream up to its end, or -1 if the stream does not support or
+ *        cannot report seeking.
+ *
+ * Intended to bound reads driven by untrusted length fields without having to
+ * cap them at an arbitrary value.
+ */
+LIBKEEPASS_API std::streamsize RemainingBytes(std::istream& src);
+
 /// Reads a length-prefixed string from the stream.
 template <> LIBKEEPASS_API std::string consume<std::string>(std::istream& src);
 

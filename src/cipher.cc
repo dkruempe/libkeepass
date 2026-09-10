@@ -57,6 +57,11 @@ void block_transform(std::istream& src, std::ostream& dst, BlockOperation<N>&& o
 
     dst.write(reinterpret_cast<const char*>(dst_block.data()),
               static_cast<std::streamsize>(dst_bytes));
+
+    // The block buffers transiently hold plaintext (encrypt input and decrypt
+    // output), so zeroize them after each block.
+    keepass::secure_zero(src_block.data(), src_block.size());
+    keepass::secure_zero(dst_block.data(), dst_block.size());
   }
 }
 
@@ -106,6 +111,9 @@ std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32>& src, const Ci
   cipher.Encrypt(src_block, dst_block);
   std::copy(dst_block.begin(), dst_block.end(), dst.begin() + 16);
 
+  secure_zero(src_block.data(), src_block.size());
+  secure_zero(dst_block.data(), dst_block.size());
+
   return dst;
 }
 
@@ -120,6 +128,9 @@ std::array<uint8_t, 32> decrypt_ecb(const std::array<uint8_t, 32>& src, const Ci
   std::copy_n(src.begin() + 16, 16, src_block.begin());
   cipher.Decrypt(src_block, dst_block);
   std::copy(dst_block.begin(), dst_block.end(), dst.begin() + 16);
+
+  secure_zero(src_block.data(), src_block.size());
+  secure_zero(dst_block.data(), dst_block.size());
 
   return dst;
 }

@@ -38,6 +38,54 @@ std::string GetTmpPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/tmp/" + name;
 }
 
+std::string ReadFile(const std::string& path) {
+  std::ifstream file(path, std::ios::in | std::ios::binary);
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+void WriteFile(const std::string& path, const std::string& data) {
+  std::ofstream file(path, std::ios::out | std::ios::binary);
+  file.write(data.data(), static_cast<std::streamsize>(data.size()));
+}
+
+// Locates the first byte after the KDBX 3 header fields, i.e. the start of
+// the hashed content blocks.
+size_t FindKdbx3HeaderEnd(const std::string& data) {
+  size_t off = 12;
+  while (off + 3 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint16_t size = static_cast<uint16_t>(static_cast<uint8_t>(data[off + 1])) |
+                          (static_cast<uint16_t>(static_cast<uint8_t>(data[off + 2])) << 8);
+    off += 3;
+    if (size > data.size() - off)
+      break;
+    off += size;
+    if (id == 0)
+      break; // End of header.
+  }
+  return off;
+}
+
+// Returns the offset of the value bytes of the first header field with the
+// given id, or data.size() if no such field is present.
+size_t FindKdbx3FieldData(const std::string& data, uint8_t wanted_id) {
+  size_t off = 12;
+  while (off + 3 <= data.size()) {
+    const uint8_t id = static_cast<uint8_t>(data[off]);
+    const uint16_t size = static_cast<uint16_t>(static_cast<uint8_t>(data[off + 1])) |
+                          (static_cast<uint16_t>(static_cast<uint8_t>(data[off + 2])) << 8);
+    off += 3;
+    if (id == 0)
+      return data.size();
+    if (size > data.size() - off)
+      break;
+    if (id == wanted_id)
+      return off;
+    off += size;
+  }
+  return data.size();
+}
+
 std::string GetTestJson(const std::string& name) {
   std::ifstream file(GetTestPath(name));
   std::string file_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -741,6 +789,57 @@ TEST(KdbxTest, ExportComplex1KeyFileCompressed) {
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), json);
+}
+
+TEST(KdbxTest, CorruptionDetected) {
+  const std::string data = ReadFile(GetTestPath("groups-1-empty-pw-aes.kdbx"));
+  ASSERT_GT(data.size(), 200U);
+
+  const size_t header_end = FindKdbx3HeaderEnd(data);
+  ASSERT_GT(header_end, 12U);
+  ASSERT_LE(header_end + 40, data.size()) << "file too short for a content block";
+
+  Key key("password");
+
+  // The master seed takes part in the key derivation; flipping it must make
+  // decryption fail instead of accepting a tampered header.
+  {
+    const size_t seed_off = FindKdbx3FieldData(data, 4);
+    ASSERT_LT(seed_off, data.size()) << "master seed field missing";
+    std::string corrupt = data;
+    corrupt[seed_off] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx3-corrupt-seed.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx3-corrupt-seed.kdbx"), key), PasswordError);
+    std::remove(GetTmpPath("kdbx3-corrupt-seed.kdbx").c_str());
+  }
+
+  // A flipped byte in the inner random stream key field does not break
+  // decryption but changes the header hash stored in <HeaderHash>.
+  {
+    const size_t key_off = FindKdbx3FieldData(data, 8);
+    ASSERT_LT(key_off, data.size()) << "inner random stream key field missing";
+    std::string corrupt = data;
+    corrupt[key_off] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx3-corrupt-innerkey.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx3-corrupt-innerkey.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx3-corrupt-innerkey.kdbx").c_str());
+  }
+
+  // A flipped byte in the first content block header fails the SHA-256 block
+  // checksum. The hashed stream raises IoError, but the XML parser reads
+  // through a std::istream whose default exception mask suppresses the
+  // streambuf exception, so the import reports the corruption as a malformed
+  // XML document instead.
+  {
+    std::string corrupt = data;
+    corrupt[header_end + 4 + 32 + 4] ^= 0x01;
+    WriteFile(GetTmpPath("kdbx3-corrupt-block.kdbx"), corrupt);
+    KdbxFile file;
+    EXPECT_THROW(file.Import(GetTmpPath("kdbx3-corrupt-block.kdbx"), key), FormatError);
+    std::remove(GetTmpPath("kdbx3-corrupt-block.kdbx").c_str());
+  }
 }
 
 TEST(KdbxTest, ExportComplex1KeyFileAndPassword) {

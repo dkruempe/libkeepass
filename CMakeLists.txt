@@ -30,6 +30,12 @@ if (BUILD_TESTING)
     ADD_SUBDIRECTORY(test)
 endif()
 
+# Fuzzing (libFuzzer targets). Requires Clang; see fuzz/CMakeLists.txt.
+option(LIBKEEPASS_BUILD_FUZZING "Build libFuzzer fuzz targets" OFF)
+if (LIBKEEPASS_BUILD_FUZZING)
+    ADD_SUBDIRECTORY(fuzz)
+endif()
+
 # Packaging (CPack)
 set(CPACK_PACKAGE_NAME libkeepass)
 set(CPACK_PACKAGE_VENDOR "Dominik Kruempelmann")

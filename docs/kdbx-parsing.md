@@ -29,7 +29,9 @@ The version's critical mask `0xffff0000` selects the parser
 (`KdbxFile::Import`, `src/kdbx.cc:1008`):
 
 *   `0x00030000` → `Import3` (KDBX 3)
-*   `0x00040000` → `Import4` (KDBX 4)
+*   `0x00040000` → `Import4` (KDBX 4.0)
+*   `0x00040001` → `Import4` (KDBX 4.1; same container, only the XML body
+    schema differs, see "KDBX 4.1" below)
 *   anything else → `FormatError`
 
 ## Header fields
@@ -147,6 +149,29 @@ inner random stream. `ParseProtectedString` decodes and deobfuscates them into
 `protect<std::string>`; `WriteProtectedString` does the reverse on export.
 The obfuscator is a `RandomObfuscator` (`src/random.cc`) over Salsa20 (KDBX 3)
 or Salsa20/ChaCha20 (KDBX 4).
+
+## KDBX 4.1
+
+KDBX 4.1 (`0x00040001`) is read and written via the same `Import4`/`Export4`
+pipeline as KDBX 4.0; header, HMAC, cipher and inner stream are unchanged.
+Only the XML body schema is extended (`src/kdbx.cc:615`, `:733`, `:845`,
+`:900`):
+
+*   `<Group><Tags>` — space-separated group tags (`Group::tags`).
+*   `<Entry><QualityCheck>` — "false" disables the password quality warning
+    (`Entry::quality_check`).
+*   `<Entry>`/`<Group><PreviousParentGroup>` — UUID of the previous parent
+    group (`Entry::previous_parent_group`/`Group::previous_parent_group`).
+*   `<Icon><Name>`/`<LastModificationTime>` — custom icon metadata
+    (`Icon::name`/`Icon::last_modification_time`).
+*   `<CustomData><Item><LastModificationTime>` — per-item modification time
+    (`Metadata::Field::last_modification_time`).
+*   `<Root><DeletedObjects><DeletedObject>` (UUID + DeletionTime) — deletion
+    tombstones for groups, entries and (since 4.1) icons
+    (`Metadata::DeletedObject`).
+
+`Export4` writes `0x00040001` only when the database uses 4.1-only features,
+otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`).
 
 ## Export pipeline
 
