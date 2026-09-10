@@ -65,7 +65,7 @@ public:
   /// input (memory is in KiB, matching the format). Argon2 costs
   /// O(iterations * memory), so unbounded values would allow CPU-burn and
   /// memory-exhaustion attacks from a malformed file.
-  static constexpr uint64_t kMaxArgon2MemoryKiB = 1u << 20;   // 1 GiB
+  static constexpr uint64_t kMaxArgon2MemoryKiB = 1u << 20; // 1 GiB
   static constexpr uint64_t kMaxArgon2Iterations = 1u << 20;
 
 private:

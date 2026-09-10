@@ -103,12 +103,10 @@ void WipeStream(std::stringstream& stream) {
 // view or std::vector<char/uint8_t>) in place.
 // std::string::data() returns a const pointer in C++11, so cast it away for
 // the wipe; writing zeros never invalidates the container invariants.
-template <typename Container>
-void WipeBuffer(Container* buffer) {
+template <typename Container> void WipeBuffer(Container* buffer) {
   if (buffer != nullptr && !buffer->empty()) {
-    secure_zero(
-        const_cast<typename Container::value_type*>(buffer->data()),
-        buffer->size() * sizeof(typename Container::value_type));
+    secure_zero(const_cast<typename Container::value_type*>(buffer->data()),
+                buffer->size() * sizeof(typename Container::value_type));
   }
 }
 
@@ -1650,8 +1648,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
         size_t n = std::min<size_t>(64, ciphertext.size() - offset);
         for (size_t i = 0; i < n; ++i)
           data[i] = static_cast<uint8_t>(ciphertext[offset + i]) ^ keystream[i];
-        content.write(reinterpret_cast<const char*>(data.data()),
-                      static_cast<std::streamsize>(n));
+        content.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(n));
         offset += n;
       }
       // The block buffers transiently hold the decrypted payload.

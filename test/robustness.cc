@@ -51,8 +51,7 @@ std::vector<uint8_t> ReadFileBytes(const std::string& path) {
                               std::istreambuf_iterator<char>());
 }
 
-template <typename T>
-std::string ToBytesLE(T value) {
+template <typename T> std::string ToBytesLE(T value) {
   std::string out(sizeof(T), '\0');
   for (std::size_t i = 0; i < out.size(); ++i) {
     out[i] = static_cast<char>(value & 0xff);
@@ -95,8 +94,7 @@ TEST(RobustnessTest, Kdbx4OversizedHeaderField) {
   KdbxFile file;
   Key key("password");
 
-  const std::vector<uint8_t> good =
-      ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
   EXPECT_NE(ImportBytes(file, good, key), nullptr);
 
   // MasterSeed field (id 4) is stored at offset 42, with its size at 43.
@@ -111,8 +109,7 @@ TEST(RobustnessTest, Kdbx4OversizedVariantDictionaryValue) {
   KdbxFile file;
   Key key("password");
 
-  const std::vector<uint8_t> good =
-      ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
 
   // Inside the KDF field (id 11, data at 101), the byte-array seed "S" is
   // stored as type/key_len/'S'/value_len; its 32-byte length lives at the last
@@ -128,8 +125,7 @@ TEST(RobustnessTest, Kdbx4AesKdfRoundsTooLarge) {
   KdbxFile file;
   Key key("password");
 
-  const std::vector<uint8_t> good =
-      ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
 
   // "R" is an 8-byte uint64; its value follows the "R\x08\x00\x00\x00" pattern.
   const std::size_t r_value = Find(good, std::string("\x52\x08\x00\x00\x00", 5), 101) + 5;
@@ -143,8 +139,7 @@ TEST(RobustnessTest, Kdbx4TruncatedCiphertext) {
   KdbxFile file;
   Key key("password");
 
-  const std::vector<uint8_t> good =
-      ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
   const std::vector<uint8_t> truncated(good.begin(), good.begin() + good.size() / 2);
   EXPECT_THROW(ImportBytes(file, truncated, key), std::exception);
 }
