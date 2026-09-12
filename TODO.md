@@ -140,11 +140,11 @@ kompatibel und es gibt keine automatische Migration des Formats.
 Das CLI ist bereits solide (Text/JSON/CSV, Export, Keyfile). Erweiterungen
 mit viel Alltagsnutzen für Scripting- und CLI-Workflows:
 
-- [ ] Suche/Filtern: `--search <query>`, `--group <name>`
-- [ ] Passwort-Generator: `--generate [länge]`
-- [ ] Einträge anlegen/ändern/löschen: `add`, `update`, `rm`
-- [ ] Exit-Codes und strukturierte Fehlermeldungen für Scripting dokumentieren/prüfen
-- [ ] Tests in `test/kpx.cc` für die neuen Optionen ergänzen
+- [x] Suche/Filtern: `--search <query>`, `--group <name>`
+- [x] Passwort-Generator: `--generate [länge]`
+- [x] Einträge anlegen/ändern/löschen: `add`, `update`, `rm`
+- [x] Exit-Codes und strukturierte Fehlermeldungen für Scripting dokumentieren/prüfen
+- [x] Tests in `test/kpx.cc` für die neuen Optionen ergänzen
 
 ---
 

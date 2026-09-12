@@ -57,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Group/entry tags now interoperate with KeePass 2.48+: the wire format is
   semicolon-joined; the public API stays space-separated, with the conversion
   performed at the XML boundary on import and export
+- `kpx` search, filtering, generation and editing: `--search <query>` and
+  `--regex` restrict the printed tree to matching entries, `--group <name>`
+  prints only the subtree of a group, `--generate[=n]` prints a generated
+  random password, and the `add`/`update`/`rm` commands create, modify and
+  delete entries (or whole groups) in place; `--help` documents the exit codes
+- `test/kpx.cc` covers the new search, generate, add, update and rm behavior
 
 ### Changed
 

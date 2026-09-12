@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -41,6 +42,8 @@ using keepass::protect;
 using keepass::secure_string;
 using kpx::ExportDatabase;
 using kpx::IsKdbPath;
+using kpx::kDefaultGenerateLength;
+using kpx::kGenerateCharset;
 using kpx::kpx_main;
 using kpx::kVersion;
 using kpx::Options;
@@ -180,6 +183,14 @@ void ExportFixture(const std::string& path) {
   });
   std::ifstream file(path);
   EXPECT_TRUE(file.is_open()) << "expected fixture file to be created: " << path;
+}
+
+// Exports a fresh copy of the fixture database for edit tests.
+std::string CreateEditFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+  ExportFixture(path);
+  return path;
 }
 
 class KpxTest : public ::testing::Test {
@@ -487,6 +498,353 @@ TEST_F(KpxTest, PrintUsage) {
   std::stringstream os;
   PrintUsage("prog", os);
   EXPECT_NE(std::string::npos, os.str().find("Usage: prog [options] <database>"));
+  EXPECT_NE(std::string::npos, os.str().find("Exit code: 0 on success, 1 on any error."));
+}
+
+TEST_F(KpxTest, SearchFiltersTextOutput) {
+  CliResult result = RunCli({"-p", "password", "--search", "ALICE", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("- mail, \"quoted\" (alice) [https://example.com]"));
+  EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
+  EXPECT_EQ(std::string::npos, result.out.find("Empty/"));
+}
+
+TEST_F(KpxTest, SearchMatchesNotesAndUrl) {
+  CliResult by_url = RunCli({"-p", "password", "--search", "root.example", Kdbx()});
+  EXPECT_EQ(0, by_url.code);
+  EXPECT_NE(std::string::npos, by_url.out.find("RootEntry"));
+  EXPECT_EQ(std::string::npos, by_url.out.find("mail"));
+
+  CliResult by_notes = RunCli({"-p", "password", "--search", "IMPORTANT", Kdbx()});
+  EXPECT_EQ(0, by_notes.code);
+  EXPECT_NE(std::string::npos, by_notes.out.find("mail"));
+}
+
+TEST_F(KpxTest, SearchNoMatchPrintsEmptyTree) {
+  CliResult result = RunCli({"-p", "password", "--search", "doesnotexist", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("root/"));
+  EXPECT_EQ(std::string::npos, result.out.find("Internet"));
+}
+
+TEST_F(KpxTest, SearchRegex) {
+  CliResult result = RunCli({"-p", "password", "--search", "q[uo]oted", "--regex", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("mail"));
+  EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
+}
+
+TEST_F(KpxTest, SearchInvalidRegex) {
+  CliResult result = RunCli({"-p", "password", "--search", "[", "--regex", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("invalid regular expression"));
+}
+
+TEST_F(KpxTest, SearchCsvAndJson) {
+  CliResult csv = RunCli({"-p", "password", "--search", "alice", "-f", "csv", Kdbx()});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_NE(std::string::npos, csv.out.find("Group,Title,Username,Password,Url,Notes"));
+  EXPECT_NE(std::string::npos, csv.out.find("alice"));
+  EXPECT_EQ(std::string::npos, csv.out.find("RootEntry"));
+
+  CliResult json = RunCli({"-p", "password", "--search", "quoted", "-f", "json", Kdbx()});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('{', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("quoted"));
+}
+
+TEST_F(KpxTest, GroupFilter) {
+  CliResult text = RunCli({"-p", "password", "--group", "Empty", Kdbx()});
+  EXPECT_EQ(0, text.code);
+  EXPECT_NE(std::string::npos, text.out.find("Empty/"));
+  EXPECT_EQ(std::string::npos, text.out.find("Internet"));
+
+  CliResult csv = RunCli({"-p", "password", "--group", "Internet", "-f", "csv", Kdbx()});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_NE(std::string::npos, csv.out.find("alice"));
+  EXPECT_EQ(std::string::npos, csv.out.find("RootEntry"));
+}
+
+TEST_F(KpxTest, GroupNotFound) {
+  CliResult result = RunCli({"-p", "password", "--group", "Missing", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("group 'Missing' not found"));
+}
+
+TEST_F(KpxTest, GroupAndSearchCombined) {
+  CliResult result = RunCli({"-p", "password", "--group", "Internet", "--search", "alice", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("Internet/"));
+  EXPECT_NE(std::string::npos, result.out.find("mail"));
+  EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
+}
+
+TEST_F(KpxTest, GeneratePasswordDefault) {
+  CliResult result = RunCli({"--generate"});
+  EXPECT_EQ(0, result.code);
+  const std::string password = result.out.substr(0, result.out.size() - 1);
+  EXPECT_EQ(16, password.size());
+  for (const char c : password)
+    EXPECT_NE(std::string::npos, std::string(kGenerateCharset).find(c))
+        << "unexpected character '" << c << "'";
+}
+
+TEST_F(KpxTest, GeneratePasswordLength) {
+  CliResult short_pw = RunCli({"--generate", "10"});
+  EXPECT_EQ(0, short_pw.code);
+  EXPECT_EQ(10, short_pw.out.size() - 1);
+
+  CliResult attached = RunCli({"--generate=64"});
+  EXPECT_EQ(0, attached.code);
+  EXPECT_EQ(64, attached.out.size() - 1);
+}
+
+TEST_F(KpxTest, GeneratePasswordInvalidLength) {
+  CliResult zero = RunCli({"--generate", "0"});
+  EXPECT_EQ(1, zero.code);
+  EXPECT_NE(std::string::npos, zero.err.find("length between 1 and 256"));
+
+  CliResult too_long = RunCli({"--generate", "999"});
+  EXPECT_EQ(1, too_long.code);
+  EXPECT_NE(std::string::npos, too_long.err.find("length between 1 and 256"));
+
+  CliResult non_numeric = RunCli({"--generate=abc"});
+  EXPECT_EQ(1, non_numeric.code);
+  EXPECT_NE(std::string::npos, non_numeric.err.find("length between 1 and 256"));
+}
+
+TEST_F(KpxTest, AddEntryToRoot) {
+  const std::string db = CreateEditFixture("cli-edit-add-root.kdbx");
+
+  CliResult result =
+      RunCli({"-p", "password", "add", "--title", "Added", "--user", "newu", "--pass", "pw123",
+              "--url", "https://added.example", "--notes", "a note", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("added entry 'Added' to 'root'"));
+
+  CliResult printed = RunCli({"-p", "password", "--search", "Added", "--with-passwords", db});
+  EXPECT_NE(std::string::npos, printed.out.find("- Added (newu) [https://added.example]"));
+  EXPECT_NE(std::string::npos, printed.out.find("password: pw123"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, AddEntryToGroup) {
+  const std::string db = CreateEditFixture("cli-edit-add-group.kdbx");
+
+  CliResult result = RunCli(
+      {"-p", "password", "add", "--group", "Internet", "--title", "Grouped", "--user", "guy", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("added entry 'Grouped' to 'Internet'"));
+
+  CliResult printed = RunCli({"-p", "password", "--group", "Internet", db});
+  EXPECT_NE(std::string::npos, printed.out.find("- Grouped (guy)"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, AddEntryMissingGroup) {
+  const std::string db = CreateEditFixture("cli-edit-add-badgroup.kdbx");
+  CliResult result = RunCli({"-p", "password", "add", "--group", "Nope", "--title", "X", db});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("group 'Nope' not found"));
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, AddEntryRequiresTitle) {
+  CliResult result = RunCli({"-p", "password", "add", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("add requires --title"));
+}
+
+TEST_F(KpxTest, AddEntryWithGeneratedPassword) {
+  const std::string db = CreateEditFixture("cli-edit-add-gen.kdbx");
+
+  CliResult result = RunCli({"-p", "password", "add", "--title", "Gen", "--generate", "24", db});
+  EXPECT_EQ(0, result.code);
+
+  CliResult printed = RunCli({"-p", "password", "--search", "Gen", "--with-passwords", db});
+  const std::size_t pos = printed.out.find("password: ");
+  ASSERT_NE(std::string::npos, pos);
+  const std::string password =
+      printed.out.substr(pos + 10, printed.out.find('\n', pos) - (pos + 10));
+  EXPECT_EQ(24, password.size());
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, UpdateEntries) {
+  const std::string db = CreateEditFixture("cli-edit-update.kdbx");
+
+  CliResult result = RunCli(
+      {"-p", "password", "update", "--search", "quoted", "--user", "updated", "--notes", "n2", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("updated 1 entry"));
+
+  CliResult printed = RunCli({"-p", "password", "--search", "quoted", db});
+  EXPECT_NE(std::string::npos, printed.out.find("- mail, \"quoted\" (updated)"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, UpdateAllMatches) {
+  const std::string db = CreateEditFixture("cli-edit-update-all.kdbx");
+
+  CliResult result = RunCli({"-p", "password", "update", "--search", "e", "--notes", "common", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("updated 2 entries"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, UpdateNoMatch) {
+  const std::string db = CreateEditFixture("cli-edit-update-nomatch.kdbx");
+  CliResult result = RunCli({"-p", "password", "update", "--search", "zzz", "--user", "x", db});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("no entries match 'zzz'"));
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, UpdateRequiresSearch) {
+  CliResult result = RunCli({"-p", "password", "update", "--user", "x", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("update requires --search"));
+}
+
+TEST_F(KpxTest, UpdateRequiresField) {
+  CliResult result = RunCli({"-p", "password", "update", "--search", "quoted", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("update requires at least one"));
+}
+
+TEST_F(KpxTest, UpdateInvalidRegex) {
+  const std::string db = CreateEditFixture("cli-edit-update-regex.kdbx");
+  CliResult result =
+      RunCli({"-p", "password", "update", "--search", "[", "--regex", "--title", "x", db});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("invalid regular expression"));
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveByTitle) {
+  const std::string db = CreateEditFixture("cli-edit-rm-title.kdbx");
+
+  CliResult result = RunCli({"-p", "password", "rm", "--title", "RootEntry", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("removed 1 entry"));
+
+  CliResult printed = RunCli({"-p", "password", db});
+  EXPECT_EQ(std::string::npos, printed.out.find("RootEntry"));
+  EXPECT_NE(std::string::npos, printed.out.find("mail"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveBySearch) {
+  const std::string db = CreateEditFixture("cli-edit-rm-search.kdbx");
+
+  CliResult result = RunCli({"-p", "password", "rm", "--search", "rootuser", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("removed 1 entry"));
+
+  CliResult printed = RunCli({"-p", "password", db});
+  EXPECT_EQ(std::string::npos, printed.out.find("RootEntry"));
+  EXPECT_NE(std::string::npos, printed.out.find("mail"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveGroup) {
+  const std::string db = CreateEditFixture("cli-edit-rm-group.kdbx");
+
+  CliResult result = RunCli({"-p", "password", "rm", "--group", "Empty", db});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("removed group 'Empty'"));
+
+  CliResult printed = RunCli({"-p", "password", db});
+  EXPECT_EQ(std::string::npos, printed.out.find("Empty/"));
+  EXPECT_NE(std::string::npos, printed.out.find("Internet/"));
+
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveMissingGroup) {
+  const std::string db = CreateEditFixture("cli-edit-rm-badgroup.kdbx");
+  CliResult result = RunCli({"-p", "password", "rm", "--group", "Nope", db});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("group 'Nope' not found"));
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveNoMatch) {
+  const std::string db = CreateEditFixture("cli-edit-rm-nomatch.kdbx");
+  CliResult result = RunCli({"-p", "password", "rm", "--search", "zzz", db});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("no matching entries"));
+  std::remove(db.c_str());
+}
+
+TEST_F(KpxTest, RemoveRequiresSelector) {
+  CliResult result = RunCli({"-p", "password", "rm", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("rm requires"));
+}
+
+TEST_F(KpxTest, ParseArgsEditOptions) {
+  Options opt;
+  const char* argv[] = {"kpx",    "--search",   "q",      "--regex", "--group",
+                        "g",      "--generate", "20",     "--title", "t",
+                        "--user", "u",          "--pass", "pw",      "--url",
+                        "url",    "--notes",    "n",      "add",     "db"};
+  const int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0]));
+  EXPECT_TRUE(ParseArgs(argc, argv, opt));
+  EXPECT_EQ("add", opt.command);
+  EXPECT_EQ("db", opt.input);
+  EXPECT_EQ("q", opt.search);
+  EXPECT_TRUE(opt.regex);
+  EXPECT_EQ("g", opt.group);
+  EXPECT_EQ(20, opt.generate);
+  EXPECT_TRUE(opt.has_title);
+  EXPECT_TRUE(opt.has_user);
+  EXPECT_TRUE(opt.has_pass);
+  EXPECT_TRUE(opt.has_url);
+  EXPECT_TRUE(opt.has_notes);
+  EXPECT_EQ("t", opt.title);
+  EXPECT_EQ("u", opt.user);
+  EXPECT_EQ("pw", opt.entry_password);
+  EXPECT_EQ("url", opt.url);
+  EXPECT_EQ("n", opt.notes);
+}
+
+TEST_F(KpxTest, ParseArgsRmCommand) {
+  Options opt;
+  const char* argv[] = {"kpx", "rm", "--search", "q", "db"};
+  const int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0]));
+  EXPECT_TRUE(ParseArgs(argc, argv, opt));
+  EXPECT_EQ("rm", opt.command);
+  EXPECT_EQ("q", opt.search);
+  EXPECT_EQ("db", opt.input);
+}
+
+TEST_F(KpxTest, ParseArgsGenerateWithoutValue) {
+  Options opt;
+  const char* argv[] = {"kpx", "--generate", "db"};
+  const int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0]));
+  EXPECT_TRUE(ParseArgs(argc, argv, opt));
+  EXPECT_EQ(kDefaultGenerateLength, opt.generate);
+  EXPECT_EQ("db", opt.input);
+}
+
+TEST_F(KpxTest, GenerateCharSetIsPrintable) {
+  CliResult result = RunCli({"--generate", "128"});
+  EXPECT_EQ(0, result.code);
+  const std::string password = result.out.substr(0, result.out.size() - 1);
+  EXPECT_EQ(128, password.size());
+  for (const char c : password) {
+    EXPECT_NE(std::string::npos, std::string(kGenerateCharset).find(c))
+        << "unexpected character '" << c << "'";
+    EXPECT_TRUE(std::isprint(static_cast<unsigned char>(c)));
+  }
 }
 
 } // namespace
