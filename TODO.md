@@ -35,7 +35,7 @@ geparst wird (Encrypt-then-MAC):
 - [x] Header-Hash KDBX 3 (`KdbxFile::Import3`, `src/kdbx.cc`)
 - [x] Header-Hash + Header-HMAC KDBX 4 (`KdbxFile::Import4`, `src/kdbx.cc`)
 
-Rest: Korruptions-Testfälle dafür sind in #2 angesiedelt.
+Korruptions-Testfälle: in `test/robustness.cc` abgedeckt (siehe #3).
 
 ### 2. Binary-/Attachment-Payloads vollständig wipen
 
@@ -50,8 +50,19 @@ nach letzter Nutzung gezeroist.
 
 Verbleibende Prüfung:
 
-- [ ] Transiente Puffer im Import-/Export-Pfad systematisch auditieren (insb. `kdbx.cc`/`stream.cc`)
-- [ ] `test/secure.cc`/KDBX-Tests um Attachment-Roundtrip inkl. Wipe-Verifikation erweitern
+- [x] Transiente Puffer im Import-/Export-Pfad auditieren (insb. `kdbx.cc`/`stream.cc`);
+      Review abgeschlossen, Fixes ausgerollt: Inner-random-stream-Key KDBX-4-Import
+      (exception-sicher) + Export (gewipt), entschlüsselter Klartext-Stream in
+      `kdb.cc` Import/Export gewipt
+- [x] Restliche Audit-Funde schließen: KDB-Entry-Felder (`consume<std::string>`,
+      `.str()`-Kopien), Binary-/Base64-Temporaries in `kdbx.cc`/`kdb.cc` gewipt
+      (KDBX-3-Meta-/Entry-Binaries Import+Export, KDB-Passwort/Attachment Import+Export,
+      KDBX-4-Binaries bereits behandelt); `Database`-Seeds
+      (`master_seed_`/`argon2_salt_`/`transform_seed_`) auf sichere Container noch offen
+      (größerer Umbau, bewusst zurückgestellt)
+- [x] `test/secure.cc`/KDBX-Tests um Attachment-Roundtrip inkl. Wipe-Verifikation
+      erweitern (Binary-/Attachment-Suites in `test/secure.cc`, KDBX-3-Roundtrip in
+      `test/kdbx.cc`; KDBX-4-Roundtrips bereits vorhanden)
 
 ### 3. Fuzzing + negative Test-Fixtures
 
@@ -62,9 +73,18 @@ Verbleibende Prüfung:
 Für eine Parsing-Bibliothek ist dynamische Eingabe-Absicherung wichtig
 (CodeQL deckt nur statisch ab):
 
-- [ ] `libFuzzer`-Targets für den Import-Pfad (`KdbxFile`/`KdbFile`, KDB + KDBX)
-- [ ] OSS-Fuzz-Integration evaluieren
-- [ ] Gezielte "corrupted/truncated"-Fixtures in `test/data/` und zugehörige Unit-Tests
+**Status: Kern erledigt** (Commits `359e15b`, Format-/Tidy-Fixes):
+
+- [x] `libFuzzer`-Targets für Import (`fuzz/fuzz_kdbx.cc`, `fuzz/fuzz_kdb.cc`)
+- [x] CI-Workflow `.github/workflows/fuzz.yml` (zwei Jobs, Seeds aus `test/data/`, 60s Laufzeit)
+- [x] Negative/"corrupted"-Tests in `test/robustness.cc` (oversized Header/Variant-Dict,
+      AES-KDF-/Argon2-Caps, truncated Ciphertext; KDB/KDBX3/KDBX4)
+- [x] Cap-Limits gegen CPU-Burn-/OOM-DoS (Header-Feld 1 MiB, Variant-Dict 16 MiB,
+      Transform-Rounds 2^28, Argon2 1 GiB / 2^20 Iterationen), siehe
+      `src/include/libkeepass/database.hh` + `src/variantdictionary.cc`
+- [x] Memory-Leak-Fix im KDBX-4-Import (Ciphertext-Puffer), `src/kdbx.cc`
+- [x] Block-größen-Bound in HMAC-/Hashed-Streams gegen OOM, `src/stream.cc`
+- [ ] OSS-Fuzz-Integration evaluieren (offen)
 
 ---
 
@@ -93,7 +113,7 @@ schreibt die Version passend zu den enthaltenen Features (wie KeePass'
 - [x] `LastModificationTime` für CustomData-Items
 - [x] Version `0x00040001` schreiben, wenn 4.1-Features vorhanden sind
 - [x] Roundtrip-Tests für alle 4.1-Features (inkl. Version-Verifikation)
-- [ ] Test-Vektoren gegen echte KeePass-2.48+-Dateien
+- [ ] **Aktiv:** Test-Vektoren gegen echte KeePass-2.48+-Dateien
 
 Entscheidung zur Migrationsstrategie (getroffen): **Wie KeePass selbst wird
 4.1 nur geschrieben, wenn 4.1-Features tatsächlich genutzt werden**; ohne
@@ -178,10 +198,10 @@ als PR an `conan-io/conan-center-index` fehlt noch.
 
 Strukturiertes Feedback von Nutzern und Contributors ermöglichen.
 
-- [ ] Bug-Report-Template (`.github/ISSUE_TEMPLATE/bug_report.md`)
-- [ ] Feature-Request-Template (`.github/ISSUE_TEMPLATE/feature_request.md`)
-- [ ] PR-Template (`.github/PULL_REQUEST_TEMPLATE.md`)
-- [ ] Issue-Templates in `CONTRIBUTING.md` erwähnen
+- [x] Bug-Report-Template (`.github/ISSUE_TEMPLATE/bug_report.md`)
+- [x] Feature-Request-Template (`.github/ISSUE_TEMPLATE/feature_request.md`)
+- [x] PR-Template (`.github/PULL_REQUEST_TEMPLATE.md`)
+- [x] Issue-Templates in `CONTRIBUTING.md` erwähnen
 
 ### 10. Codecov-Account verbinden
 

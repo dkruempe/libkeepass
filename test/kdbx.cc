@@ -22,9 +22,14 @@
 #include <gtest/gtest.h>
 
 #include "config.hh"
+#include "libkeepass/binary.hh"
+#include "libkeepass/database.hh"
+#include "libkeepass/entry.hh"
 #include "libkeepass/exception.hh"
+#include "libkeepass/group.hh"
 #include "libkeepass/kdbx.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/metadata.hh"
 
 using namespace keepass;
 
@@ -861,4 +866,42 @@ TEST(KdbxTest, ExportComplex1KeyFileAndPassword) {
   std::shared_ptr<Group> root = db->root();
   EXPECT_NE(root, nullptr);
   EXPECT_EQ(root->ToJson(), json);
+}
+
+TEST(KdbxTest, AttachmentRoundtrip) {
+  Key key("password");
+
+  KdbxFile file;
+  std::unique_ptr<Database> db = file.Import(GetTestPath("complex-1-pw-aes.kdbx"), key);
+  ASSERT_NE(db->root(), nullptr);
+  ASSERT_NE(db->meta(), nullptr);
+
+  auto entry = std::make_shared<Entry>();
+  entry->set_title(protect<secure_string>("AttachmentEntry", false));
+  db->root()->AddEntry(entry);
+
+  // KDBX 3 stores attachments as base64 <Binary> XML in <Meta><Binaries>.
+  const std::string payload("kdbx3 attachment payload", 24);
+  auto binary = std::make_shared<Binary>(protect<secure_string>(secure_string(payload), true));
+  auto attachment = std::make_shared<Entry::Attachment>();
+  attachment->set_name("secret.bin");
+  attachment->set_binary(binary);
+  entry->AddAttachment(attachment);
+  db->meta()->AddBinary(binary);
+
+  const std::string dst_path = GetTmpPath("kdbx3-attachment.kdbx");
+  ASSERT_NO_THROW(file.Export(dst_path, *db, key));
+
+  std::unique_ptr<Database> reimported;
+  ASSERT_NO_THROW({ reimported = file.Import(dst_path, key); });
+  ASSERT_NE(reimported, nullptr);
+
+  const auto& attachments = reimported->root()->Entries().front()->attachments();
+  ASSERT_EQ(attachments.size(), 1U);
+  EXPECT_EQ(attachments[0]->name(), "secret.bin");
+  ASSERT_NE(attachments[0]->binary(), nullptr);
+  EXPECT_EQ(attachments[0]->binary()->data().value().str(), payload);
+  EXPECT_TRUE(attachments[0]->binary()->data().is_protected());
+
+  std::remove(dst_path.c_str());
 }
