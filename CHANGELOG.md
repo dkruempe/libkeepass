@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and deletion tombstones (`Metadata::DeletedObject`) are parsed and written;
   the exporter writes version `0x00040001` only when such 4.1-only features are
   used (mirroring KeePass' `GetMinKdbxVersion`)
+- KDBX 4.1 import verified against real KeePass-generated files: fixtures
+  produced by KeePass 2.57 (`test/data/kdbx4/kdbx41/`, generator in
+  `tools/kdbx41_fixturegen/`) with new import tests in `test/kdbx4.cc`. The
+  exact version rules of KeePass 2.57 were confirmed empirically: a
+  previous-parent-group reference does not enforce 4.1 (and is then omitted
+  from the 4.0 output), any `<CustomData>` item enforces 4.1, entry tags do not
+- Group/entry tags now interoperate with KeePass 2.48+: the wire format is
+  semicolon-joined; the public API stays space-separated, with the conversion
+  performed at the XML boundary on import and export
 
 ### Changed
 

@@ -110,6 +110,44 @@ template <typename Container> void WipeBuffer(Container* buffer) {
   }
 }
 
+// KeePass 2.48+ stores entry and group tags as a semicolon-separated list in
+// the XML document (verified against KeePass 2.57). The public API contract is
+// space-separated, so the two representations are converted at the XML
+// boundary. Tag names cannot contain spaces or semicolons in KeePass.
+std::string TagsFromXml(const char* xml_tags) {
+  std::string out;
+  bool pending_space = false;
+  for (const char* p = xml_tags; *p != '\0'; ++p) {
+    if (*p == ';') {
+      pending_space = !out.empty();
+    } else {
+      if (pending_space) {
+        out.push_back(' ');
+        pending_space = false;
+      }
+      out.push_back(*p);
+    }
+  }
+  return out;
+}
+
+std::string TagsToXml(const std::string& api_tags) {
+  std::string out;
+  bool pending_semicolon = false;
+  for (char c : api_tags) {
+    if (c == ' ') {
+      pending_semicolon = !out.empty();
+    } else {
+      if (pending_semicolon) {
+        out.push_back(';');
+        pending_semicolon = false;
+      }
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
 } // namespace
 
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
@@ -181,15 +219,15 @@ bool IsZeroUuid(const std::array<uint8_t, 16>& uuid) {
 }
 
 bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
-  if (!group->tags().empty() || !IsZeroUuid(group->previous_parent_group()))
+  if (!group->tags().empty())
     return true;
 
   for (const auto& entry : group->Entries()) {
-    if (!entry->quality_check() || !IsZeroUuid(entry->previous_parent_group()))
+    if (!entry->quality_check())
       return true;
 
     for (const auto& history : entry->history()) {
-      if (!history->quality_check() || !IsZeroUuid(history->previous_parent_group()))
+      if (!history->quality_check())
         return true;
     }
   }
@@ -197,7 +235,13 @@ bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
   return std::any_of(group->Groups().begin(), group->Groups().end(), GroupRequiresKdbx41);
 }
 
-// Returns whether the database uses any KDBX 4.1-only features.
+// Returns whether the database uses any KDBX 4.1-only features. Mirrors
+// KeePass' KdbxFile.GetMinKdbxVersion (verified against KeePass 2.57):
+// - previous-parent-group references do NOT enforce KDBX 4.1 and the element
+//   is dropped from 4.0 output (KeePass' migration rule, KDBX 4.1 spec);
+// - entry tags do NOT enforce KDBX 4.1 (they exist in the 4.0 XML schema);
+// - any custom data item enforces KDBX 4.1, because every item carries a
+//   LastModificationTime (a 4.1-only element).
 bool RequiresKdbx41(const Database& db) {
   if (db.root() && GroupRequiresKdbx41(db.root()))
     return true;
@@ -208,10 +252,8 @@ bool RequiresKdbx41(const Database& db) {
         return true;
     }
 
-    for (const auto& field : db.meta()->fields()) {
-      if (field.last_modification_time() != 0)
-        return true;
-    }
+    if (!db.meta()->fields().empty())
+      return true;
   }
 
   return false;
@@ -736,7 +778,7 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
   entry->set_bg_color(entry_node.child_value("BackgroundColor"));
   entry->set_override_url(entry_node.child_value("OverrideURL"));
   entry->set_quality_check(entry_node.child("QualityCheck").text().as_bool(true));
-  entry->set_tags(entry_node.child_value("Tags"));
+  entry->set_tags(TagsFromXml(entry_node.child_value("Tags")));
 
   if (entry_node.child("PreviousParentGroup")) {
     std::array<uint8_t, 16> prev_parent = {{0}};
@@ -879,7 +921,7 @@ void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscat
   entry_node.append_child("OverrideURL").text().set(entry->override_url().c_str());
   if (!entry->quality_check())
     entry_node.append_child("QualityCheck").text().set(false);
-  entry_node.append_child("Tags").text().set(entry->tags().c_str());
+  entry_node.append_child("Tags").text().set(TagsToXml(entry->tags()).c_str());
   if (kdbx41_ && !IsZeroUuid(entry->previous_parent_group()))
     entry_node.append_child("PreviousParentGroup")
         .text()
@@ -994,7 +1036,7 @@ std::shared_ptr<Group> KdbxFile::ParseGroup(const pugi::xml_node& group_node,
   group->set_uuid(uuid);
   group->set_name(group_node.child_value("Name"));
   group->set_notes(group_node.child_value("Notes"));
-  group->set_tags(group_node.child_value("Tags"));
+  group->set_tags(TagsFromXml(group_node.child_value("Tags")));
 
   if (group_node.child("PreviousParentGroup")) {
     std::array<uint8_t, 16> prev_parent = {{0}};
@@ -1066,7 +1108,7 @@ void KdbxFile::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscat
                            group->previous_parent_group().end())
                  .c_str());
   if (!group->tags().empty())
-    group_node.append_child("Tags").text().set(group->tags().c_str());
+    group_node.append_child("Tags").text().set(TagsToXml(group->tags()).c_str());
   group_node.append_child("IconID").text().set(group->icon());
 
   if (auto icon = group->custom_icon().lock()) {

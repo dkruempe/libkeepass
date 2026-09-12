@@ -378,6 +378,19 @@ std::array<uint8_t, 16> KdfUuid(Database::Kdf kdf) {
   return {{0}};
 }
 
+// Builds a UUID by repeating the given byte pattern cyclically, e.g. {0xde,
+// 0xad, 0xbe, 0xef} yields 0xdeadbeefdeadbeefdeadbeefdeadbeef.
+std::array<uint8_t, 16> PatternUuid(std::initializer_list<uint8_t> pattern) {
+  std::array<uint8_t, 16> uuid = {{0}};
+  size_t i = 0;
+  for (uint8_t byte : pattern) {
+    for (size_t j = i; j < uuid.size(); j += pattern.size())
+      uuid[j] = byte;
+    ++i;
+  }
+  return uuid;
+}
+
 } // namespace
 
 TEST(Kdbx4Test, ImportSamples) {
@@ -413,6 +426,176 @@ TEST(Kdbx4Test, ImportSamples) {
     EXPECT_EQ(db->compress(), sample.compressed);
     EXPECT_EQ(db->root()->ToJson(), GetTestJson(base + ".json"));
   }
+}
+
+TEST(Kdbx4Test, RealKeePass41AllFeatures) {
+  // kdbx41-all.kdbx was generated with KeePass 2.57 from a database that uses
+  // every KDBX 4.1 feature, so the file must carry version 0x00040001.
+  const std::string path = GetTestPath("kdbx41/kdbx41-all.kdbx");
+  const std::array<uint8_t, 16> zero_uuid = {{0}};
+
+  HeaderInfo header = ReadHeader(ReadFile(path));
+  EXPECT_EQ(header.version, kKdbxVersion4_1);
+  EXPECT_EQ(header.cipher, kCipherAes);
+  EXPECT_EQ(header.kdf, kKdfArgon2d);
+
+  Key key("password");
+  KdbxFile file;
+  std::unique_ptr<Database> db;
+  EXPECT_NO_THROW({ db = file.Import(path, key); });
+  ASSERT_NE(db, nullptr);
+  EXPECT_EQ(db->cipher(), Database::Cipher::kAes);
+  EXPECT_EQ(db->kdf(), Database::Kdf::kArgon2d);
+  EXPECT_TRUE(db->compress());
+
+  std::shared_ptr<Group> root = db->root();
+  ASSERT_NE(root, nullptr);
+  ASSERT_EQ(root->Groups().size(), 2U);
+
+  std::shared_ptr<Group> finance = root->Groups()[0];
+  ASSERT_NE(finance, nullptr);
+  EXPECT_EQ(finance->name(), "Finance");
+  EXPECT_EQ(finance->uuid(), PatternUuid({0x11}));
+  // KeePass stores tags semicolon-separated ("banking;finance"); the public
+  // API contract is space-separated, which is what the importer delivers.
+  EXPECT_EQ(finance->tags(), "banking finance");
+  EXPECT_EQ(finance->previous_parent_group(), zero_uuid);
+
+  std::shared_ptr<Group> personal = root->Groups()[1];
+  ASSERT_NE(personal, nullptr);
+  EXPECT_EQ(personal->name(), "Personal");
+  EXPECT_EQ(personal->uuid(), PatternUuid({0x12}));
+  EXPECT_EQ(personal->previous_parent_group(), PatternUuid({0x99, 0x01}));
+
+  ASSERT_EQ(finance->Entries().size(), 1U);
+  std::shared_ptr<Entry> bank = finance->Entries()[0];
+  ASSERT_NE(bank, nullptr);
+  EXPECT_EQ(bank->title()->str(), "Bank Entry");
+  EXPECT_EQ(bank->username()->str(), "bank_user");
+  EXPECT_EQ(bank->password()->str(), "bank_password");
+  EXPECT_TRUE(bank->password().is_protected());
+  EXPECT_EQ(bank->uuid(), PatternUuid({0x21}));
+  EXPECT_FALSE(bank->quality_check());
+  EXPECT_EQ(bank->previous_parent_group(), PatternUuid({0x88, 0x02}));
+  EXPECT_TRUE(bank->expires());
+  EXPECT_EQ(bank->creation_time(), 1700000100);
+  std::shared_ptr<Icon> bank_icon = bank->custom_icon().lock();
+  ASSERT_NE(bank_icon, nullptr);
+  EXPECT_EQ(bank_icon->uuid(), PatternUuid({0x41, 0x01}));
+  EXPECT_EQ(finance->Entries().front()->icon(), 0);
+
+  ASSERT_EQ(personal->Entries().size(), 1U);
+  std::shared_ptr<Entry> plain = personal->Entries()[0];
+  ASSERT_NE(plain, nullptr);
+  EXPECT_EQ(plain->title()->str(), "Plain Entry");
+  EXPECT_EQ(plain->username()->str(), "alice");
+  EXPECT_EQ(plain->password()->str(), "plain_password");
+  EXPECT_EQ(plain->previous_parent_group(), zero_uuid);
+  EXPECT_TRUE(plain->quality_check());
+  EXPECT_FALSE(plain->expires());
+  EXPECT_EQ(plain->creation_time(), 1700000220);
+
+  std::shared_ptr<Metadata> meta = db->meta();
+  ASSERT_NE(meta, nullptr);
+  ASSERT_EQ(meta->icons().size(), 1U);
+  EXPECT_EQ(meta->icons()[0]->uuid(), PatternUuid({0x41, 0x01}));
+  EXPECT_EQ(meta->icons()[0]->name(), "MyIcon");
+  EXPECT_EQ(meta->icons()[0]->last_modification_time(), 1700000280);
+  EXPECT_EQ(meta->icons()[0]->data(), std::vector<uint8_t>({0x89, 0x50, 0x4e, 0x47}));
+
+  ASSERT_EQ(meta->fields().size(), 1U);
+  EXPECT_EQ(meta->fields()[0].key(), "kdbx41-key");
+  EXPECT_EQ(meta->fields()[0].value(), "kdbx41-value");
+  // KeePass stamps the custom-data item with a last-modification time on
+  // write; its mere presence is the 4.1-relevant fact, not the exact value.
+  EXPECT_NE(meta->fields()[0].last_modification_time(), 0);
+
+  ASSERT_EQ(meta->deleted_objects().size(), 2U);
+  EXPECT_EQ(meta->deleted_objects()[0].uuid(), PatternUuid({0xde, 0xad, 0xbe, 0xef}));
+  EXPECT_EQ(meta->deleted_objects()[0].deletion_time(), 1700000340);
+  EXPECT_EQ(meta->deleted_objects()[1].uuid(), PatternUuid({0x42, 0x01}));
+  EXPECT_EQ(meta->deleted_objects()[1].deletion_time(), 1700000400);
+}
+
+TEST(Kdbx4Test, RealKeePass41PrevParentMigration) {
+  // kdbx41-prevparent-only.kdbx was generated with KeePass 2.57 from a
+  // database whose only 4.1 feature is a previous-parent-group reference.
+  // Per KeePass' migration rule in the KDBX 4.1 spec this does NOT enforce
+  // version 4.1; the file stays at 0x00040000 and KeePass drops the
+  // PreviousParentGroup element from the 4.0 output.
+  const std::string path = GetTestPath("kdbx41/kdbx41-prevparent-only.kdbx");
+  const std::array<uint8_t, 16> zero_uuid = {{0}};
+
+  HeaderInfo header = ReadHeader(ReadFile(path));
+  EXPECT_EQ(header.version, kKdbxVersion4);
+
+  Key key("password");
+  KdbxFile file;
+  std::unique_ptr<Database> db;
+  EXPECT_NO_THROW({ db = file.Import(path, key); });
+  ASSERT_NE(db, nullptr);
+  EXPECT_EQ(db->cipher(), Database::Cipher::kAes);
+  EXPECT_EQ(db->kdf(), Database::Kdf::kArgon2d);
+
+  std::shared_ptr<Group> root = db->root();
+  ASSERT_NE(root, nullptr);
+  ASSERT_EQ(root->Groups().size(), 1U);
+  std::shared_ptr<Group> moved = root->Groups()[0];
+  ASSERT_NE(moved, nullptr);
+  EXPECT_EQ(moved->name(), "Moved Group");
+  EXPECT_EQ(moved->previous_parent_group(), zero_uuid);
+  EXPECT_EQ(moved->tags(), "");
+
+  ASSERT_EQ(moved->Entries().size(), 1U);
+  std::shared_ptr<Entry> entry = moved->Entries()[0];
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->title()->str(), "Moved Entry");
+  EXPECT_EQ(entry->username()->str(), "bob");
+  EXPECT_EQ(entry->password()->str(), "moved_password");
+  EXPECT_TRUE(entry->quality_check());
+  EXPECT_EQ(entry->previous_parent_group(), zero_uuid);
+
+  ASSERT_NE(db->meta(), nullptr);
+  EXPECT_TRUE(db->meta()->icons().empty());
+  EXPECT_TRUE(db->meta()->fields().empty());
+  EXPECT_TRUE(db->meta()->deleted_objects().empty());
+}
+
+TEST(Kdbx4Test, RealKeePass40Plain) {
+  // kdbx40-plain.kdbx carries no 4.1 features and must stay at 0x00040000.
+  const std::string path = GetTestPath("kdbx41/kdbx40-plain.kdbx");
+
+  HeaderInfo header = ReadHeader(ReadFile(path));
+  EXPECT_EQ(header.version, kKdbxVersion4);
+
+  Key key("password");
+  KdbxFile file;
+  std::unique_ptr<Database> db;
+  EXPECT_NO_THROW({ db = file.Import(path, key); });
+  ASSERT_NE(db, nullptr);
+  EXPECT_EQ(db->cipher(), Database::Cipher::kAes);
+  EXPECT_EQ(db->kdf(), Database::Kdf::kArgon2d);
+
+  std::shared_ptr<Group> root = db->root();
+  ASSERT_NE(root, nullptr);
+  ASSERT_EQ(root->Groups().size(), 1U);
+  std::shared_ptr<Group> plain_group = root->Groups()[0];
+  ASSERT_NE(plain_group, nullptr);
+  EXPECT_EQ(plain_group->name(), "Plain Group");
+  EXPECT_EQ(plain_group->tags(), "");
+
+  ASSERT_EQ(plain_group->Entries().size(), 1U);
+  std::shared_ptr<Entry> entry = plain_group->Entries()[0];
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->title()->str(), "Plain Entry");
+  EXPECT_EQ(entry->username()->str(), "carol");
+  EXPECT_EQ(entry->password()->str(), "plain_password");
+  EXPECT_TRUE(entry->quality_check());
+
+  ASSERT_NE(db->meta(), nullptr);
+  EXPECT_TRUE(db->meta()->icons().empty());
+  EXPECT_TRUE(db->meta()->fields().empty());
+  EXPECT_TRUE(db->meta()->deleted_objects().empty());
 }
 
 TEST(Kdbx4Test, KeyfileImport) {

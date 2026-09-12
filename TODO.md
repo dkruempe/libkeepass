@@ -113,7 +113,14 @@ schreibt die Version passend zu den enthaltenen Features (wie KeePass'
 - [x] `LastModificationTime` für CustomData-Items
 - [x] Version `0x00040001` schreiben, wenn 4.1-Features vorhanden sind
 - [x] Roundtrip-Tests für alle 4.1-Features (inkl. Version-Verifikation)
-- [ ] **Aktiv:** Test-Vektoren gegen echte KeePass-2.48+-Dateien
+- [x] Test-Vektoren gegen echte KeePass-2.48+-Dateien: Fixtures von KeePass 2.57
+      (`test/data/kdbx4/kdbx41/`, Generator `tools/kdbx41_fixturegen/`) mit neuen
+      Import-Tests in `test/kdbx4.cc`. Dabei empirisch verifiziert gegen KeePass:
+      `PreviousParentGroup` erzwingt **kein** 4.1 (File bleibt 4.0, Element wird
+      verworfen), jedes `<CustomData>`-Item erzwingt 4.1, Entry-Tags erzwingen
+      kein 4.1; Tags sind im XML `;`-getrennt (API bleibt space-getrennt,
+      Konvertierung an der XML-Grenze). `RequiresKdbx41`/`GroupRequiresKdbx41`
+      entsprechend an KeePass' `GetMinKdbxVersion` angeglichen.
 
 Entscheidung zur Migrationsstrategie (getroffen): **Wie KeePass selbst wird
 4.1 nur geschrieben, wenn 4.1-Features tatsächlich genutzt werden**; ohne

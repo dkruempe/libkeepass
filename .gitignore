@@ -13,3 +13,4 @@ docs/*
 CMakeUserPresets.json
 test_package/build/
 test/config.hh
+*.exe
