@@ -84,7 +84,8 @@ Für eine Parsing-Bibliothek ist dynamische Eingabe-Absicherung wichtig
       `src/include/libkeepass/database.hh` + `src/variantdictionary.cc`
 - [x] Memory-Leak-Fix im KDBX-4-Import (Ciphertext-Puffer), `src/kdbx.cc`
 - [x] Block-größen-Bound in HMAC-/Hashed-Streams gegen OOM, `src/stream.cc`
-- [ ] OSS-Fuzz-Integration evaluieren (offen)
+- [x] OSS-Fuzz-Integration evaluiert: Prüfung ergeben, aber Integration bewusst
+      zurückgestellt (erfordert hermetischen Non-Conan-Build und OSS-Fuzz-PR)
 
 ---
 
@@ -113,7 +114,14 @@ schreibt die Version passend zu den enthaltenen Features (wie KeePass'
 - [x] `LastModificationTime` für CustomData-Items
 - [x] Version `0x00040001` schreiben, wenn 4.1-Features vorhanden sind
 - [x] Roundtrip-Tests für alle 4.1-Features (inkl. Version-Verifikation)
-- [ ] **Aktiv:** Test-Vektoren gegen echte KeePass-2.48+-Dateien
+- [x] Test-Vektoren gegen echte KeePass-2.48+-Dateien: Fixtures von KeePass 2.57
+      (`test/data/kdbx4/kdbx41/`, Generator `tools/kdbx41_fixturegen/`) mit neuen
+      Import-Tests in `test/kdbx4.cc`. Dabei empirisch verifiziert gegen KeePass:
+      `PreviousParentGroup` erzwingt **kein** 4.1 (File bleibt 4.0, Element wird
+      verworfen), jedes `<CustomData>`-Item erzwingt 4.1, Entry-Tags erzwingen
+      kein 4.1; Tags sind im XML `;`-getrennt (API bleibt space-getrennt,
+      Konvertierung an der XML-Grenze). `RequiresKdbx41`/`GroupRequiresKdbx41`
+      entsprechend an KeePass' `GetMinKdbxVersion` angeglichen.
 
 Entscheidung zur Migrationsstrategie (getroffen): **Wie KeePass selbst wird
 4.1 nur geschrieben, wenn 4.1-Features tatsächlich genutzt werden**; ohne
@@ -133,11 +141,11 @@ kompatibel und es gibt keine automatische Migration des Formats.
 Das CLI ist bereits solide (Text/JSON/CSV, Export, Keyfile). Erweiterungen
 mit viel Alltagsnutzen für Scripting- und CLI-Workflows:
 
-- [ ] Suche/Filtern: `--search <query>`, `--group <name>`
-- [ ] Passwort-Generator: `--generate [länge]`
-- [ ] Einträge anlegen/ändern/löschen: `add`, `update`, `rm`
-- [ ] Exit-Codes und strukturierte Fehlermeldungen für Scripting dokumentieren/prüfen
-- [ ] Tests in `test/kpx.cc` für die neuen Optionen ergänzen
+- [x] Suche/Filtern: `--search <query>`, `--group <name>`
+- [x] Passwort-Generator: `--generate [länge]`
+- [x] Einträge anlegen/ändern/löschen: `add`, `update`, `rm`
+- [x] Exit-Codes und strukturierte Fehlermeldungen für Scripting dokumentieren/prüfen
+- [x] Tests in `test/kpx.cc` für die neuen Optionen ergänzen
 
 ---
 
@@ -155,8 +163,8 @@ verbessert Testbarkeit und Wartbarkeit und ist Voraussetzung für einen
 sauberen 4.1-Support:
 
 - [ ] Header-Parser ausgliedern (KDBX 3 vs. 4)
-- [ ] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
-- [ ] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
+- [x] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
+- [x] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
 - [ ] Öffentliche Fläche (`libkeepass/*.hh`) stabil halten (ABI-kompatibel erweitern)
 
 ### 7. Streaming statt Voll-Import + Benchmark

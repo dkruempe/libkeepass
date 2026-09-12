@@ -181,6 +181,20 @@ kpx -p password database.kdbx
 kpx -p password -f json database.kdbx
 kpx -p password -f csv --with-passwords database.kdbx
 
+# Search and filter the output
+kpx -p password --search alice database.kdbx
+kpx -p password --search "^mail" --regex database.kdbx
+kpx -p password --group Internet database.kdbx
+
+# Generate a random password (default length 16, max 256)
+kpx --generate
+kpx --generate 32
+
+# Edit the database in place
+kpx -p password add --title "New" --user alice --pass secret --group Internet database.kdbx
+kpx -p password update --search alice --notes "changed" database.kdbx
+kpx -p password rm --title "Obsolete" database.kdbx
+
 # Export to a new KeePass file (.kdb / .kdbx)
 kpx -p password -e output.kdbx database.kdb
 
@@ -188,7 +202,7 @@ kpx -p password -e output.kdbx database.kdb
 KEEPASS_PASSWORD=secret kpx database.kdbx
 ```
 
-The password is read from `--password`, otherwise from the `KEEPASS_PASSWORD` environment variable, otherwise interactively (POSIX terminals only). Keyfiles are supported via `--keyfile <path>`.
+The password is read from `--password`, otherwise from the `KEEPASS_PASSWORD` environment variable, otherwise interactively (POSIX terminals only). Keyfiles are supported via `--keyfile <path>`. The exit code is `0` on success and `1` on any error; see `kpx --help` for the full option and command reference.
 
 ## Usage
 

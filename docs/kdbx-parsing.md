@@ -157,7 +157,9 @@ pipeline as KDBX 4.0; header, HMAC, cipher and inner stream are unchanged.
 Only the XML body schema is extended (`src/kdbx.cc:615`, `:733`, `:845`,
 `:900`):
 
-*   `<Group><Tags>` — space-separated group tags (`Group::tags`).
+*   `<Group><Tags>` — semicolon-joined group tags on the wire (KeePass 2.48+);
+    the API surface is space-separated, the conversion happens at the XML
+    boundary in `TagsFromXml`/`TagsToXml` (`src/kdbx.cc:117`).
 *   `<Entry><QualityCheck>` — "false" disables the password quality warning
     (`Entry::quality_check`).
 *   `<Entry>`/`<Group><PreviousParentGroup>` — UUID of the previous parent
@@ -171,7 +173,17 @@ Only the XML body schema is extended (`src/kdbx.cc:615`, `:733`, `:845`,
     (`Metadata::DeletedObject`).
 
 `Export4` writes `0x00040001` only when the database uses 4.1-only features,
-otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`).
+otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`, verified against
+KeePass 2.57). Two rules differ from a naive reading of the format:
+
+*   A `PreviousParentGroup` reference does **not** enforce KDBX 4.1. KeePass
+    keeps the file at `0x00040000` for a database whose only 4.1 feature is
+    such a reference (KeePass' migration rule) and then omits the element from
+    the 4.0 output. libkeepass mirrors this: the reference is parsed whenever
+    the element is present, but never bumps the version.
+*   Any `<CustomData>` item enforces KDBX 4.1, because every item carries a
+    `LastModificationTime`. Entry-level `<Tags>` do **not** enforce KDBX 4.1
+    (they are part of the 4.0 schema).
 
 ## Export pipeline
 

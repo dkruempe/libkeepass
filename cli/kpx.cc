@@ -17,11 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
+#include <random>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -40,11 +44,15 @@ namespace kpx {
 
 const char* const kVersion = "0.2.0";
 
+const char* const kGenerateCharset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+                                     "!@#$%^&*()-_=+[]{};:,.?";
+
 void PrintUsage(const char* prog, std::ostream& os) {
   os << "Usage: " << prog << " [options] <database>\n"
+     << "       " << prog << " [options] <command> <database>\n"
      << "\n"
-     << "Reads a KeePass database (KDB or KDBX) and either prints its entries\n"
-     << "or exports it to a new KeePass file.\n"
+     << "Reads a KeePass database (KDB or KDBX) and prints its entries, exports\n"
+     << "it to a new KeePass file, or edits it in place (add/update/rm).\n"
      << "\n"
      << "Options:\n"
      << "  -p, --password <pw>   master password (env: KEEPASS_PASSWORD;\n"
@@ -54,9 +62,26 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "  -o, --output <path>   write print output to <path> instead of stdout\n"
      << "  -e, --export <path>   export the database to <path> (.kdb or .kdbx)\n"
      << "      --with-passwords  include passwords in text/csv output\n"
+     << "      --search <query>  only print entries matching <query> (title,\n"
+     << "                        username, URL or notes; case-insensitive substring)\n"
+     << "      --regex           treat --search as a regular expression\n"
+     << "      --group <name>    only print the subtree of the named group\n"
+     << "      --generate[=n]    print a generated random password (default\n"
+     << "                        length 16, max 256); with `add`, sets the new\n"
+     << "                        entry password when --pass is absent\n"
      << "  -v, --verbose         print diagnostics to stderr\n"
      << "  -h, --help            show this help and exit\n"
-     << "      --version         print version and exit\n";
+     << "      --version         print version and exit\n"
+     << "\n"
+     << "Commands (first positional argument; default: print):\n"
+     << "  add    create an entry (--group <name>, --title, --user, --pass,\n"
+     << "         --url, --notes)\n"
+     << "  update modify matching entries (--search <query> and at least one\n"
+     << "         of --title, --user, --pass, --url, --notes)\n"
+     << "  rm     delete the entry with an exact title (--title), all entries\n"
+     << "         matching --search <query>, or a whole group (--group <name>)\n"
+     << "\n"
+     << "Exit code: 0 on success, 1 on any error.\n";
 }
 
 template <typename T>
@@ -87,6 +112,116 @@ bool IsKdbPath(const std::string& path) {
   return ext == "kdb";
 }
 
+// The edit commands are recognized as the first positional argument.
+bool IsCommand(const std::string& arg) { return arg == "add" || arg == "update" || arg == "rm"; }
+
+// Parses the --generate length, printing an error and returning -1 on invalid
+// input. Lengths are clamped to [1, kMaxGenerateLength].
+int ParseGenerateLength(const std::string& value, const std::string& option) {
+  char* end = nullptr;
+  const long length = std::strtol(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0' || length <= 0 || length > kMaxGenerateLength) {
+    std::cerr << "error: option '" << option << "' expects a length between 1 and "
+              << kMaxGenerateLength << "\n";
+    return -1;
+  }
+  return static_cast<int>(length);
+}
+
+// Case-insensitive containment of needle_lower in haystack.
+bool ContainsLower(const std::string& haystack, const std::string& needle_lower) {
+  return Lower(haystack).find(needle_lower) != std::string::npos;
+}
+
+// Returns whether the string consists entirely of decimal digits.
+bool IsNumeric(const std::string& s) {
+  return !s.empty() && std::all_of(s.begin(), s.end(), [](char c) {
+    return std::isdigit(static_cast<unsigned char>(c));
+  });
+}
+
+// Returns whether an entry matches the search query. By default a
+// case-insensitive substring search over title, username, URL and notes;
+// with regex, std::regex_search on the same fields. With exact_title only the
+// exact title is compared.
+bool EntryMatches(const std::shared_ptr<keepass::Entry>& entry, const std::string& query,
+                  bool regex, bool exact_title) {
+  if (exact_title)
+    return entry->title()->str() == query;
+
+  if (regex) {
+    try {
+      const std::regex re(query);
+      return std::regex_search(entry->title()->str(), re) ||
+             std::regex_search(entry->username()->str(), re) ||
+             std::regex_search(entry->url()->str(), re) ||
+             std::regex_search(entry->notes()->str(), re);
+    } catch (const std::regex_error& e) {
+      throw std::invalid_argument(std::string("invalid regular expression: ") + e.what());
+    }
+  }
+
+  const std::string needle = Lower(query);
+  return ContainsLower(entry->title()->str(), needle) ||
+         ContainsLower(entry->username()->str(), needle) ||
+         ContainsLower(entry->url()->str(), needle) || ContainsLower(entry->notes()->str(), needle);
+}
+
+// Collects all entries under the given group that match the query.
+std::vector<std::shared_ptr<keepass::Entry>>
+SearchEntries(const std::shared_ptr<keepass::Group>& start, const std::string& query, bool regex,
+              bool exact_title) {
+  std::vector<std::shared_ptr<keepass::Entry>> result;
+  std::function<void(const std::shared_ptr<keepass::Group>&)> collect =
+      [&](const std::shared_ptr<keepass::Group>& group) {
+        for (const auto& entry : group->Entries()) {
+          if (EntryMatches(entry, query, regex, exact_title))
+            result.push_back(entry);
+        }
+        for (const auto& child : group->Groups())
+          collect(child);
+      };
+  collect(start);
+  return result;
+}
+
+// Builds a lightweight copy of the group tree that contains only the entries
+// matching the query and their ancestor groups. The copied groups only carry
+// their names; the entries are the original objects. Used to feed the regular
+// print pipeline when --search filters the output.
+std::shared_ptr<keepass::Group> PrunedRoot(const std::shared_ptr<keepass::Group>& src,
+                                           const std::string& query, bool regex) {
+  std::shared_ptr<keepass::Group> pruned = std::make_shared<keepass::Group>();
+  pruned->set_name(src->name());
+
+  for (const auto& child : src->Groups()) {
+    std::shared_ptr<keepass::Group> pruned_child = PrunedRoot(child, query, regex);
+    if (!pruned_child->Groups().empty() || !pruned_child->Entries().empty())
+      pruned->AddGroup(pruned_child);
+  }
+  for (const auto& entry : src->Entries()) {
+    if (EntryMatches(entry, query, regex, false))
+      pruned->AddEntry(entry);
+  }
+  return pruned;
+}
+
+// Generates a random password of the given length from a printable character
+// set guarded against ambiguity between look-alike characters.
+std::string GeneratePassword(int length) {
+  const std::string chars(kGenerateCharset);
+  const std::size_t count = chars.size();
+
+  std::mt19937 rng(std::random_device{}());
+  std::uniform_int_distribution<std::size_t> dist(0, count - 1);
+
+  std::string password;
+  password.reserve(length);
+  for (int i = 0; i < length; ++i)
+    password.push_back(chars[dist(rng)]);
+  return password;
+}
+
 // Parses the command-line arguments into @p opt. Supports long options
 // (--password, --keyfile, --format, --output, --export, --with-passwords,
 // --verbose, --help, --version, both with '=' and as separate value
@@ -106,11 +241,14 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
     // "--" ends option parsing; every remaining element is the input path.
     if (arg == "--") {
       for (int rest_idx = i + 1; rest_idx < argc; ++rest_idx) {
-        if (!opt.input.empty()) {
+        if (opt.command.empty() && IsCommand(argv[rest_idx])) {
+          opt.command = argv[rest_idx];
+        } else if (opt.input.empty()) {
+          opt.input = argv[rest_idx];
+        } else {
           std::cerr << "error: unexpected extra argument '" << argv[rest_idx] << "'\n";
           return false;
         }
-        opt.input = argv[rest_idx];
       }
       break;
     }
@@ -141,6 +279,48 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
           return false;
       } else if (name == "export") {
         if (!NextValue(argc, argv, i, "--export", has_value, value, opt.export_path))
+          return false;
+      } else if (name == "search") {
+        if (!NextValue(argc, argv, i, "--search", has_value, value, opt.search))
+          return false;
+      } else if (name == "group") {
+        if (!NextValue(argc, argv, i, "--group", has_value, value, opt.group))
+          return false;
+      } else if (name == "generate") {
+        if (has_value) {
+          opt.generate = ParseGenerateLength(value, "--generate");
+          if (opt.generate < 0)
+            return false;
+        } else if (i + 1 < argc && IsNumeric(argv[i + 1])) {
+          // A following bare number is consumed as the optional length.
+          opt.generate = ParseGenerateLength(argv[i + 1], "--generate");
+          if (opt.generate < 0)
+            return false;
+          skip_next = true;
+        } else {
+          opt.generate = kDefaultGenerateLength;
+        }
+      } else if (name == "regex") {
+        opt.regex = true;
+      } else if (name == "title") {
+        opt.has_title = true;
+        if (!NextValue(argc, argv, i, "--title", has_value, value, opt.title))
+          return false;
+      } else if (name == "user") {
+        opt.has_user = true;
+        if (!NextValue(argc, argv, i, "--user", has_value, value, opt.user))
+          return false;
+      } else if (name == "pass") {
+        opt.has_pass = true;
+        if (!NextValue(argc, argv, i, "--pass", has_value, value, opt.entry_password))
+          return false;
+      } else if (name == "url") {
+        opt.has_url = true;
+        if (!NextValue(argc, argv, i, "--url", has_value, value, opt.url))
+          return false;
+      } else if (name == "notes") {
+        opt.has_notes = true;
+        if (!NextValue(argc, argv, i, "--notes", has_value, value, opt.notes))
           return false;
       } else if (name == "with-passwords") {
         opt.with_passwords = true;
@@ -240,11 +420,14 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
       continue;
     }
 
-    if (!opt.input.empty()) {
+    if (opt.command.empty() && IsCommand(arg)) {
+      opt.command = arg;
+    } else if (opt.input.empty()) {
+      opt.input = arg;
+    } else {
       std::cerr << "error: unexpected extra argument '" << arg << "'\n";
       return false;
     }
-    opt.input = arg;
   }
   return true;
 }
@@ -380,6 +563,151 @@ bool OpenOutput(const Options& opt, std::ofstream& file) {
   return true;
 }
 
+std::ostream& OutputStream(const Options& opt, std::ofstream& file) {
+  return opt.output.empty() ? static_cast<std::ostream&>(std::cout)
+                            : static_cast<std::ostream&>(file);
+}
+
+// Applies the --generate length to the given database edit, either filling
+// the password with a generated value or returning the configured password.
+std::string ResolveNewPassword(const Options& opt) {
+  if (opt.has_pass)
+    return opt.entry_password;
+  if (opt.generate > 0)
+    return GeneratePassword(opt.generate);
+  return {};
+}
+
+// Wraps a plain-text string in a protected secure string for the entry setters.
+keepass::protect<keepass::secure_string> Prot(const std::string& s, bool protected_value) {
+  return {keepass::secure_string(s), protected_value};
+}
+
+int RunAdd(const Options& opt, keepass::KeePass& keeper, keepass::Database* db) {
+  std::shared_ptr<keepass::Group> group = db->root();
+  if (!group) {
+    std::cerr << "error: database has no root group\n";
+    return 1;
+  }
+  if (!opt.group.empty()) {
+    group = db->FindGroup(opt.group);
+    if (!group) {
+      std::cerr << "error: group '" << opt.group << "' not found\n";
+      return 1;
+    }
+  }
+
+  std::shared_ptr<keepass::Entry> entry = keepass::Database::NewEntry(opt.title);
+  if (opt.has_user)
+    entry->set_username(Prot(opt.user, false));
+  if (opt.has_url)
+    entry->set_url(Prot(opt.url, false));
+  if (opt.has_notes)
+    entry->set_notes(Prot(opt.notes, false));
+  const std::string password = ResolveNewPassword(opt);
+  if (!password.empty())
+    entry->set_password(Prot(password, true));
+
+  keepass::Database::AddEntry(group, entry);
+  keeper.Save(opt.input, *db);
+  std::cout << "added entry '" << opt.title << "' to '" << group->name() << "'\n";
+  return 0;
+}
+
+int RunUpdate(const Options& opt, keepass::KeePass& keeper, keepass::Database* db) {
+  if (opt.search.empty()) {
+    std::cerr << "error: update requires --search <query>\n";
+    return 1;
+  }
+  if (!opt.has_title && !opt.has_user && !opt.has_pass && !opt.has_url && !opt.has_notes) {
+    std::cerr << "error: update requires at least one of --title, --user, --pass, --url, --notes\n";
+    return 1;
+  }
+
+  std::vector<std::shared_ptr<keepass::Entry>> matches =
+      SearchEntries(db->root(), opt.search, opt.regex, false);
+  if (matches.empty()) {
+    std::cerr << "error: no entries match '" << opt.search << "'\n";
+    return 1;
+  }
+
+  for (const auto& entry : matches) {
+    if (opt.has_title)
+      entry->set_title(Prot(opt.title, false));
+    if (opt.has_user)
+      entry->set_username(Prot(opt.user, false));
+    if (opt.has_pass)
+      entry->set_password(Prot(opt.entry_password, true));
+    if (opt.has_url)
+      entry->set_url(Prot(opt.url, false));
+    if (opt.has_notes)
+      entry->set_notes(Prot(opt.notes, false));
+  }
+
+  keeper.Save(opt.input, *db);
+  std::cout << "updated " << matches.size() << " entr" << (matches.size() == 1 ? "y" : "ies")
+            << "\n";
+  return 0;
+}
+
+int RunRemove(const Options& opt, keepass::KeePass& keeper, keepass::Database* db) {
+  if (!opt.group.empty()) {
+    std::shared_ptr<keepass::Group> group = db->FindGroup(opt.group);
+    if (!group) {
+      std::cerr << "error: group '" << opt.group << "' not found\n";
+      return 1;
+    }
+    db->DeleteGroup(group->uuid());
+    keeper.Save(opt.input, *db);
+    std::cout << "removed group '" << opt.group << "'\n";
+    return 0;
+  }
+
+  if (opt.search.empty() && !opt.has_title) {
+    std::cerr << "error: rm requires --title <title>, --search <query> or --group <name>\n";
+    return 1;
+  }
+
+  std::vector<std::shared_ptr<keepass::Entry>> matches =
+      opt.has_title ? SearchEntries(db->root(), opt.title, false, true)
+                    : SearchEntries(db->root(), opt.search, opt.regex, false);
+  if (matches.empty()) {
+    std::cerr << "error: no matching entries\n";
+    return 1;
+  }
+
+  for (const auto& entry : matches)
+    db->DeleteEntry(entry->uuid());
+  keeper.Save(opt.input, *db);
+  std::cout << "removed " << matches.size() << " entr" << (matches.size() == 1 ? "y" : "ies")
+            << "\n";
+  return 0;
+}
+
+int RunGenerate(const Options& opt) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  OutputStream(opt, file) << GeneratePassword(opt.generate) << "\n";
+  return 0;
+}
+
+int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  if (opt.format == "json") {
+    out << root->ToJson() << "\n";
+  } else if (opt.format == "csv") {
+    PrintCsv(out, root, opt.with_passwords);
+  } else {
+    PrintText(out, root, opt.with_passwords);
+  }
+  return 0;
+}
+
 int Run(const Options& opt, const char* argv0) {
   if (opt.help) {
     PrintUsage(argv0, std::cout);
@@ -391,8 +719,16 @@ int Run(const Options& opt, const char* argv0) {
     return 0;
   }
 
+  if (opt.generate > 0 && opt.command.empty() && opt.input.empty())
+    return RunGenerate(opt);
+
   if (opt.input.empty()) {
     PrintUsage(argv0, std::cerr);
+    return 1;
+  }
+
+  if (opt.command == "add" && (opt.title.empty() || !opt.has_title)) {
+    std::cerr << "error: add requires --title <title>\n";
     return 1;
   }
 
@@ -417,6 +753,13 @@ int Run(const Options& opt, const char* argv0) {
     return 1;
   }
 
+  if (opt.command == "add")
+    return RunAdd(opt, keeper, db.get());
+  if (opt.command == "update")
+    return RunUpdate(opt, keeper, db.get());
+  if (opt.command == "rm")
+    return RunRemove(opt, keeper, db.get());
+
   if (!opt.export_path.empty()) {
     keeper.Save(opt.export_path, *db);
     if (opt.verbose)
@@ -424,20 +767,18 @@ int Run(const Options& opt, const char* argv0) {
     return 0;
   }
 
-  std::ofstream file;
-  if (!OpenOutput(opt, file))
-    return 1;
-
-  std::ostream& out =
-      opt.output.empty() ? static_cast<std::ostream&>(std::cout) : static_cast<std::ostream&>(file);
-  if (opt.format == "json") {
-    out << db->root()->ToJson() << "\n";
-  } else if (opt.format == "csv") {
-    PrintCsv(out, db->root(), opt.with_passwords);
-  } else {
-    PrintText(out, db->root(), opt.with_passwords);
+  std::shared_ptr<keepass::Group> start = db->root();
+  if (!opt.group.empty()) {
+    start = db->FindGroup(opt.group);
+    if (!start) {
+      std::cerr << "error: group '" << opt.group << "' not found\n";
+      return 1;
+    }
   }
-  return 0;
+  if (!opt.search.empty())
+    start = PrunedRoot(start, opt.search, opt.regex);
+
+  return RunPrint(opt, start);
 }
 
 int kpx_main(int argc, const char* argv[]) {
