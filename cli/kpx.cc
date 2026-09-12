@@ -293,9 +293,10 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
             return false;
         } else if (i + 1 < argc && IsNumeric(argv[i + 1])) {
           // A following bare number is consumed as the optional length.
-          opt.generate = ParseGenerateLength(argv[++i], "--generate");
+          opt.generate = ParseGenerateLength(argv[i + 1], "--generate");
           if (opt.generate < 0)
             return false;
+          skip_next = true;
         } else {
           opt.generate = kDefaultGenerateLength;
         }
