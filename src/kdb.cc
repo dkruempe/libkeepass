@@ -429,8 +429,8 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
 
         std::vector<char> data = consume<std::vector<char>>(field);
         std::string payload(data.begin(), data.end());
-        std::shared_ptr<Binary> binary = std::make_shared<Binary>(
-            protect<secure_string>(secure_string(payload), false));
+        std::shared_ptr<Binary> binary =
+            std::make_shared<Binary>(protect<secure_string>(secure_string(payload), false));
         attachment->set_binary(binary);
         WipeBuffer(&payload);
         WipeBuffer(&data);
