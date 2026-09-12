@@ -50,8 +50,19 @@ nach letzter Nutzung gezeroist.
 
 Verbleibende Prüfung:
 
-- [ ] Transiente Puffer im Import-/Export-Pfad systematisch auditieren (insb. `kdbx.cc`/`stream.cc`)
-- [ ] `test/secure.cc`/KDBX-Tests um Attachment-Roundtrip inkl. Wipe-Verifikation erweitern
+- [x] Transiente Puffer im Import-/Export-Pfad auditieren (insb. `kdbx.cc`/`stream.cc`);
+      Review abgeschlossen, Fixes ausgerollt: Inner-random-stream-Key KDBX-4-Import
+      (exception-sicher) + Export (gewipt), entschlüsselter Klartext-Stream in
+      `kdb.cc` Import/Export gewipt
+- [x] Restliche Audit-Funde schließen: KDB-Entry-Felder (`consume<std::string>`,
+      `.str()`-Kopien), Binary-/Base64-Temporaries in `kdbx.cc`/`kdb.cc` gewipt
+      (KDBX-3-Meta-/Entry-Binaries Import+Export, KDB-Passwort/Attachment Import+Export,
+      KDBX-4-Binaries bereits behandelt); `Database`-Seeds
+      (`master_seed_`/`argon2_salt_`/`transform_seed_`) auf sichere Container noch offen
+      (größerer Umbau, bewusst zurückgestellt)
+- [x] `test/secure.cc`/KDBX-Tests um Attachment-Roundtrip inkl. Wipe-Verifikation
+      erweitern (Binary-/Attachment-Suites in `test/secure.cc`, KDBX-3-Roundtrip in
+      `test/kdbx.cc`; KDBX-4-Roundtrips bereits vorhanden)
 
 ### 3. Fuzzing + negative Test-Fixtures
 
@@ -187,10 +198,10 @@ als PR an `conan-io/conan-center-index` fehlt noch.
 
 Strukturiertes Feedback von Nutzern und Contributors ermöglichen.
 
-- [ ] Bug-Report-Template (`.github/ISSUE_TEMPLATE/bug_report.md`)
-- [ ] Feature-Request-Template (`.github/ISSUE_TEMPLATE/feature_request.md`)
-- [ ] PR-Template (`.github/PULL_REQUEST_TEMPLATE.md`)
-- [ ] Issue-Templates in `CONTRIBUTING.md` erwähnen
+- [x] Bug-Report-Template (`.github/ISSUE_TEMPLATE/bug_report.md`)
+- [x] Feature-Request-Template (`.github/ISSUE_TEMPLATE/feature_request.md`)
+- [x] PR-Template (`.github/PULL_REQUEST_TEMPLATE.md`)
+- [x] Issue-Templates in `CONTRIBUTING.md` erwähnen
 
 ### 10. Codecov-Account verbinden
 

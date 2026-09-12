@@ -26,6 +26,8 @@
 
 #include <gtest/gtest.h>
 
+#include "libkeepass/binary.hh"
+#include "libkeepass/entry.hh"
 #include "libkeepass/secure.hh"
 #include "libkeepass/security.hh"
 
@@ -211,4 +213,92 @@ TEST(ProtectTest, FlagAndValueRoundtrip) {
 
   p.set_protected(false);
   EXPECT_FALSE(p.is_protected());
+}
+
+TEST(BinaryTest, ConstructStoresProtectedData) {
+  protect<secure_string> payload(secure_string("attachment bytes"), true);
+  Binary binary(payload);
+
+  EXPECT_EQ(binary.Size(), static_cast<std::size_t>(16));
+  EXPECT_FALSE(binary.Empty());
+  EXPECT_EQ(*binary.data(), "attachment bytes");
+  EXPECT_TRUE(binary.data().is_protected());
+  EXPECT_FALSE(binary.compress());
+}
+
+TEST(BinaryTest, CompressFlagRoundtrip) {
+  Binary binary(protect<secure_string>(secure_string("abc"), true));
+  EXPECT_FALSE(binary.compress());
+  binary.set_compress(true);
+  EXPECT_TRUE(binary.compress());
+}
+
+TEST(BinaryTest, SetDataReplacesPayload) {
+  const std::string replacement(200, 'x');
+  Binary binary(protect<secure_string>(secure_string("sensitive payload"), true));
+  ASSERT_EQ(*binary.data(), "sensitive payload");
+  ASSERT_EQ(binary.Size(), static_cast<std::size_t>(17));
+
+  // A new allocation must be made for the replacement value; the old buffer
+  // is handed to secure_free(), which zeroizes it, before the new one is
+  // stored (see secure_string::Allocate/Release).
+  const char* old_storage = binary.data()->c_str();
+
+  binary.set_data(protect<secure_string>(secure_string(replacement), true));
+  EXPECT_EQ(*binary.data(), replacement);
+  EXPECT_EQ(binary.Size(), replacement.size());
+  EXPECT_NE(binary.data()->c_str(), old_storage);
+}
+
+TEST(BinaryTest, EmptySetDataMarksEmpty) {
+  Binary binary(protect<secure_string>(secure_string("data"), true));
+  EXPECT_FALSE(binary.Empty());
+
+  binary.set_data(protect<secure_string>(secure_string(), true));
+  EXPECT_TRUE(binary.Empty());
+  EXPECT_EQ(binary.Size(), 0U);
+}
+
+TEST(AttachmentTest, SetAndGetBinaryProperty) {
+  Entry entry;
+
+  const std::vector<uint8_t> payload = {0x50, 0x4b, 0x03, 0x04, 0x00, 0x2a};
+  entry.set_binary_property("file.zip", payload);
+
+  ASSERT_TRUE(entry.HasAttachment());
+  ASSERT_EQ(entry.attachments().size(), 1U);
+  EXPECT_EQ(entry.attachments()[0]->name(), "file.zip");
+  ASSERT_NE(entry.attachments()[0]->binary(), nullptr);
+  EXPECT_TRUE(entry.attachments()[0]->binary()->data().is_protected());
+  EXPECT_EQ(entry.attachments()[0]->binary()->data().value().str(),
+            std::string(payload.begin(), payload.end()));
+
+  EXPECT_EQ(entry.get_binary_property("file.zip"), payload);
+  EXPECT_TRUE(entry.get_binary_property("missing.bin").empty());
+}
+
+TEST(AttachmentTest, ReplaceBinaryPropertyKeepsSingleAttachment) {
+  const std::vector<uint8_t> replacement(200, 0x7a);
+  Entry entry;
+  entry.set_binary_property("file.bin", std::vector<uint8_t>({'o', 'l', 'd'}));
+
+  const char* old_storage = entry.attachments()[0]->binary()->data()->c_str();
+
+  entry.set_binary_property("file.bin", replacement);
+
+  ASSERT_EQ(entry.attachments().size(), 1U);
+  EXPECT_EQ(entry.attachments()[0]->binary()->data().value().str(),
+            std::string(replacement.begin(), replacement.end()));
+  EXPECT_NE(entry.attachments()[0]->binary()->data()->c_str(), old_storage);
+}
+
+TEST(AttachmentTest, DeleteBinaryPropertyRemovesAttachment) {
+  Entry entry;
+  entry.set_binary_property("file.bin", std::vector<uint8_t>({0x01, 0x02}));
+  ASSERT_TRUE(entry.HasAttachment());
+
+  entry.delete_binary_property("file.bin");
+  EXPECT_FALSE(entry.HasAttachment());
+  EXPECT_TRUE(entry.attachments().empty());
+  EXPECT_TRUE(entry.get_binary_property("file.bin").empty());
 }

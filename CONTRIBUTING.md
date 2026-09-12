@@ -82,18 +82,19 @@ run-clang-tidy -p build-lint -extra-arg=-Wno-unknown-warning-option src cli test
 
 ## Opening an Issue
 
-Use GitHub Issues to report bugs or request features. Before opening one, search the existing issues to avoid duplicates. When reporting a bug, include:
+Use GitHub Issues to report bugs or request features. Before opening one, search the existing issues to avoid duplicates. The repository provides templates that guide you through the information we need:
 
-- The libkeepass version or commit you are using
-- The `kpx` command line (or API snippet) that reproduces the problem
-- The expected and the actual behaviour
+- **Bug reports:** `.github/ISSUE_TEMPLATE/bug_report.md` — please include the libkeepass version or commit you are using, the `kpx` command line (or API snippet) that reproduces the problem, and the expected vs. actual behaviour.
+- **Feature requests:** `.github/ISSUE_TEMPLATE/feature_request.md` — please describe the problem or workflow you want to enable, plus the behaviour you would expect from a solution.
+
+For security vulnerabilities, do **not** open a public issue; follow the instructions in [SECURITY.md](SECURITY.md) instead.
 
 ## Submitting a Pull Request
 
 1. [Fork](https://github.com/dkruempe/libkeepass/fork) the repository and create a feature branch from `master`.
 2. Make focused, self-contained changes. Keep commits small with descriptive messages in the style of the existing history (e.g. `Fix off-by-one in KDBX header parsing`).
 3. Run the tests and the checks described in [Before You Submit](#before-you-submit).
-4. Open the pull request against `master` and summarize your changes; reference the issue it fixes, if any.
+4. Open the pull request against `master` using the template in `.github/PULL_REQUEST_TEMPLATE.md` and summarize your changes; reference the issue it fixes, if any.
 5. The CI workflows (build on Linux/macOS/Windows, lint, and docs) must pass.
 
 ## License and Legal

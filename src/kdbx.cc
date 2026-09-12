@@ -507,20 +507,28 @@ std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
 
       bool compressed = false;
       if (bin_node.attribute("Protected").as_bool()) {
-        data = protect<secure_string>(
-            obfuscator.Process(secure_string(base64_decode(bin_node.text().as_string()))), true);
+        std::string encoded = base64_decode(bin_node.text().as_string());
+        data = protect<secure_string>(obfuscator.Process(secure_string(encoded)), true);
+        WipeBuffer(&encoded);
       } else {
         if (bin_node.attribute("Compressed").as_bool()) {
           compressed = true;
-          std::stringstream raw_stream(base64_decode(bin_node.text().as_string()));
+          std::string encoded = base64_decode(bin_node.text().as_string());
+          std::stringstream raw_stream(encoded);
           gzip_istreambuf gzip_streambuf(raw_stream);
           std::istream gzip_stream(&gzip_streambuf);
 
-          data = protect<secure_string>(secure_string(consume<std::string>(gzip_stream)),
+          std::string decompressed = consume<std::string>(gzip_stream);
+          data = protect<secure_string>(secure_string(decompressed),
                                         bin_node.attribute("ProtectedInMemory").as_bool());
+          WipeBuffer(&decompressed);
+          WipeBuffer(&encoded);
+          WipeStream(raw_stream);
         } else {
-          data = protect<secure_string>(secure_string(base64_decode(bin_node.text().as_string())),
+          std::string decoded = base64_decode(bin_node.text().as_string());
+          data = protect<secure_string>(secure_string(decoded),
                                         bin_node.attribute("ProtectedInMemory").as_bool());
+          WipeBuffer(&decoded);
         }
       }
 
@@ -664,7 +672,12 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
 
       if (binary->data().is_protected()) {
         bin_node.append_attribute("Protected").set_value("True");
-        bin_node.text().set(base64_encode(obfuscator.Process(*binary->data()).str()).c_str());
+        // The obfuscated secure_string wipes itself; only the base64 copy of
+        // the (obfuscated) payload must be released explicitly.
+        secure_string obfuscated = obfuscator.Process(*binary->data());
+        std::string encoded = base64_encode(obfuscated.str());
+        bin_node.text().set(encoded.c_str());
+        WipeBuffer(&encoded);
       } else {
         if (binary->compress()) {
           bin_node.append_attribute("Compressed").set_value("True");
@@ -676,11 +689,17 @@ void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator
                     std::ostreambuf_iterator<char>(gzip_stream));
           gzip_stream.flush();
 
-          bin_node.text().set(base64_encode(std::istreambuf_iterator<char>(compressed_data),
-                                            std::istreambuf_iterator<char>())
-                                  .c_str());
+          std::string encoded = base64_encode(std::istreambuf_iterator<char>(compressed_data),
+                                              std::istreambuf_iterator<char>());
+          bin_node.text().set(encoded.c_str());
+          WipeBuffer(&encoded);
+          WipeStream(compressed_data);
         } else {
-          bin_node.text().set(base64_encode((*binary->data()).str()).c_str());
+          std::string payload = (*binary->data()).str();
+          std::string encoded = base64_encode(payload);
+          bin_node.text().set(encoded.c_str());
+          WipeBuffer(&payload);
+          WipeBuffer(&encoded);
         }
       }
 
@@ -802,20 +821,27 @@ std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
         protect<secure_string> prot_val;
 
         if (bin_node.attribute("Protected").as_bool()) {
-          prot_val = protect<secure_string>(
-              obfuscator.Process(secure_string(base64_decode(bin_node.text().as_string()))), true);
+          std::string encoded = base64_decode(bin_node.text().as_string());
+          prot_val = protect<secure_string>(obfuscator.Process(secure_string(encoded)), true);
+          WipeBuffer(&encoded);
         } else {
           if (bin_node.attribute("Compressed").as_bool()) {
-            std::stringstream raw_stream(base64_decode(bin_node.text().as_string()));
+            std::string encoded = base64_decode(bin_node.text().as_string());
+            std::stringstream raw_stream(encoded);
             gzip_istreambuf gzip_streambuf(raw_stream);
             std::istream gzip_stream(&gzip_streambuf);
 
-            prot_val = protect<secure_string>(secure_string(consume<std::string>(gzip_stream)),
+            std::string decompressed = consume<std::string>(gzip_stream);
+            prot_val = protect<secure_string>(secure_string(decompressed),
                                               bin_node.attribute("ProtectedInMemory").as_bool());
+            WipeBuffer(&decompressed);
+            WipeBuffer(&encoded);
+            WipeStream(raw_stream);
           } else {
-            prot_val =
-                protect<secure_string>(secure_string(base64_decode(bin_node.text().as_string())),
-                                       bin_node.attribute("ProtectedInMemory").as_bool());
+            std::string decoded = base64_decode(bin_node.text().as_string());
+            prot_val = protect<secure_string>(secure_string(decoded),
+                                              bin_node.attribute("ProtectedInMemory").as_bool());
+            WipeBuffer(&decoded);
           }
         }
 
@@ -939,8 +965,12 @@ void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscat
     }
 
     if (!found_in_pool) {
-      bin_node.append_child("Value").text().set(
-          base64_encode(attachment->binary()->data().value().str()).c_str());
+      // Attachment data is sensitive; wipe the transient copies.
+      std::string payload = attachment->binary()->data().value().str();
+      std::string encoded = base64_encode(payload);
+      bin_node.append_child("Value").text().set(encoded.c_str());
+      WipeBuffer(&payload);
+      WipeBuffer(&encoded);
     }
   }
 
@@ -1735,15 +1765,22 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // Prepare deobfuscation stream.
   RandomObfuscator obfuscator(RandomObfuscator::Type::kSalsa20, inner_random_stream_key);
-  switch (inner_random_stream_id) {
-  case static_cast<uint32_t>(kKdbxRandomStream::kSalsa20):
-    obfuscator = RandomObfuscator(RandomObfuscator::Type::kSalsa20, inner_random_stream_key);
-    break;
-  case 3: // ChaCha20
-    obfuscator = RandomObfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
-    break;
-  default:
-    throw FormatError("Unknown inner random stream in KDBX 4 database.");
+  try {
+    switch (inner_random_stream_id) {
+    case static_cast<uint32_t>(kKdbxRandomStream::kSalsa20):
+      obfuscator = RandomObfuscator(RandomObfuscator::Type::kSalsa20, inner_random_stream_key);
+      break;
+    case 3: // ChaCha20
+      obfuscator = RandomObfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
+      break;
+    default:
+      throw FormatError("Unknown inner random stream in KDBX 4 database.");
+    }
+  } catch (...) {
+    // Unknown stream type or a failed obfuscator construction must not leave
+    // the inner random stream key behind.
+    secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
+    throw;
   }
 
   secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
@@ -2175,6 +2212,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
                     static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamKey));
   conserve<uint32_t>(inner_header_stream, 32);
   conserve<std::array<uint8_t, 32>>(inner_header_stream, inner_random_stream_key);
+
+  // The inner random stream key protects every protected field in the XML;
+  // it must not linger in memory after the header has been serialized. The
+  // obfuscator keeps its own derived copy, which is wiped on destruction.
+  secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
 
   for (const auto& binary : ordered_binaries) {
     std::stringstream bin_stream;

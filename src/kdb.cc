@@ -47,6 +47,40 @@ const uint32_t kKdbSignature1 = 0xb54bfb65;
 const uint32_t kKdbFlagRijndael = 0x00000002;
 const uint32_t kKdbFlagTwofish = 0x00000008;
 
+namespace {
+
+// Zeroizes the buffered content of a stringstream in place, so that the
+// decrypted plaintext database does not linger in the heap after parsing or
+// encrypting.
+void WipeStream(std::stringstream& stream) {
+  std::streambuf* buffer = stream.rdbuf();
+  std::streamsize size =
+      buffer->pubseekoff(0, std::ios_base::end, std::ios_base::in | std::ios_base::out);
+  buffer->pubseekoff(0, std::ios_base::beg, std::ios_base::in | std::ios_base::out);
+
+  static constexpr std::streamsize kChunkSize = 4096;
+  char zeros[kChunkSize] = {};
+  while (size > 0) {
+    std::streamsize chunk = size < kChunkSize ? size : kChunkSize;
+    if (buffer->sputn(zeros, chunk) != chunk)
+      return;
+    size -= chunk;
+  }
+}
+
+// Zeroizes the contents of a contiguous container (std::string or
+// std::vector<char/uint8_t>) in place. std::string::data() returns a const
+// pointer in C++11, so cast it away for the wipe; writing zeros never
+// invalidates the container invariants.
+template <typename Container> void WipeBuffer(Container* buffer) {
+  if (buffer != nullptr && !buffer->empty()) {
+    secure_zero(const_cast<typename Container::value_type*>(buffer->data()),
+                buffer->size() * sizeof(typename Container::value_type));
+  }
+}
+
+} // namespace
+
 #pragma pack(push, 1)
 struct KdbHeader {
   uint32_t signature0;
@@ -355,10 +389,12 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
       entry->set_username(
           protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
-    case KdbEntryFieldType::kPassword:
-      entry->set_password(
-          protect<secure_string>(secure_string(consume<std::string>(field)), false));
+    case KdbEntryFieldType::kPassword: {
+      std::string password = consume<std::string>(field);
+      entry->set_password(protect<secure_string>(secure_string(password), false));
+      WipeBuffer(&password);
       break;
+    }
     case KdbEntryFieldType::kNotes:
       entry->set_notes(protect<secure_string>(secure_string(consume<std::string>(field)), false));
       break;
@@ -392,10 +428,12 @@ std::shared_ptr<Entry> KdbFile::ReadEntry(std::istream& src, uint32_t& group_id)
           attachment = std::make_shared<Entry::Attachment>();
 
         std::vector<char> data = consume<std::vector<char>>(field);
-
+        std::string payload(data.begin(), data.end());
         std::shared_ptr<Binary> binary = std::make_shared<Binary>(
-            protect<secure_string>(secure_string(std::string(data.begin(), data.end())), false));
+            protect<secure_string>(secure_string(payload), false));
         attachment->set_binary(binary);
+        WipeBuffer(&payload);
+        WipeBuffer(&data);
       }
       break;
     case KdbEntryFieldType::kEnd:
@@ -440,7 +478,9 @@ void KdbFile::WriteEntry(std::ostream& dst, const std::shared_ptr<Entry>& entry,
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kPassword));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->password()->size()) + 1);
-  conserve<std::string>(dst, entry->password().value().str());
+  std::string password = entry->password().value().str();
+  conserve<std::string>(dst, password);
+  WipeBuffer(&password);
 
   conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kNotes));
   conserve<uint32_t>(dst, static_cast<uint32_t>(entry->notes()->size()) + 1);
@@ -479,11 +519,13 @@ void KdbFile::WriteEntry(std::ostream& dst, const std::shared_ptr<Entry>& entry,
       conserve<uint16_t>(dst, static_cast<uint16_t>(KdbEntryFieldType::kAttachmentData));
       conserve<uint32_t>(dst, static_cast<uint32_t>(attachment->binary()->Size()));
 
+      // Attachment data is sensitive; wipe the transient copy.
       std::vector<char> data;
       data.resize(attachment->binary()->Size());
       std::copy(attachment->binary()->data()->begin(), attachment->binary()->data()->end(),
                 data.begin());
       conserve<std::vector<char>>(dst, data);
+      WipeBuffer(&data);
     }
   }
 
@@ -656,6 +698,8 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   }
 
   db->set_root(group_root);
+  WipeStream(content);
+
   return db;
 }
 
@@ -776,6 +820,9 @@ void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
 
   // Encrypt the content.
   encrypt_cbc(content, dst, *cipher);
+
+  // The content stream transiently holds the plaintext database.
+  WipeStream(content);
 }
 
 } // namespace keepass
