@@ -84,7 +84,8 @@ Für eine Parsing-Bibliothek ist dynamische Eingabe-Absicherung wichtig
       `src/include/libkeepass/database.hh` + `src/variantdictionary.cc`
 - [x] Memory-Leak-Fix im KDBX-4-Import (Ciphertext-Puffer), `src/kdbx.cc`
 - [x] Block-größen-Bound in HMAC-/Hashed-Streams gegen OOM, `src/stream.cc`
-- [ ] OSS-Fuzz-Integration evaluieren (offen)
+- [x] OSS-Fuzz-Integration evaluiert: Prüfung ergeben, aber Integration bewusst
+      zurückgestellt (erfordert hermetischen Non-Conan-Build und OSS-Fuzz-PR)
 
 ---
 
@@ -162,8 +163,8 @@ verbessert Testbarkeit und Wartbarkeit und ist Voraussetzung für einen
 sauberen 4.1-Support:
 
 - [ ] Header-Parser ausgliedern (KDBX 3 vs. 4)
-- [ ] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
-- [ ] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
+- [x] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
+- [x] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
 - [ ] Öffentliche Fläche (`libkeepass/*.hh`) stabil halten (ABI-kompatibel erweitern)
 
 ### 7. Streaming statt Voll-Import + Benchmark

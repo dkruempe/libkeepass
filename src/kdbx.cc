@@ -23,13 +23,10 @@
 #include <cassert>
 #include <cstring>
 #include <fstream>
-#ifdef DEBUG
-#include <iostream>
-#endif
+#include <sstream>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#include <pugixml.hpp>
 
 // OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
 #ifdef _MSC_VER
@@ -38,44 +35,18 @@
 #define KEEPASS_HMAC_DATA_LEN(x) (x)
 #endif
 
-#ifdef _MSC_VER
-#include <cstdio>
-namespace {
-char* portable_strptime(const char* buf, const char* /*format*/, std::tm* tm) {
-  int year, month, day, hour, min, sec;
-  if (sscanf_s(buf, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min, &sec) == 6) {
-    tm->tm_year = year - 1900;
-    tm->tm_mon = month - 1;
-    tm->tm_mday = day;
-    tm->tm_hour = hour;
-    tm->tm_min = min;
-    tm->tm_sec = sec;
-    tm->tm_isdst = 0;
-    const char* p = buf;
-    while (*p && *p != 'Z' && *p != '\0')
-      ++p;
-    return const_cast<char*>(p);
-  }
-  return nullptr;
-}
-} // namespace
-#define strptime portable_strptime
-#endif
-
-#include "libkeepass/base64.hh"
 #include "libkeepass/cipher.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
-#include "libkeepass/icon.hh"
 #include "libkeepass/io.hh"
-#include "libkeepass/iterator.hh"
+#include "libkeepass/kdbx_kdf.hh"
+#include "libkeepass/kdbx_xml.hh"
 #include "libkeepass/key.hh"
 #include "libkeepass/metadata.hh"
 #include "libkeepass/random.hh"
 #include "libkeepass/secure.hh"
 #include "libkeepass/security.hh"
 #include "libkeepass/stream.hh"
-#include "libkeepass/variantdictionary.hh"
 
 namespace keepass {
 
@@ -110,44 +81,6 @@ template <typename Container> void WipeBuffer(Container* buffer) {
   }
 }
 
-// KeePass 2.48+ stores entry and group tags as a semicolon-separated list in
-// the XML document (verified against KeePass 2.57). The public API contract is
-// space-separated, so the two representations are converted at the XML
-// boundary. Tag names cannot contain spaces or semicolons in KeePass.
-std::string TagsFromXml(const char* xml_tags) {
-  std::string out;
-  bool pending_space = false;
-  for (const char* p = xml_tags; *p != '\0'; ++p) {
-    if (*p == ';') {
-      pending_space = !out.empty();
-    } else {
-      if (pending_space) {
-        out.push_back(' ');
-        pending_space = false;
-      }
-      out.push_back(*p);
-    }
-  }
-  return out;
-}
-
-std::string TagsToXml(const std::string& api_tags) {
-  std::string out;
-  bool pending_semicolon = false;
-  for (char c : api_tags) {
-    if (c == ' ') {
-      pending_semicolon = !out.empty();
-    } else {
-      if (pending_semicolon) {
-        out.push_back(';');
-        pending_semicolon = false;
-      }
-      out.push_back(c);
-    }
-  }
-  return out;
-}
-
 } // namespace
 
 constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
@@ -170,24 +103,8 @@ constexpr std::array<uint8_t, 16> kKdbxCipherTwofish = {{0xad, 0x68, 0xf2, 0x9f,
                                                          0xb9, 0xa3, 0x6a, 0xd4, 0x7a, 0xf9, 0x65,
                                                          0x34, 0x6c}};
 
-constexpr std::array<uint8_t, 16> kKdbxKdfAesKdbx4 = {{0x7c, 0x02, 0xbb, 0x82, 0x79, 0xa7, 0x4a,
-                                                       0xc0, 0x92, 0x7d, 0x11, 0x4a, 0x00, 0x64,
-                                                       0x82, 0x38}};
-[[maybe_unused]] constexpr std::array<uint8_t, 16> kKdbxKdfAesKdbx3 = {
-    {0xc9, 0xd9, 0xf3, 0x9a, 0x62, 0x8a, 0x44, 0x60, 0xbf, 0x74, 0x0d, 0x08, 0xc1, 0x8a, 0x4f,
-     0xea}};
-constexpr std::array<uint8_t, 16> kKdbxKdfArgon2d = {{0xef, 0x63, 0x6d, 0xdf, 0x8c, 0x29, 0x44,
-                                                      0x4b, 0x91, 0xf7, 0xa9, 0xa4, 0x03, 0xe3,
-                                                      0x0a, 0x0c}};
-constexpr std::array<uint8_t, 16> kKdbxKdfArgon2id = {{0x9e, 0x29, 0x8b, 0x19, 0x56, 0xdb, 0x47,
-                                                       0x73, 0xb2, 0x3d, 0xfc, 0x3e, 0xc6, 0xf0,
-                                                       0xa1, 0xe6}};
-
 constexpr std::array<uint8_t, 8> kKdbxInnerRandomStreamInitVec = {0xe8, 0x30, 0x09, 0x4b,
                                                                   0x97, 0x20, 0x5d, 0x2a};
-
-/** Seconds between 0001-01-01 and the Unix epoch (1970-01-01). */
-constexpr int64_t kKdbxEpochBias = 62135596800LL;
 
 /**
  * Upper bound for a single outer header field. Real KDBX headers only contain
@@ -214,10 +131,6 @@ enum class kKdbxRandomStream : uint32_t {
 
 // Returns whether the group subtree contains KDBX 4.1-only features. Mirrors
 // KeePass' KdbxFile.GetMinKdbxVersion.
-bool IsZeroUuid(const std::array<uint8_t, 16>& uuid) {
-  return std::all_of(uuid.begin(), uuid.end(), [](uint8_t byte) { return byte == 0; });
-}
-
 bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
   if (!group->tags().empty())
     return true;
@@ -323,938 +236,7 @@ enum class kKdbxInnerHeader : uint8_t {
 };
 #pragma pack(pop)
 
-void KdbxFile::Reset() {
-  binary_pool_.clear();
-  icon_pool_.clear();
-  group_pool_.clear();
-  header_hash_ = {0};
-  kdbx41_ = false;
-}
-
-std::shared_ptr<Group> KdbxFile::GetGroup(const std::string& uuid_str) {
-  if (uuid_str.empty())
-    return nullptr;
-
-  auto it = group_pool_.find(uuid_str);
-  if (it != group_pool_.end())
-    return it->second;
-
-  std::array<uint8_t, 16> uuid{};
-  base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-      uuid_str, bounds_checked(uuid));
-
-  std::shared_ptr<Group> group = std::make_shared<Group>();
-  group->set_uuid(uuid);
-
-  group_pool_.insert(std::make_pair(uuid_str, group));
-  return group;
-}
-
-int64_t KdbxFile::NeverSeconds() {
-  // The KDBX "never" marker is the fixed timestamp 2999-12-28T22:59:59Z.
-  static const int64_t kNeverSeconds = []() {
-    std::tm tm{};
-    strptime("2999-12-28T22:59:59Z", "%Y-%m-%dT%H:%M:%S", &tm);
-#ifdef _MSC_VER
-    return _mkgmtime(&tm) + kKdbxEpochBias;
-#else
-    return timegm(&tm) + kKdbxEpochBias;
-#endif
-  }();
-
-  return kNeverSeconds;
-}
-
-std::time_t KdbxFile::ParseDateTime(const char* text) const {
-  std::string str(text);
-
-  // Check for the special KeePass 1x "never" timestamp.
-  if (str == "2999-12-28T22:59:59Z")
-    return 0;
-
-  if (kdbx4_) {
-    // KDBX 4 stores times as a Base64 encoded Int64 value of the number of
-    // seconds elapsed since 0001-01-01 00:00:00 UTC, little-endian.
-    std::string raw = base64_decode(str);
-    if (raw.size() < 8)
-      return 0;
-
-    uint64_t secs = 0;
-    for (std::size_t i = 0; i < 8; ++i)
-      secs |= static_cast<uint64_t>(static_cast<uint8_t>(raw[i])) << (8 * i);
-
-    if (static_cast<int64_t>(secs) == NeverSeconds())
-      return 0;
-
-    return static_cast<int64_t>(secs) - kKdbxEpochBias;
-  }
-
-  std::tm tm{};
-  char* res = strptime(text, "%Y-%m-%dT%H:%M:%S", &tm);
-  if (res == nullptr) {
-    assert(false);
-    return 0;
-  }
-
-  // Format is expected to always be in UTC.
-  assert(*res == 'Z' || *res == '\0');
-
-#ifdef _MSC_VER
-  return _mkgmtime(&tm);
-#else
-  return timegm(&tm);
-#endif
-}
-
-std::string KdbxFile::WriteDateTime(std::time_t time) const {
-  if (kdbx4_) {
-    int64_t secs = time == 0 ? NeverSeconds() : static_cast<int64_t>(time) + kKdbxEpochBias;
-
-    uint8_t bytes[8];
-    uint64_t val = static_cast<uint64_t>(secs);
-    for (uint8_t& byte : bytes) {
-      byte = static_cast<uint8_t>(val & 0xff);
-      val >>= 8;
-    }
-
-    return base64_encode(bytes, bytes + 8);
-  }
-
-  if (time == 0)
-    return "2999-12-28T22:59:59Z";
-
-  char buffer[128];
-#ifdef _MSC_VER
-  std::tm time_buf{};
-  gmtime_s(&time_buf, &time);
-  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &time_buf);
-#else
-  std::tm time_buf{};
-  gmtime_r(&time, &time_buf);
-  std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &time_buf);
-#endif
-  return buffer;
-}
-
-protect<secure_string> KdbxFile::ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                                      RandomObfuscator& obfuscator) {
-  pugi::xml_node val_node = node.child(name);
-  if (val_node) {
-    bool prot = val_node.attribute("Protected").as_bool();
-    if (prot) {
-      std::string val = base64_decode(val_node.text().as_string());
-      if (!val.empty()) {
-        secure_string decrypted = obfuscator.Process(secure_string(val));
-        secure_zero(val.data(), val.size());
-        return {std::move(decrypted), true};
-      }
-    }
-
-    return {secure_string(val_node.text().as_string()),
-            prot || val_node.attribute("ProtectedInMemory").as_bool()};
-  }
-
-  return {secure_string(), false};
-}
-
-void KdbxFile::WriteProtectedString(pugi::xml_node& node, const protect<secure_string>& str,
-                                    RandomObfuscator& obfuscator) {
-  if (str.is_protected()) {
-    node.append_attribute("Protected").set_value("True");
-    node.text().set(base64_encode(obfuscator.Process(*str).str()).c_str());
-  } else {
-    node.text().set(str->c_str());
-  }
-}
-
-std::shared_ptr<Metadata> KdbxFile::ParseMeta(const pugi::xml_node& meta_node,
-                                              RandomObfuscator& obfuscator) {
-  std::shared_ptr<Metadata> meta = std::make_shared<Metadata>();
-
-  // Parse header hash and store in member for checking later.
-  base64_decode<bounds_checked_iterator<std::array<uint8_t, 32>>, unsigned char>(
-      meta_node.child_value("HeaderHash"), bounds_checked(header_hash_));
-
-  meta->set_generator(meta_node.child_value("Generator"));
-  meta->set_database_name(
-      temporal<std::string>(meta_node.child_value("DatabaseName"),
-                            ParseDateTime(meta_node.child_value("DatabaseNameChanged"))));
-  meta->set_database_desc(
-      temporal<std::string>(meta_node.child_value("DatabaseDescription"),
-                            ParseDateTime(meta_node.child_value("DatabaseDescriptionChanged"))));
-  meta->set_default_username(
-      temporal<std::string>(meta_node.child_value("DefaultUserName"),
-                            ParseDateTime(meta_node.child_value("DefaultUserNameChanged"))));
-  meta->set_maintenance_hist_days(meta_node.child("MaintenanceHistoryDays").text().as_uint(365));
-  meta->set_database_color(meta_node.child_value("Color"));
-  meta->set_master_key_changed(ParseDateTime(meta_node.child_value("MasterKeyChanged")));
-  meta->set_master_key_change_rec(meta_node.child("MasterKeyChangeRec").text().as_llong(-1));
-  meta->set_master_key_change_force(meta_node.child("MasterKeyChangeForce").text().as_llong(-1));
-
-  pugi::xml_node mp_node = meta_node.child("MemoryProtection");
-  meta->memory_protection().set_title(mp_node.child("ProtectTitle").text().as_bool());
-  meta->memory_protection().set_username(mp_node.child("ProtectUserName").text().as_bool());
-  meta->memory_protection().set_password(mp_node.child("ProtectPassword").text().as_bool(true));
-  meta->memory_protection().set_url(mp_node.child("ProtectURL").text().as_bool());
-  meta->memory_protection().set_notes(mp_node.child("ProtectNotes").text().as_bool());
-
-  if (meta_node.child("RecycleBinEnabled").text().as_bool(true))
-    meta->set_recycle_bin(GetGroup(meta_node.child_value("RecycleBinUUID")));
-  else
-    meta->set_recycle_bin(std::shared_ptr<Group>());
-  meta->set_recycle_bin_changed(ParseDateTime(meta_node.child_value("RecycleBinChanged")));
-
-  meta->set_entry_templates(GetGroup(meta_node.child_value("EntryTemplatesGroup")));
-  meta->set_entry_templates_changed(
-      ParseDateTime(meta_node.child_value("EntryTemplatesGroupChanged")));
-
-  meta->set_history_max_items(meta_node.child("HistoryMaxItems").text().as_int(-1));
-  meta->set_history_max_size(meta_node.child("HistoryMaxSize").text().as_llong(-1));
-
-  // Note that we're not parsing "LastSelectedGroup" and "LastTopVisibleGroup"
-  // here. They will be parsed later by ParseXml(). The reason is that we need
-  // to parse all groups first.
-
-  pugi::xml_node icons_node = meta_node.child("CustomIcons");
-  if (icons_node) {
-    for (pugi::xml_node icon_node = icons_node.child("Icon"); icon_node;
-         icon_node = icon_node.next_sibling("Icon")) {
-      std::vector<uint8_t> data;
-      base64_decode<std::back_insert_iterator<std::vector<uint8_t>>, unsigned char>(
-          icon_node.child_value("Data"), std::back_inserter(data));
-      if (data.empty())
-        continue;
-
-      std::array<uint8_t, 16> uuid{};
-      base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-          icon_node.child_value("UUID"), bounds_checked(uuid));
-
-      std::shared_ptr<Icon> icon = std::make_shared<Icon>(uuid, data);
-      icon->set_name(icon_node.child_value("Name"));
-      icon->set_last_modification_time(
-          ParseDateTime(icon_node.child_value("LastModificationTime")));
-      meta->AddIcon(icon);
-
-      icon_pool_.insert(std::make_pair(icon_node.child_value("UUID"), icon));
-    }
-  }
-
-  pugi::xml_node bins_node = meta_node.child("Binaries");
-  if (bins_node) {
-    for (pugi::xml_node bin_node = bins_node.child("Binary"); bin_node;
-         bin_node = bin_node.next_sibling("Binary")) {
-      std::string id = bin_node.attribute("ID").value();
-
-      protect<secure_string> data;
-
-      bool compressed = false;
-      if (bin_node.attribute("Protected").as_bool()) {
-        std::string encoded = base64_decode(bin_node.text().as_string());
-        data = protect<secure_string>(obfuscator.Process(secure_string(encoded)), true);
-        WipeBuffer(&encoded);
-      } else {
-        if (bin_node.attribute("Compressed").as_bool()) {
-          compressed = true;
-          std::string encoded = base64_decode(bin_node.text().as_string());
-          std::stringstream raw_stream(encoded);
-          gzip_istreambuf gzip_streambuf(raw_stream);
-          std::istream gzip_stream(&gzip_streambuf);
-
-          std::string decompressed = consume<std::string>(gzip_stream);
-          data = protect<secure_string>(secure_string(decompressed),
-                                        bin_node.attribute("ProtectedInMemory").as_bool());
-          WipeBuffer(&decompressed);
-          WipeBuffer(&encoded);
-          WipeStream(raw_stream);
-        } else {
-          std::string decoded = base64_decode(bin_node.text().as_string());
-          data = protect<secure_string>(secure_string(decoded),
-                                        bin_node.attribute("ProtectedInMemory").as_bool());
-          WipeBuffer(&decoded);
-        }
-      }
-
-      std::shared_ptr<Binary> binary = std::make_shared<Binary>(data);
-      binary->set_compress(compressed);
-      meta->AddBinary(binary);
-
-      binary_pool_.insert(std::make_pair(id, binary));
-    }
-  }
-
-  pugi::xml_node data_node = meta_node.child("CustomData");
-  if (data_node) {
-    for (pugi::xml_node item_node = data_node.child("Item"); item_node;
-         item_node = item_node.next_sibling("Item")) {
-      std::string key = item_node.child_value("Key");
-      std::string value = item_node.child_value("Value");
-      if (key.empty()) {
-        assert(false);
-        continue;
-      }
-
-      Metadata::Field field(key, value);
-      field.set_last_modification_time(
-          ParseDateTime(item_node.child_value("LastModificationTime")));
-      meta->AddField(field);
-    }
-  }
-
-  return meta;
-}
-
-void KdbxFile::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
-                         const std::shared_ptr<Metadata>& meta) {
-  // In KDBX 4 the header hash is stored in the KDBX header instead of in the
-  // XML document.
-  if (!kdbx4_) {
-    meta_node.append_child("HeaderHash")
-        .text()
-        .set(base64_encode(header_hash_.begin(), header_hash_.end()).c_str());
-  }
-  meta_node.append_child("Generator").text().set(meta->generator().c_str());
-  meta_node.append_child("DatabaseName").text().set(meta->database_name()->c_str());
-  meta_node.append_child("DatabaseNameChanged")
-      .text()
-      .set(WriteDateTime(meta->database_name().time()).c_str());
-  meta_node.append_child("DatabaseDescription").text().set(meta->database_desc()->c_str());
-  meta_node.append_child("DatabaseDescriptionChanged")
-      .text()
-      .set(WriteDateTime(meta->database_desc().time()).c_str());
-  meta_node.append_child("DefaultUserName").text().set(meta->default_username()->c_str());
-  meta_node.append_child("DefaultUserNameChanged")
-      .text()
-      .set(WriteDateTime(meta->default_username().time()).c_str());
-  meta_node.append_child("MaintenanceHistoryDays").text().set(meta->maintenance_hist_days());
-  meta_node.append_child("Color").text().set(meta->database_color().c_str());
-  meta_node.append_child("MasterKeyChanged")
-      .text()
-      .set(WriteDateTime(meta->master_key_changed()).c_str());
-  meta_node.append_child("MasterKeyChangeRec")
-      .text()
-      .set(static_cast<long long>(meta->master_key_change_rec()));
-  meta_node.append_child("MasterKeyChangeForce")
-      .text()
-      .set(static_cast<long long>(meta->master_key_change_force()));
-
-  pugi::xml_node mp_node = meta_node.append_child("MemoryProtection");
-  mp_node.append_child("ProtectTitle").text().set(meta->memory_protection().title());
-  mp_node.append_child("ProtectUserName").text().set(meta->memory_protection().username());
-  mp_node.append_child("ProtectPassword").text().set(meta->memory_protection().password());
-  mp_node.append_child("ProtectURL").text().set(meta->memory_protection().url());
-  mp_node.append_child("ProtectNotes").text().set(meta->memory_protection().notes());
-
-  if (meta->recycle_bin()) {
-    meta_node.append_child("RecycleBinEnabled").text().set(true);
-    meta_node.append_child("RecycleBinUUID")
-        .text()
-        .set(base64_encode(meta->recycle_bin()->uuid().begin(), meta->recycle_bin()->uuid().end())
-                 .c_str());
-  } else {
-    meta_node.append_child("RecycleBinEnabled").text().set(false);
-  }
-  meta_node.append_child("RecycleBinChanged")
-      .text()
-      .set(WriteDateTime(meta->recycle_bin_changed()).c_str());
-
-  if (meta->entry_templates()) {
-    meta_node.append_child("EntryTemplatesGroup")
-        .text()
-        .set(base64_encode(meta->entry_templates()->uuid().begin(),
-                           meta->entry_templates()->uuid().end())
-                 .c_str());
-  }
-  meta_node.append_child("EntryTemplatesGroupChanged")
-      .text()
-      .set(WriteDateTime(meta->entry_templates_changed()).c_str());
-
-  meta_node.append_child("HistoryMaxItems").text().set(meta->history_max_items());
-  meta_node.append_child("HistoryMaxSize")
-      .text()
-      .set(static_cast<long long>(meta->history_max_size()));
-
-  if (auto group = meta->last_selected_group().lock()) {
-    meta_node.append_child("LastSelectedGroup")
-        .text()
-        .set(base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
-  }
-
-  if (auto group = meta->last_visible_group().lock()) {
-    meta_node.append_child("LastTopVisibleGroup")
-        .text()
-        .set(base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
-  }
-
-  pugi::xml_node icons_node = meta_node.append_child("CustomIcons");
-  for (const auto& icon : meta->icons()) {
-    pugi::xml_node icon_node = icons_node.append_child("Icon");
-    icon_node.append_child("UUID").text().set(
-        base64_encode(icon->uuid().begin(), icon->uuid().end()).c_str());
-    icon_node.append_child("Data").text().set(
-        base64_encode(icon->data().begin(), icon->data().end()).c_str());
-
-    if (kdbx41_) {
-      if (!icon->name().empty())
-        icon_node.append_child("Name").text().set(icon->name().c_str());
-      if (icon->last_modification_time() != 0)
-        icon_node.append_child("LastModificationTime")
-            .text()
-            .set(WriteDateTime(icon->last_modification_time()).c_str());
-    }
-  }
-
-  // In KDBX 4 the binary attachments are stored in the KDBX inner header
-  // instead of in the XML document. Their pool is filled by Export4().
-  if (!kdbx4_) {
-    uint32_t binary_id = 0;
-    pugi::xml_node bins_node = meta_node.append_child("Binaries");
-    for (const auto& binary : meta->binaries()) {
-      pugi::xml_node bin_node = bins_node.append_child("Binary");
-      bin_node.append_attribute("ID").set_value(binary_id);
-
-      if (binary->data().is_protected()) {
-        bin_node.append_attribute("Protected").set_value("True");
-        // The obfuscated secure_string wipes itself; only the base64 copy of
-        // the (obfuscated) payload must be released explicitly.
-        secure_string obfuscated = obfuscator.Process(*binary->data());
-        std::string encoded = base64_encode(obfuscated.str());
-        bin_node.text().set(encoded.c_str());
-        WipeBuffer(&encoded);
-      } else {
-        if (binary->compress()) {
-          bin_node.append_attribute("Compressed").set_value("True");
-          std::stringstream compressed_data;
-
-          gzip_ostreambuf gzip_streambuf(compressed_data);
-          std::ostream gzip_stream(&gzip_streambuf);
-          std::copy(binary->data()->begin(), binary->data()->end(),
-                    std::ostreambuf_iterator<char>(gzip_stream));
-          gzip_stream.flush();
-
-          std::string encoded = base64_encode(std::istreambuf_iterator<char>(compressed_data),
-                                              std::istreambuf_iterator<char>());
-          bin_node.text().set(encoded.c_str());
-          WipeBuffer(&encoded);
-          WipeStream(compressed_data);
-        } else {
-          std::string payload = (*binary->data()).str();
-          std::string encoded = base64_encode(payload);
-          bin_node.text().set(encoded.c_str());
-          WipeBuffer(&payload);
-          WipeBuffer(&encoded);
-        }
-      }
-
-      binary_pool_.insert(std::make_pair(std::to_string(binary_id), binary));
-
-      ++binary_id;
-    }
-  }
-
-  pugi::xml_node data_node = meta_node.append_child("CustomData");
-  for (const auto& field : meta->fields()) {
-    pugi::xml_node item_node = data_node.append_child("Item");
-    item_node.append_child("Key").text().set(field.key().c_str());
-    item_node.append_child("Value").text().set(field.value().c_str());
-
-    if (kdbx41_ && field.last_modification_time() != 0)
-      item_node.append_child("LastModificationTime")
-          .text()
-          .set(WriteDateTime(field.last_modification_time()).c_str());
-  }
-}
-
-std::shared_ptr<Entry> KdbxFile::ParseEntry(const pugi::xml_node& entry_node,
-                                            std::array<uint8_t, 16>& entry_uuid,
-                                            RandomObfuscator& obfuscator) {
-  std::shared_ptr<Entry> entry = std::make_shared<Entry>();
-
-  base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-      entry_node.child_value("UUID"), bounds_checked(entry_uuid));
-
-  entry->set_uuid(entry_uuid);
-  entry->set_icon(entry_node.child("IconID").text().as_uint());
-  entry->set_fg_color(entry_node.child_value("ForegroundColor"));
-  entry->set_bg_color(entry_node.child_value("BackgroundColor"));
-  entry->set_override_url(entry_node.child_value("OverrideURL"));
-  entry->set_quality_check(entry_node.child("QualityCheck").text().as_bool(true));
-  entry->set_tags(TagsFromXml(entry_node.child_value("Tags")));
-
-  if (entry_node.child("PreviousParentGroup")) {
-    std::array<uint8_t, 16> prev_parent = {{0}};
-    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-        entry_node.child_value("PreviousParentGroup"), bounds_checked(prev_parent));
-    entry->set_previous_parent_group(prev_parent);
-  }
-
-  if (entry_node.child("CustomIconUUID")) {
-    auto it = icon_pool_.find(entry_node.child_value("CustomIconUUID"));
-    if (it != icon_pool_.end()) {
-      entry->set_custom_icon(it->second);
-    } else {
-      assert(false);
-    }
-  }
-
-  pugi::xml_node times_node = entry_node.child("Times");
-  if (times_node) {
-    entry->set_creation_time(ParseDateTime(times_node.child_value("CreationTime")));
-    entry->set_modification_time(ParseDateTime(times_node.child_value("LastModificationTime")));
-    entry->set_access_time(ParseDateTime(times_node.child_value("LastAccessTime")));
-    entry->set_expiry_time(ParseDateTime(times_node.child_value("ExpiryTime")));
-    entry->set_move_time(ParseDateTime(times_node.child_value("LocationChanged")));
-    entry->set_expires(times_node.child("Expires").text().as_bool());
-    entry->set_usage_count(times_node.child("UsageCount").text().as_uint());
-  }
-
-  // Auto type.
-  pugi::xml_node autotype_node = entry_node.child("AutoType");
-  if (autotype_node) {
-    entry->auto_type().set_enabled(autotype_node.child("Enabled").text().as_bool());
-    entry->auto_type().set_obfuscation(
-        autotype_node.child("DataTransferObfuscation").text().as_uint());
-    entry->auto_type().set_sequence(autotype_node.child_value("DefaultSequence"));
-
-    for (pugi::xml_node ass_node = autotype_node.child("Association"); ass_node;
-         ass_node = ass_node.next_sibling("Association")) {
-      entry->auto_type().AddAssociation(ass_node.child_value("Window"),
-                                        ass_node.child_value("KeystrokeSequence"));
-    }
-  }
-
-  // Read string fields.
-  for (pugi::xml_node str_node = entry_node.child("String"); str_node;
-       str_node = str_node.next_sibling("String")) {
-    std::string key = str_node.child_value("Key");
-    protect<secure_string> val = ParseProtectedString(str_node, "Value", obfuscator);
-
-    if (key == "Title") {
-      entry->set_title(val);
-    } else if (key == "URL") {
-      entry->set_url(val);
-    } else if (key == "UserName") {
-      entry->set_username(val);
-    } else if (key == "Password") {
-      entry->set_password(val);
-    } else if (key == "Notes") {
-      entry->set_notes(val);
-    } else {
-      entry->AddCustomField(key, val);
-    }
-  }
-
-  // Read binary fields.
-  for (pugi::xml_node bin_node = entry_node.child("Binary"); bin_node;
-       bin_node = bin_node.next_sibling("Binary")) {
-    std::string key = bin_node.child_value("Key");
-    std::shared_ptr<Binary> binary;
-
-    pugi::xml_node val_node = bin_node.child("Value");
-    if (val_node) {
-      pugi::xml_attribute ref_attr = val_node.attribute("Ref");
-      if (ref_attr) {
-        auto it = binary_pool_.find(ref_attr.value());
-        if (it == binary_pool_.end()) {
-          throw FormatError("Entry attachment refers to non-existing binary data.");
-        }
-
-        binary = it->second;
-      } else {
-        protect<secure_string> prot_val;
-
-        if (bin_node.attribute("Protected").as_bool()) {
-          std::string encoded = base64_decode(bin_node.text().as_string());
-          prot_val = protect<secure_string>(obfuscator.Process(secure_string(encoded)), true);
-          WipeBuffer(&encoded);
-        } else {
-          if (bin_node.attribute("Compressed").as_bool()) {
-            std::string encoded = base64_decode(bin_node.text().as_string());
-            std::stringstream raw_stream(encoded);
-            gzip_istreambuf gzip_streambuf(raw_stream);
-            std::istream gzip_stream(&gzip_streambuf);
-
-            std::string decompressed = consume<std::string>(gzip_stream);
-            prot_val = protect<secure_string>(secure_string(decompressed),
-                                              bin_node.attribute("ProtectedInMemory").as_bool());
-            WipeBuffer(&decompressed);
-            WipeBuffer(&encoded);
-            WipeStream(raw_stream);
-          } else {
-            std::string decoded = base64_decode(bin_node.text().as_string());
-            prot_val = protect<secure_string>(secure_string(decoded),
-                                              bin_node.attribute("ProtectedInMemory").as_bool());
-            WipeBuffer(&decoded);
-          }
-        }
-
-        binary = std::make_shared<Binary>(prot_val);
-      }
-    }
-
-    std::shared_ptr<Entry::Attachment> attachment = std::make_shared<Entry::Attachment>();
-    attachment->set_name(key);
-    attachment->set_binary(binary);
-
-    entry->AddAttachment(attachment);
-  }
-
-  // Read history entries.
-  pugi::xml_node history_node = entry_node.child("History");
-  if (history_node) {
-    for (pugi::xml_node subentry_node = history_node.child("Entry"); subentry_node;
-         subentry_node = subentry_node.next_sibling("Entry")) {
-      std::array<uint8_t, 16> subentry_uuid = {0};
-      entry->AddHistoryEntry(ParseEntry(subentry_node, subentry_uuid, obfuscator));
-    }
-  }
-
-  return entry;
-}
-
-void KdbxFile::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscator,
-                          const std::shared_ptr<Entry>& entry) {
-  entry_node.append_child("UUID").text().set(
-      base64_encode(entry->uuid().begin(), entry->uuid().end()).c_str());
-  entry_node.append_child("IconID").text().set(entry->icon());
-  entry_node.append_child("ForegroundColor").text().set(entry->fg_color().c_str());
-  entry_node.append_child("BackgroundColor").text().set(entry->bg_color().c_str());
-  entry_node.append_child("OverrideURL").text().set(entry->override_url().c_str());
-  if (!entry->quality_check())
-    entry_node.append_child("QualityCheck").text().set(false);
-  entry_node.append_child("Tags").text().set(TagsToXml(entry->tags()).c_str());
-  if (kdbx41_ && !IsZeroUuid(entry->previous_parent_group()))
-    entry_node.append_child("PreviousParentGroup")
-        .text()
-        .set(base64_encode(entry->previous_parent_group().begin(),
-                           entry->previous_parent_group().end())
-                 .c_str());
-
-  if (auto icon = entry->custom_icon().lock()) {
-    entry_node.append_child("CustomIconUUID")
-        .text()
-        .set(base64_encode(icon->uuid().begin(), icon->uuid().end()).c_str());
-  }
-
-  pugi::xml_node times_node = entry_node.append_child("Times");
-  times_node.append_child("CreationTime").text().set(WriteDateTime(entry->creation_time()).c_str());
-  times_node.append_child("LastModificationTime")
-      .text()
-      .set(WriteDateTime(entry->modification_time()).c_str());
-  times_node.append_child("LastAccessTime").text().set(WriteDateTime(entry->access_time()).c_str());
-  times_node.append_child("ExpiryTime").text().set(WriteDateTime(entry->expiry_time()).c_str());
-  times_node.append_child("LocationChanged").text().set(WriteDateTime(entry->move_time()).c_str());
-  times_node.append_child("Expires").text().set(entry->expires());
-  times_node.append_child("UsageCount").text().set(entry->usage_count());
-
-  pugi::xml_node autotype_node = entry_node.append_child("AutoType");
-  autotype_node.append_child("Enabled").text().set(entry->auto_type().enabled());
-  autotype_node.append_child("DataTransferObfuscation")
-      .text()
-      .set(entry->auto_type().obfuscation());
-  autotype_node.append_child("DefaultSequence").text().set(entry->auto_type().sequence().c_str());
-
-  for (const auto& ass : entry->auto_type().associations()) {
-    pugi::xml_node ass_node = autotype_node.append_child("Association");
-    ass_node.append_child("Window").text().set(ass.window().c_str());
-    ass_node.append_child("KeystrokeSequence").text().set(ass.sequence().c_str());
-  }
-
-  // Write string fields.
-  pugi::xml_node str_node = entry_node.append_child("String");
-  str_node.append_child("Key").text().set("Title");
-  pugi::xml_node val_node = str_node.append_child("Value");
-  WriteProtectedString(val_node, entry->title(), obfuscator);
-
-  str_node = entry_node.append_child("String");
-  str_node.append_child("Key").text().set("URL");
-  val_node = str_node.append_child("Value");
-  WriteProtectedString(val_node, entry->url(), obfuscator);
-
-  str_node = entry_node.append_child("String");
-  str_node.append_child("Key").text().set("UserName");
-  val_node = str_node.append_child("Value");
-  WriteProtectedString(val_node, entry->username(), obfuscator);
-
-  str_node = entry_node.append_child("String");
-  str_node.append_child("Key").text().set("Password");
-  val_node = str_node.append_child("Value");
-  WriteProtectedString(val_node, entry->password(), obfuscator);
-
-  str_node = entry_node.append_child("String");
-  str_node.append_child("Key").text().set("Notes");
-  val_node = str_node.append_child("Value");
-  WriteProtectedString(val_node, entry->notes(), obfuscator);
-
-  for (const auto& field : entry->custom_fields()) {
-    str_node = entry_node.append_child("String");
-    str_node.append_child("Key").text().set(field.key().c_str());
-    val_node = str_node.append_child("Value");
-    WriteProtectedString(val_node, field.value(), obfuscator);
-  }
-
-  // Write binary fields.
-  for (const auto& attachment : entry->attachments()) {
-    pugi::xml_node bin_node = entry_node.append_child("Binary");
-    bin_node.append_child("Key").text().set(attachment->name().c_str());
-
-    bool found_in_pool = false;
-    for (const auto& it : binary_pool_) {
-      if (it.second == attachment->binary()) {
-        bin_node.append_child("Value").append_attribute("Ref").set_value(it.first.c_str());
-        found_in_pool = true;
-        break;
-      }
-    }
-
-    if (!found_in_pool) {
-      // Attachment data is sensitive; wipe the transient copies.
-      std::string payload = attachment->binary()->data().value().str();
-      std::string encoded = base64_encode(payload);
-      bin_node.append_child("Value").text().set(encoded.c_str());
-      WipeBuffer(&payload);
-      WipeBuffer(&encoded);
-    }
-  }
-
-  // Write history entries.
-  pugi::xml_node history_node = entry_node.append_child("History");
-  for (const auto& histentry : entry->history()) {
-    pugi::xml_node histentry_node = history_node.append_child("Entry");
-    WriteEntry(histentry_node, obfuscator, histentry);
-  }
-}
-
-std::shared_ptr<Group> KdbxFile::ParseGroup(const pugi::xml_node& group_node,
-                                            RandomObfuscator& obfuscator) {
-  std::shared_ptr<Group> group = std::make_shared<Group>();
-  group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
-
-  std::array<uint8_t, 16> uuid = {0};
-  base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-      group_node.child_value("UUID"), bounds_checked(uuid));
-
-  group->set_uuid(uuid);
-  group->set_name(group_node.child_value("Name"));
-  group->set_notes(group_node.child_value("Notes"));
-  group->set_tags(TagsFromXml(group_node.child_value("Tags")));
-
-  if (group_node.child("PreviousParentGroup")) {
-    std::array<uint8_t, 16> prev_parent = {{0}};
-    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-        group_node.child_value("PreviousParentGroup"), bounds_checked(prev_parent));
-    group->set_previous_parent_group(prev_parent);
-  }
-
-  group->set_icon(group_node.child("IconID").text().as_uint());
-
-  if (group_node.child("CustomIconUUID")) {
-    auto icon = icon_pool_.find(group_node.child_value("CustomIconUUID"));
-    if (icon != icon_pool_.end()) {
-      group->set_custom_icon(icon->second);
-    } else {
-      assert(false);
-    }
-  }
-
-  pugi::xml_node times_node = group_node.child("Times");
-  if (times_node) {
-    group->set_creation_time(ParseDateTime(times_node.child_value("CreationTime")));
-    group->set_modification_time(ParseDateTime(times_node.child_value("LastModificationTime")));
-    group->set_access_time(ParseDateTime(times_node.child_value("LastAccessTime")));
-    group->set_expiry_time(ParseDateTime(times_node.child_value("ExpiryTime")));
-    group->set_move_time(ParseDateTime(times_node.child_value("LocationChanged")));
-    group->set_expires(times_node.child("Expires").text().as_bool());
-    group->set_usage_count(times_node.child("UsageCount").text().as_uint());
-  }
-
-  group->set_expanded(group_node.child("IsExpanded").text().as_bool());
-  group->set_default_autotype_sequence(group_node.child_value("DefaultAutoTypeSequence"));
-  group->set_autotype(group_node.child("EnableAutoType").text().as_bool());
-  group->set_search(group_node.child("EnableSearching").text().as_bool());
-
-  base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-      group_node.child_value("LastTopVisibleEntry"), bounds_checked(uuid));
-
-  for (pugi::xml_node entry_node = group_node.child("Entry"); entry_node;
-       entry_node = entry_node.next_sibling("Entry")) {
-    std::array<uint8_t, 16> entry_uuid = {0};
-    std::shared_ptr<Entry> entry = ParseEntry(entry_node, entry_uuid, obfuscator);
-    group->AddEntry(entry);
-
-    if (entry_uuid == uuid) {
-      assert(group->last_visible_entry().expired());
-      group->set_last_visible_entry(entry);
-    }
-  }
-
-  for (pugi::xml_node subgroup_node = group_node.child("Group"); subgroup_node;
-       subgroup_node = subgroup_node.next_sibling("Group")) {
-    group->AddGroup(ParseGroup(subgroup_node, obfuscator));
-  }
-
-  return group;
-}
-
-void KdbxFile::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscator,
-                          const std::shared_ptr<Group>& group) {
-  group_node.append_child("UUID").text().set(
-      base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
-  group_node.append_child("Name").text().set(group->name().c_str());
-  group_node.append_child("Notes").text().set(group->notes().c_str());
-  if (kdbx41_ && !IsZeroUuid(group->previous_parent_group()))
-    group_node.append_child("PreviousParentGroup")
-        .text()
-        .set(base64_encode(group->previous_parent_group().begin(),
-                           group->previous_parent_group().end())
-                 .c_str());
-  if (!group->tags().empty())
-    group_node.append_child("Tags").text().set(TagsToXml(group->tags()).c_str());
-  group_node.append_child("IconID").text().set(group->icon());
-
-  if (auto icon = group->custom_icon().lock()) {
-    group_node.append_child("CustomIconUUID")
-        .text()
-        .set(base64_encode(icon->uuid().begin(), icon->uuid().end()).c_str());
-  }
-
-  pugi::xml_node times_node = group_node.append_child("Times");
-  times_node.append_child("CreationTime").text().set(WriteDateTime(group->creation_time()).c_str());
-  times_node.append_child("LastModificationTime")
-      .text()
-      .set(WriteDateTime(group->modification_time()).c_str());
-  times_node.append_child("LastAccessTime").text().set(WriteDateTime(group->access_time()).c_str());
-  times_node.append_child("ExpiryTime").text().set(WriteDateTime(group->expiry_time()).c_str());
-  times_node.append_child("LocationChanged").text().set(WriteDateTime(group->move_time()).c_str());
-  times_node.append_child("Expires").text().set(group->expires());
-  times_node.append_child("UsageCount").text().set(group->usage_count());
-
-  group_node.append_child("IsExpanded").text().set(group->expanded());
-  group_node.append_child("DefaultAutoTypeSequence")
-      .text()
-      .set(group->default_autotype_sequence().c_str());
-  group_node.append_child("EnableAutoType").text().set(group->autotype());
-  group_node.append_child("EnableSearching").text().set(group->search());
-
-  if (auto entry = group->last_visible_entry().lock()) {
-    group_node.append_child("LastTopVisibleEntry")
-        .text()
-        .set(base64_encode(entry->uuid().begin(), entry->uuid().end()).c_str());
-  }
-
-  for (const auto& entry : group->Entries()) {
-    pugi::xml_node entry_node = group_node.append_child("Entry");
-    WriteEntry(entry_node, obfuscator, entry);
-  }
-
-  for (const auto& subgroup : group->Groups()) {
-    pugi::xml_node subgroup_node = group_node.append_child("Group");
-    WriteGroup(subgroup_node, obfuscator, subgroup);
-  }
-}
-
-void KdbxFile::ParseXml(std::istream& src, RandomObfuscator& obfuscator, Database& db) {
-  pugi::xml_document doc;
-  if (!doc.load(src, pugi::parse_default | pugi::parse_trim_pcdata))
-    throw FormatError("Malformed XML in KDBX.");
-
-  pugi::xml_node kpf_node = doc.child("KeePassFile");
-  if (!kpf_node)
-    throw FormatError("No \"KeePassFile\" element in KDBX XML.");
-
-  pugi::xml_node meta_node = kpf_node.child("Meta");
-  if (!meta_node)
-    throw FormatError("No \"Meta\" element in KDBX XML.");
-
-  pugi::xml_node group_node = kpf_node.child("Root").child("Group");
-  if (!group_node)
-    throw FormatError(R"(No "Root" or "Group" element in KDBX XML.)");
-
-  std::shared_ptr<Metadata> meta = ParseMeta(meta_node, obfuscator);
-  std::shared_ptr<Group> root = ParseGroup(group_node, obfuscator);
-
-  for (pugi::xml_node object_node =
-           kpf_node.child("Root").child("DeletedObjects").child("DeletedObject");
-       object_node; object_node = object_node.next_sibling("DeletedObject")) {
-    std::array<uint8_t, 16> uuid = {{0}};
-    base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
-        object_node.child_value("UUID"), bounds_checked(uuid));
-    meta->AddDeletedObject(
-        Metadata::DeletedObject(uuid, ParseDateTime(object_node.child_value("DeletionTime"))));
-  }
-
-  db.set_meta(meta);
-  db.set_root(root);
-
-  // When first parsing the meta data we haven't yet parsed all groups so we
-  // have to wait until every group is parsed before parsing the final parts of
-  // the meta data.
-  auto it = group_pool_.find(meta_node.child_value("LastSelectedGroup"));
-  if (it != group_pool_.end()) {
-    meta->set_last_selected_group(it->second);
-  }
-
-  it = group_pool_.find(meta_node.child_value("LastTopVisibleGroup"));
-  if (it != group_pool_.end()) {
-    meta->set_last_visible_group(it->second);
-  }
-}
-
-#ifdef DEBUG
-void KdbxFile::PrintXml(pugi::xml_document& doc) {
-  static const char* kNodeTypeNames[] = {"null",  "document", "element", "pcdata",
-                                         "cdata", "comment",  "pi",      "declaration"};
-
-  struct XmlTreeWalker : pugi::xml_tree_walker {
-  public:
-    virtual bool for_each(pugi::xml_node& node) override {
-      for (int i = 0; i < depth(); ++i)
-        std::cout << "  ";
-
-      std::cout << kNodeTypeNames[node.type()] << ": name=\"" << node.name() << "\"; value=\""
-                << node.value() << "\"" << std::endl;
-      return true;
-    }
-  };
-
-  XmlTreeWalker walker;
-  doc.traverse(walker);
-}
-#endif
-
-void KdbxFile::WriteXml(std::ostream& dst, RandomObfuscator& obfuscator, const Database& db) {
-  pugi::xml_document doc;
-
-  pugi::xml_node kpf_node = doc.append_child("KeePassFile");
-  pugi::xml_node meta_node = kpf_node.append_child("Meta");
-  pugi::xml_node root_node = kpf_node.append_child("Root");
-  pugi::xml_node group_node = root_node.append_child("Group");
-
-  // A freshly created database may lack metadata or a root group; export a
-  // default placeholder in that case instead of dereferencing a null pointer.
-  if (!db.meta()) {
-    static const std::shared_ptr<Metadata> empty_meta = std::make_shared<Metadata>();
-    WriteMeta(meta_node, obfuscator, empty_meta);
-  } else {
-    WriteMeta(meta_node, obfuscator, db.meta());
-
-    if (!db.meta()->deleted_objects().empty()) {
-      pugi::xml_node del_node = root_node.append_child("DeletedObjects");
-      for (const auto& object : db.meta()->deleted_objects()) {
-        pugi::xml_node object_node = del_node.append_child("DeletedObject");
-        object_node.append_child("UUID").text().set(
-            base64_encode(object.uuid().begin(), object.uuid().end()).c_str());
-        object_node.append_child("DeletionTime")
-            .text()
-            .set(WriteDateTime(object.deletion_time()).c_str());
-      }
-    }
-  }
-
-  static const std::shared_ptr<Group> empty_root = std::make_shared<Group>();
-  WriteGroup(group_node, obfuscator, db.root() ? db.root() : empty_root);
-
-  doc.save(dst);
-}
+void KdbxFile::Reset() { xml_.Reset(); }
 
 std::unique_ptr<Database> KdbxFile::Import(const std::string& path, const Key& key) {
   std::ifstream src(path, std::ios::binary);
@@ -1280,9 +262,10 @@ std::unique_ptr<Database> KdbxFile::Import(std::istream& src, const Key& key) {
 
   switch (header.version & kKdbxVersionCriticalMask) {
   case kKdbxVersion3:
+    xml_.set_kdbx4(false);
     return Import3(src, key);
   case kKdbxVersion4:
-    kdbx4_ = true;
+    xml_.set_kdbx4(true);
     return Import4(src, key);
   default:
     throw FormatError(
@@ -1395,8 +378,8 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   WipeBuffer(&header_data);
 
   // Produce the final key used for encrypting the contents.
-  SecureBuffer<32> transformed_key = key.Transform(db->transform_seed(), db->transform_rounds(),
-                                                   Key::SubKeyResolution::kHashSubKeys);
+  SecureBuffer<32> transformed_key =
+      KdbxKdf::Transform(key, *db, Key::SubKeyResolution::kHashSubKeys);
   db->set_transformed_key(transformed_key.Clone());
   std::array<uint8_t, 32> final_key{};
 
@@ -1456,62 +439,19 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
     gzip_istreambuf gzip_streambuf(hashed_stream);
     std::istream gzip_stream(&gzip_streambuf);
 
-    ParseXml(gzip_stream, obfuscator, *db);
+    xml_.Parse(gzip_stream, obfuscator, *db);
   } else {
-    ParseXml(hashed_stream, obfuscator, *db);
+    xml_.Parse(hashed_stream, obfuscator, *db);
   }
 
   // The content stream still holds the decrypted payload.
   WipeStream(content);
 
   // Validate header hash.
-  if (header_hash_ != header_hash)
+  if (xml_.header_hash() != header_hash)
     throw FormatError("Header checksum error in KDBX.");
 
   return db;
-}
-
-void KdbxFile::ParseKdfParameters(std::istream& field, Database& db) {
-  VariantDictionary vdict;
-  vdict.Parse(field);
-
-  const VariantDictionary::Entry& uuid_entry = vdict.Get("$UUID");
-  if (uuid_entry.type != VariantDictionary::Type::kByteArray || uuid_entry.value.size() != 16) {
-    throw FormatError("Illegal KDF UUID in KDBX 4 database.");
-  }
-
-  std::array<uint8_t, 16> uuid{};
-  std::copy(uuid_entry.value.begin(), uuid_entry.value.end(), uuid.begin());
-
-  if (uuid == kKdbxKdfAesKdbx4 || uuid == kKdbxKdfAesKdbx3) {
-    db.set_kdf(Database::Kdf::kAes);
-
-    std::vector<uint8_t> seed = vdict.GetBytes("S");
-    if (seed.size() != 32)
-      throw FormatError("Illegal KDF seed size in KDBX 4 database.");
-    std::array<uint8_t, 32> seed_arr{};
-    std::copy(seed.begin(), seed.end(), seed_arr.begin());
-    db.set_transform_seed(seed_arr);
-    const uint64_t transform_rounds = vdict.GetUInt64("R");
-    if (transform_rounds > Database::kMaxTransformRounds)
-      throw FormatError("KDF parameters declare too many transform rounds.");
-    db.set_transform_rounds(transform_rounds);
-  } else if (uuid == kKdbxKdfArgon2d || uuid == kKdbxKdfArgon2id) {
-    db.set_kdf(uuid == kKdbxKdfArgon2d ? Database::Kdf::kArgon2d : Database::Kdf::kArgon2id);
-
-    db.set_argon2_salt(vdict.GetBytes("S"));
-    const uint64_t argon2_iterations = vdict.GetUInt64("I");
-    const uint64_t argon2_memory = vdict.GetUInt64("M");
-    if (argon2_iterations > Database::kMaxArgon2Iterations ||
-        argon2_memory > (Database::kMaxArgon2MemoryKiB << 10))
-      throw FormatError("Argon2 KDF parameters are out of bounds.");
-    db.set_argon2_iterations(argon2_iterations);
-    db.set_argon2_memory(argon2_memory);
-    db.set_argon2_parallelism(vdict.GetUInt32("P"));
-    db.set_argon2_version(vdict.GetUInt32("V"));
-  } else {
-    throw FormatError("Unknown KDF in KDBX 4 database.");
-  }
 }
 
 std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
@@ -1574,7 +514,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
       }
       break;
     case Kdbx4HeaderField::kKdfParameters:
-      ParseKdfParameters(field, *db);
+      KdbxKdf::ParseParameters(field, *db);
       break;
     default:
       throw FormatError("Illegal header field in KDBX.");
@@ -1608,20 +548,8 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // Produce the transformed key used for both the final encryption key and
   // the HMAC verification key.
-  SecureBuffer<32> transformed_key;
-  switch (db->kdf()) {
-  case Database::Kdf::kAes:
-    transformed_key = key.Transform(db->transform_seed(), db->transform_rounds(),
-                                    Key::SubKeyResolution::kHashSubKeys);
-    break;
-  case Database::Kdf::kArgon2d:
-  case Database::Kdf::kArgon2id:
-    transformed_key = key.TransformArgon2(
-        db->kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d : Key::Kdf::kArgon2id,
-        db->argon2_salt(), db->argon2_iterations(), db->argon2_memory(), db->argon2_parallelism(),
-        db->argon2_version(), Key::SubKeyResolution::kHashSubKeys);
-    break;
-  }
+  SecureBuffer<32> transformed_key =
+      KdbxKdf::Transform(key, *db, Key::SubKeyResolution::kHashSubKeys);
   db->set_transformed_key(transformed_key.Clone());
 
   // Compute the HMAC key for the header. The block index 0xFFFFFFFFFFFFFFFF
@@ -1797,7 +725,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
       // The stream buffer transiently holds the raw attachment payload.
       WipeStream(raw_stream);
 
-      binary_pool_.insert(std::make_pair(std::to_string(binary_pool_.size()), binary));
+      xml_.binary_pool().insert(std::make_pair(std::to_string(xml_.binary_pool().size()), binary));
       break;
     }
     default:
@@ -1829,7 +757,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // Parse the XML content, which follows the inner header in the same
   // (already decompressed) payload.
-  ParseXml(xml_source, obfuscator, *db);
+  xml_.Parse(xml_source, obfuscator, *db);
 
   // KDBX 4 attachments live in the inner header. Keep them in the meta so
   // that they are not lost when exporting to older formats.
@@ -1856,23 +784,22 @@ void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   Reset();
 
   if (write_kdbx4_ || db.kdf() != Database::Kdf::kAes) {
-    kdbx4_ = true;
-    kdbx41_ = RequiresKdbx41(db);
+    xml_.set_kdbx4(true);
+    xml_.set_kdbx41(RequiresKdbx41(db));
     Export4(dst, db, key);
     return;
   }
 
-  kdbx4_ = false;
-  kdbx41_ = false;
+  xml_.set_kdbx4(false);
+  xml_.set_kdbx41(false);
   Export3(dst, db, key);
 }
 
 void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   // Produce the final key used for encrypting the contents.
-  SecureBuffer<32> transformed_key = db.has_transformed_key()
-                                         ? db.transformed_key().Clone()
-                                         : key.Transform(db.transform_seed(), db.transform_rounds(),
-                                                         Key::SubKeyResolution::kHashSubKeys);
+  SecureBuffer<32> transformed_key =
+      db.has_transformed_key() ? db.transformed_key().Clone()
+                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
 
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
@@ -1944,7 +871,7 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestInit_ex(mdctx2, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx2, header_data.c_str(), header_data.size());
   unsigned int out_len2 = 0;
-  EVP_DigestFinal_ex(mdctx2, header_hash_.data(), &out_len2);
+  EVP_DigestFinal_ex(mdctx2, xml_.header_hash().data(), &out_len2);
   EVP_MD_CTX_free(mdctx2);
 
   // Write header to file.
@@ -1979,10 +906,10 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
     gzip_ostreambuf gzip_streambuf(hashed_stream);
     std::ostream gzip_stream(&gzip_streambuf);
 
-    WriteXml(gzip_stream, obfuscator, db);
+    xml_.Write(gzip_stream, obfuscator, db);
     gzip_stream.flush();
   } else {
-    WriteXml(hashed_stream, obfuscator, db);
+    xml_.Write(hashed_stream, obfuscator, db);
   }
 
   hashed_stream.flush();
@@ -2001,25 +928,9 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // Derive the transformed key used for the final encryption key and the HMAC
   // key. If the database was imported and the KDF parameters were not modified,
   // the cached key can be reused; otherwise recompute it.
-  SecureBuffer<32> transformed_key;
-  if (db.has_transformed_key()) {
-    transformed_key = db.transformed_key().Clone();
-  } else {
-    switch (db.kdf()) {
-    case Database::Kdf::kAes:
-      transformed_key = key.Transform(db.transform_seed(), db.transform_rounds(),
-                                      Key::SubKeyResolution::kHashSubKeys);
-      break;
-    case Database::Kdf::kArgon2d:
-    case Database::Kdf::kArgon2id:
-      // The Argon2 parameters are stored in the KDF variant dictionary below.
-      transformed_key = key.TransformArgon2(
-          db.kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d : Key::Kdf::kArgon2id,
-          db.argon2_salt(), db.argon2_iterations(), db.argon2_memory(), db.argon2_parallelism(),
-          db.argon2_version(), Key::SubKeyResolution::kHashSubKeys);
-      break;
-    }
-  }
+  SecureBuffer<32> transformed_key =
+      db.has_transformed_key() ? db.transformed_key().Clone()
+                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
 
   std::array<uint8_t, 32> final_key{};
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
@@ -2048,7 +959,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   KdbxHeader header{};
   header.signature0 = kKdbxSignature0;
   header.signature1 = kKdbxSignature1;
-  header.version = kdbx41_ ? kKdbxVersion4_1 : kKdbxVersion4;
+  header.version = xml_.kdbx41() ? kKdbxVersion4_1 : kKdbxVersion4;
 
   std::stringstream header_stream;
   conserve<KdbxHeader>(header_stream, header);
@@ -2079,56 +990,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
 
   // Serialize the KDF variant dictionary.
   std::stringstream kdf_stream;
-  {
-    VariantDictionary vdict;
-
-    if (db.kdf() == Database::Kdf::kAes) {
-      std::array<uint8_t, 16> uuid = kKdbxKdfAesKdbx4;
-      std::vector<uint8_t> uuid_vec(uuid.begin(), uuid.end());
-      vdict.Set("$UUID", VariantDictionary::Type::kByteArray, std::move(uuid_vec));
-
-      std::array<uint8_t, 32> seed = db.transform_seed();
-      std::vector<uint8_t> seed_vec(seed.begin(), seed.end());
-      vdict.Set("S", VariantDictionary::Type::kByteArray, std::move(seed_vec));
-
-      std::vector<uint8_t> rounds(sizeof(uint64_t), 0);
-      const uint64_t rounds_val = db.transform_rounds();
-      std::memcpy(rounds.data(), &rounds_val, sizeof(rounds_val));
-      vdict.Set("R", VariantDictionary::Type::kUInt64, std::move(rounds));
-    } else {
-      const std::array<uint8_t, 16> kdf_uuid =
-          db.kdf() == Database::Kdf::kArgon2d ? kKdbxKdfArgon2d : kKdbxKdfArgon2id;
-
-      std::array<uint8_t, 16> uuid = kdf_uuid;
-      std::vector<uint8_t> uuid_vec(uuid.begin(), uuid.end());
-      vdict.Set("$UUID", VariantDictionary::Type::kByteArray, std::move(uuid_vec));
-
-      std::vector<uint8_t> salt = db.argon2_salt();
-      vdict.Set("S", VariantDictionary::Type::kByteArray, std::move(salt));
-
-      std::vector<uint8_t> iterations(sizeof(uint64_t), 0);
-      const uint64_t iterations_val = db.argon2_iterations();
-      std::memcpy(iterations.data(), &iterations_val, sizeof(iterations_val));
-      vdict.Set("I", VariantDictionary::Type::kUInt64, std::move(iterations));
-
-      std::vector<uint8_t> memory(sizeof(uint64_t), 0);
-      const uint64_t memory_val = db.argon2_memory();
-      std::memcpy(memory.data(), &memory_val, sizeof(memory_val));
-      vdict.Set("M", VariantDictionary::Type::kUInt64, std::move(memory));
-
-      std::vector<uint8_t> parallelism(sizeof(uint32_t), 0);
-      const uint32_t parallelism_val = db.argon2_parallelism();
-      std::memcpy(parallelism.data(), &parallelism_val, sizeof(parallelism_val));
-      vdict.Set("P", VariantDictionary::Type::kUInt32, std::move(parallelism));
-
-      std::vector<uint8_t> version(sizeof(uint32_t), 0);
-      const uint32_t version_val = db.argon2_version();
-      std::memcpy(version.data(), &version_val, sizeof(version_val));
-      vdict.Set("V", VariantDictionary::Type::kUInt32, std::move(version));
-    }
-
-    vdict.Write(kdf_stream);
-  }
+  KdbxKdf::WriteParameters(kdf_stream, db);
 
   std::string kdf_data = kdf_stream.str();
   conserve<Kdbx4HeaderField>(
@@ -2158,7 +1020,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestInit_ex(mdctx_h, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx_h, header_data.c_str(), header_data.size());
   unsigned int out_len_h = 0;
-  EVP_DigestFinal_ex(mdctx_h, header_hash_.data(), &out_len_h);
+  EVP_DigestFinal_ex(mdctx_h, xml_.header_hash().data(), &out_len_h);
   EVP_MD_CTX_free(mdctx_h);
 
   SecureBuffer<64> hmac_key;
@@ -2195,7 +1057,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // Write header, stored hash and stored HMAC to the file.
   std::copy(std::istreambuf_iterator<char>(header_stream), std::istreambuf_iterator<char>(),
             std::ostreambuf_iterator<char>(dst));
-  conserve<std::array<uint8_t, 32>>(dst, header_hash_);
+  conserve<std::array<uint8_t, 32>>(dst, xml_.header_hash());
   conserve<std::array<uint8_t, 32>>(dst, header_hmac);
 
   // The header buffers transiently hold key material (master seed, KDF salt).
@@ -2209,7 +1071,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   RandomObfuscator obfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
 
   // Collect all binaries used by entries into the inner header pool.
-  binary_pool_.clear();
+  xml_.binary_pool().clear();
   std::vector<std::shared_ptr<Binary>> ordered_binaries;
   const auto collect = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
     for (const auto& entry : group->Entries()) {
@@ -2238,7 +1100,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   collect(collect, db.root());
 
   for (std::size_t i = 0; i < ordered_binaries.size(); ++i) {
-    binary_pool_.insert(std::make_pair(std::to_string(i), ordered_binaries[i]));
+    xml_.binary_pool().insert(std::make_pair(std::to_string(i), ordered_binaries[i]));
   }
 
   // Write content stream: inner header followed by the (optionally gzip
@@ -2297,12 +1159,12 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
 
     std::copy(std::istreambuf_iterator<char>(inner_header_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(gzip_stream));
-    WriteXml(gzip_stream, obfuscator, db);
+    xml_.Write(gzip_stream, obfuscator, db);
     gzip_stream.flush();
   } else {
     std::copy(std::istreambuf_iterator<char>(inner_header_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain_stream));
-    WriteXml(plain_stream, obfuscator, db);
+    xml_.Write(plain_stream, obfuscator, db);
   }
 
   // Encrypt the plaintext payload first ...
