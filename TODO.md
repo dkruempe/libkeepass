@@ -201,11 +201,16 @@ in-memory). Für große Datenbanken und Netzwerk-/in-memory-I/O:
 **Ziel-Version:** v0.3.0
 
 Das CCI-Rezept liegt vorbereitet in `conan-center-index/`; die Einreichung
-als PR an `conan-io/conan-center-index` fehlt noch.
+als PR an `conan-io/conan-center-index` erfolgte bereits.
 
-- [ ] Rezept reviewen und auf den aktuellen Stand bringen
-- [ ] PR an `conan-io/conan-center-index` einreichen
-- [ ] `conanfile.py`/`test_package` im Repo mitführen (parallel zum CCI-Rezept)
+- [x] Rezept reviewen und auf den aktuellen Stand bringen (CCI-V2-Konventionen:
+      `test_package` statt `test_v1_package`, `implements = ["auto_shared_fpic"]`,
+      `check_min_cppstd` in `validate()`, SPDX-Lizenz `GPL-3.0-only`,
+      Version auf v0.3.0 aktualisiert; static + shared Builds lokal verifiziert)
+- [x] PR an `conan-io/conan-center-index` einreichen
+      ([#30962](https://github.com/conan-io/conan-center-index/pull/30962))
+- [x] `conanfile.py`/`test_package` im Repo mitführen (parallel zum CCI-Rezept;
+      `conan create` lokal verifiziert)
 
 ### 9. GitHub Issue- und PR-Templates
 
@@ -228,8 +233,8 @@ Strukturiertes Feedback von Nutzern und Contributors ermöglichen.
 
 Coverage wird bereits via `lcov/gcov` in der CI erzeugt und hochgeladen.
 
-- [ ] Codecov-Account anlegen und Repository verbinden
-- [ ] Badge-Status im README prüfen
+- [x] Codecov-Account anlegen und Repository verbinden
+- [x] Badge-Status im README prüfen (Badge existiert in `README.md`, Codecov-Seite erreichbar)
 
 ---
 
