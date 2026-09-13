@@ -30,6 +30,7 @@
  * Usage: benchmark [<number-of-entries>]   (default: 2000)
  */
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -157,8 +158,12 @@ Result MeasureImport(const std::string& path, const Database& db, const Key& key
 
 int main(int argc, char** argv) {
   std::size_t entry_count = 2000;
-  if (argc > 1)
-    entry_count = static_cast<std::size_t>(std::atoll(argv[1]));
+  if (argc > 1) {
+    char* end = nullptr;
+    const long long value = std::strtoll(argv[1], &end, 10);
+    if (end != argv[1] && *end == '\0' && value > 0)
+      entry_count = static_cast<std::size_t>(value);
+  }
 
   const std::unique_ptr<Database> db = MakeDatabase(entry_count);
   const Key key("password");
@@ -180,7 +185,7 @@ int main(int argc, char** argv) {
   std::printf("libkeepass load benchmark (%zu entries)\n", entry_count);
   std::printf("scenario                    bytes      ms   MiB/s\n");
 
-  long double worst = 0.0;
+  double worst = 0.0;
   for (const Scenario& scenario : scenarios) {
     // The database is reused for every scenario; per-scenario settings are
     // applied just before export.
@@ -194,13 +199,12 @@ int main(int argc, char** argv) {
 
     Result result = MeasureImport(path, *db, key, exporter);
 
-    const long double mib = static_cast<long double>(result.bytes) / (1024.0L * 1024.0L);
+    const double mib = static_cast<double>(result.bytes) / (1024.0 * 1024.0);
     const double mib_per_s = mib / (result.ms / 1000.0);
     std::printf("%-24s %8zu %8.2f %8.2f\n", scenario.name, result.bytes, result.ms, mib_per_s);
-    if (result.ms > worst)
-      worst = result.ms;
+    worst = std::max(worst, result.ms);
   }
 
-  std::printf("worst-case import: %.2f ms\n", static_cast<double>(worst));
+  std::printf("worst-case import: %.2f ms\n", worst);
   return 0;
 }
