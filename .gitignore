@@ -13,4 +13,6 @@ docs/*
 CMakeUserPresets.json
 test_package/build/
 test/config.hh
+test/tmp
+timeout-*
 *.exe

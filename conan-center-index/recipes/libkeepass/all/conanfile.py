@@ -3,9 +3,9 @@ import os
 from conan import ConanFile
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
-from conan.tools.files import copy, get, rmdir
+from conan.tools.files import copy, get, rm, rmdir
 
-required_conan_version = ">=1.53.0"
+required_conan_version = ">=2.0.9"
 
 
 class LibkeepassConan(ConanFile):
@@ -20,14 +20,10 @@ class LibkeepassConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
     options = {"shared": [True, False], "fPIC": [True, False]}
     default_options = {"shared": False, "fPIC": True}
+    implements = ["auto_shared_fpic"]
 
-    def config_options(self):
-        if self.settings.os == "Windows":
-            del self.options.fPIC
-
-    def configure(self):
-        if self.options.shared:
-            del self.options.fPIC
+    def validate(self):
+        check_min_cppstd(self, 11)
 
     def layout(self):
         cmake_layout(self, src_folder="src")
@@ -52,7 +48,6 @@ class LibkeepassConan(ConanFile):
         deps.generate()
 
     def build(self):
-        check_min_cppstd(self, 11)
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
@@ -62,6 +57,8 @@ class LibkeepassConan(ConanFile):
         cmake = CMake(self)
         cmake.install()
         rmdir(self, os.path.join(self.package_folder, "lib", "cmake"))
+        rmdir(self, os.path.join(self.package_folder, "share"))
+        rm(self, "*.pdb", self.package_folder, recursive=True)
 
     def package_info(self):
         self.cpp_info.libs = ["libkeepass"]

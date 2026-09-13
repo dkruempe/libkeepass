@@ -9,7 +9,7 @@ from conan.tools.files import copy
 
 class LibkeepassConan(ConanFile):
     name = "libkeepass"
-    license = "GPL-3.0"
+    license = "GPL-3.0-only"
     url = "https://github.com/dkruempe/libkeepass"
     homepage = "https://github.com/dkruempe/libkeepass"
     description = "C++11 library for importing and exporting KeePass password databases"

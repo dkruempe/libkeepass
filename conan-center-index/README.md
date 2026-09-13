@@ -13,7 +13,7 @@ conan-center-index/
         └── all/
             ├── conanfile.py
             ├── conandata.yml
-            └── test_v1_package/
+            └── test_package/
                 ├── CMakeLists.txt
                 ├── conanfile.py
                 └── test_package.cpp
@@ -28,18 +28,18 @@ conan-center-index/
    maintainers review the recipe before it is merged.
 
 Once merged, ConanCenter builds and hosts the `libkeepass` package binaries and
-it can be consumed with `[requires] libkeepass/0.2.1`.
+it can be consumed with `[requires] libkeepass/0.3.0`.
 
 ## Local validation
 
 From the `recipes/libkeepass/all` directory run:
 
 ```sh
-conan create . --version=0.2.1 --build=missing
-conan create . --version=0.2.1 --build=missing -o "libkeepass/*:shared=True"
+conan create . --version=0.3.0 --build=missing
+conan create . --version=0.3.0 --build=missing -o "libkeepass/*:shared=True"
 ```
 
-The recipe fetches the sources of the tagged `v0.2.1` release from GitHub (see
+The recipe fetches the sources of the tagged `v0.3.0` release from GitHub (see
 `conandata.yml`) and builds static/shared libraries that are linked against
 OpenSSL, zlib, pugixml and Argon2. When adding a new release, bump the version
-in `conandata.yml`, `config.yml` and the test package's `requires()`.
+in `conandata.yml` and `config.yml`.
