@@ -56,6 +56,12 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
 
+      # Load benchmark: prints import times for all formats. Results are tracked
+      # but never asserted, so slow machines do not fail the build.
+      - name: Benchmark load times
+        continue-on-error: true
+        run: ./bin/benchmark 1000
+
       - name: Test
         if: matrix.build-type != 'Debug'
         working-directory: build

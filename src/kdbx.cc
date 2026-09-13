@@ -39,6 +39,7 @@
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
 #include "libkeepass/io.hh"
+#include "libkeepass/kdbx_header.hh"
 #include "libkeepass/kdbx_kdf.hh"
 #include "libkeepass/kdbx_xml.hh"
 #include "libkeepass/key.hh"
@@ -83,51 +84,8 @@ template <typename Container> void WipeBuffer(Container* buffer) {
 
 } // namespace
 
-constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
-constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
-constexpr uint32_t kKdbxVersionCriticalMask = 0xffff0000;
-constexpr uint32_t kKdbxVersion3 = 0x00030000;
-constexpr uint32_t kKdbxVersionCriticalMin = 0x00030001;
-constexpr uint32_t kKdbxVersion4 = 0x00040000;
-constexpr uint32_t kKdbxVersion4_1 = 0x00040001;
-
-constexpr std::array<uint8_t, 16> kKdbxCipherAes = {{0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50,
-                                                     0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a,
-                                                     0xff}};
-
-constexpr std::array<uint8_t, 16> kKdbxCipherChaCha20 = {{0xd6, 0x03, 0x8a, 0x2b, 0x8b, 0x6f, 0x4c,
-                                                          0xb5, 0xa5, 0x24, 0x33, 0x9a, 0x31, 0xdb,
-                                                          0xb5, 0x9a}};
-
-constexpr std::array<uint8_t, 16> kKdbxCipherTwofish = {{0xad, 0x68, 0xf2, 0x9f, 0x57, 0x6f, 0x4b,
-                                                         0xb9, 0xa3, 0x6a, 0xd4, 0x7a, 0xf9, 0x65,
-                                                         0x34, 0x6c}};
-
 constexpr std::array<uint8_t, 8> kKdbxInnerRandomStreamInitVec = {0xe8, 0x30, 0x09, 0x4b,
                                                                   0x97, 0x20, 0x5d, 0x2a};
-
-/**
- * Upper bound for a single outer header field. Real KDBX headers only contain
- * short fields (cipher id, seeds, KDF parameters); the cap exists to reject
- * crafted files whose declared field lengths would trigger unbounded
- * allocations or reads before the header integrity check runs.
- */
-constexpr uint32_t kMaxOuterHeaderFieldSize = 1U << 20;
-
-enum class kKdbxCompressionFlags : uint32_t {
-  kNone,
-  kGzip,
-
-  kCount
-};
-
-enum class kKdbxRandomStream : uint32_t {
-  kNone,
-  kArcFourVariant,
-  kSalsa20,
-
-  kCount
-};
 
 // Returns whether the group subtree contains KDBX 4.1-only features. Mirrors
 // KeePass' KdbxFile.GetMinKdbxVersion.
@@ -172,69 +130,12 @@ bool RequiresKdbx41(const Database& db) {
   return false;
 }
 
-#pragma pack(push, 1)
-struct KdbxHeader {
-  uint32_t signature0;
-  uint32_t signature1;
-  uint32_t version;
-};
-static_assert(sizeof(KdbxHeader) == 12, "bad packing of header structure.");
-
-struct KdbxHeaderField {
-  enum Id : uint8_t {
-    kEndOfHeader = 0,
-    // kComment = 1,
-    kCipherId = 2,
-    kCompressionFlags = 3,
-    kMasterSeed = 4,
-    kTransformSeed = 5,
-    kTransformRounds = 6,
-    kExcryptionInitVec = 7,
-    kInnerRandomStreamKey = 8,
-    kContentStreamStartBytes = 9,
-    kInnerRandomStreamId = 10
-  } id = kEndOfHeader;
-
-  uint16_t size = 0;
-
-  KdbxHeaderField() = default;
-  KdbxHeaderField(Id new_id, uint16_t new_size) : id(new_id), size(new_size) {}
-  KdbxHeaderField(KdbxHeaderField&& other) noexcept {
-    id = other.id;
-    size = other.size;
-  }
-};
-static_assert(sizeof(KdbxHeaderField) == 3, "bad packing of bitfield header structure.");
-
-struct Kdbx4HeaderField {
-  enum Id : uint8_t {
-    kEndOfHeader = 0,
-    kComment = 1,
-    kCipherId = 2,
-    kCompressionFlags = 3,
-    kMasterSeed = 4,
-    kEncryptionIv = 7,
-    kKdfParameters = 11
-  } id = kEndOfHeader;
-
-  uint32_t size = 0;
-
-  Kdbx4HeaderField() = default;
-  Kdbx4HeaderField(Id new_id, uint32_t new_size) : id(new_id), size(new_size) {}
-  Kdbx4HeaderField(Kdbx4HeaderField&& other) noexcept {
-    id = other.id;
-    size = other.size;
-  }
-};
-static_assert(sizeof(Kdbx4HeaderField) == 5, "bad packing of header structure.");
-
 enum class kKdbxInnerHeader : uint8_t {
   kEnd = 0,
   kInnerRandomStreamId = 1,
   kInnerRandomStreamKey = 2,
   kBinaries = 3
 };
-#pragma pack(pop)
 
 void KdbxFile::Reset() { xml_.Reset(); }
 
@@ -249,117 +150,27 @@ std::unique_ptr<Database> KdbxFile::Import(const std::string& path, const Key& k
 std::unique_ptr<Database> KdbxFile::Import(std::istream& src, const Key& key) {
   Reset();
 
-  // Read header.
-  KdbxHeader header{};
-  try {
-    header = consume<KdbxHeader>(src);
-  } catch (std::exception&) {
-    throw FormatError("Not a KDBX database.");
-  }
-  if (header.signature0 != kKdbxSignature0 || header.signature1 != kKdbxSignature1) {
-    throw FormatError("Not a KDBX database.");
-  }
+  // Read the signature and version prefix to dispatch to the right parser.
+  const uint32_t version = KdbxHeader::ReadVersion(src);
 
-  switch (header.version & kKdbxVersionCriticalMask) {
-  case kKdbxVersion3:
-    xml_.set_kdbx4(false);
-    return Import3(src, key);
-  case kKdbxVersion4:
+  if (KdbxHeader::IsKdbx4(version)) {
     xml_.set_kdbx4(true);
     return Import4(src, key);
-  default:
-    throw FormatError(
-        std::string(Format() << "KDBX version " << header.version << " is not supported."));
   }
+
+  if ((version & KdbxHeader::kVersionCriticalMask) == KdbxHeader::kVersion3) {
+    xml_.set_kdbx4(false);
+    return Import3(src, key);
+  }
+
+  throw FormatError(std::string(Format() << "KDBX version " << version << " is not supported."));
 }
 
 std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
-  std::array<uint8_t, 32> content_start_bytes = {{0}};
-
   std::unique_ptr<Database> db(new Database());
 
-  // Read header fields.
-  bool done = false;
-  while (!done && src.good()) {
-    auto header_field = consume<KdbxHeaderField>(src);
-
-    // Read the header field into a separate buffer before parsing. This is to
-    // guard against reading outside the field as well as for making sure to
-    // read the complete field regardless of how much of it that we parse.
-    // KDBX 3 field sizes are 16 bit and thus always below the cap.
-    if (static_cast<uint64_t>(header_field.size) >
-        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
-      throw FormatError("Corrupt header field size in KDBX.");
-    std::stringstream field;
-    std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
-                    [&src]() { return static_cast<char>(src.get()); });
-    if (!src.good())
-      throw IoError("Read error.");
-
-    assert(field.str().size() == header_field.size);
-
-    switch (header_field.id) {
-    case KdbxHeaderField::kEndOfHeader:
-      done = true;
-      break;
-    case KdbxHeaderField::kCipherId:
-      if (consume<std::array<uint8_t, 16>>(field) != kKdbxCipherAes)
-        throw FormatError("Unknown cipher in KDBX.");
-      db->set_cipher(Database::Cipher::kAes);
-      break;
-    case KdbxHeaderField::kCompressionFlags: {
-      auto comp_flags = consume<uint32_t>(field);
-      if (comp_flags > static_cast<uint32_t>(kKdbxCompressionFlags::kCount))
-        throw FormatError("Unknown compression method in KDBX.");
-      db->set_compress(comp_flags == static_cast<uint32_t>(kKdbxCompressionFlags::kGzip));
-      break;
-    }
-    case KdbxHeaderField::kMasterSeed:
-      db->set_master_seed(consume<std::vector<uint8_t>>(field));
-      break;
-    case KdbxHeaderField::kTransformSeed:
-      if (header_field.size != 32)
-        throw FormatError("Illegal transform seed size in KDBX.");
-      db->set_transform_seed(consume<std::array<uint8_t, 32>>(field));
-      break;
-    case KdbxHeaderField::kTransformRounds: {
-      const uint32_t transform_rounds = consume<uint32_t>(field);
-      if (transform_rounds > Database::kMaxTransformRounds)
-        throw FormatError("KDBX header declares too many transform rounds.");
-      db->set_transform_rounds(transform_rounds);
-      break;
-    }
-    case KdbxHeaderField::kExcryptionInitVec:
-      if (header_field.size != 16)
-        throw FormatError("Illegal initialization vector size in KDBX.");
-      db->set_init_vector(consume<std::array<uint8_t, 16>>(field));
-      break;
-    case KdbxHeaderField::kInnerRandomStreamKey:
-      if (header_field.size != 32)
-        throw FormatError("Illegal protected stream key size in KDBX.");
-      db->set_inner_random_stream_key(consume<std::array<uint8_t, 32>>(field));
-      break;
-    case KdbxHeaderField::kContentStreamStartBytes:
-      if (header_field.size != 32)
-        throw FormatError("Illegal stream start sequence size in KDBX.");
-      content_start_bytes = consume<std::array<uint8_t, 32>>(field);
-      break;
-    case KdbxHeaderField::kInnerRandomStreamId: {
-      auto inner_random_stream_id = consume<uint32_t>(field);
-      if (inner_random_stream_id != static_cast<uint32_t>(kKdbxRandomStream::kSalsa20)) {
-        throw FormatError("Unknown random stream in KDBX.");
-      }
-      break;
-    }
-    default:
-      throw FormatError("Illegal header field in KDBX.");
-      break;
-    }
-
-    // The field stream transiently holds header material (master seed, key
-    // material) that is not part of the exported database object.
-    WipeStream(field);
-  }
+  // Parse and validate the KDBX 3 outer header fields.
+  const std::array<uint8_t, 32> content_start_bytes = KdbxHeader::Parse3(src, *db);
 
   // Compute the header hash.
   std::streampos header_end = src.tellg();
@@ -457,72 +268,8 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
 std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   std::unique_ptr<Database> db(new Database());
 
-  // Read header fields.
-  bool done = false;
-  while (!done && src.good()) {
-    auto header_field = consume<Kdbx4HeaderField>(src);
-
-    // Read the header field into a separate buffer before parsing.
-    if (header_field.size > kMaxOuterHeaderFieldSize ||
-        static_cast<uint64_t>(header_field.size) >
-            static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(src))))
-      throw FormatError("Corrupt header field size in KDBX 4 database.");
-    std::stringstream field;
-    std::generate_n(std::ostreambuf_iterator<char>(field), header_field.size,
-                    [&src]() { return static_cast<char>(src.get()); });
-    if (!src.good())
-      throw IoError("Read error.");
-
-    switch (header_field.id) {
-    case Kdbx4HeaderField::kEndOfHeader:
-      done = true;
-      break;
-    case Kdbx4HeaderField::kCipherId: {
-      auto uuid = consume<std::array<uint8_t, 16>>(field);
-      if (uuid == kKdbxCipherChaCha20) {
-        db->set_cipher(Database::Cipher::kChaCha20);
-      } else if (uuid == kKdbxCipherAes) {
-        db->set_cipher(Database::Cipher::kAes);
-      } else if (uuid == kKdbxCipherTwofish) {
-        db->set_cipher(Database::Cipher::kTwofish);
-      } else {
-        throw FormatError("Unknown cipher in KDBX 4 database.");
-      }
-      break;
-    }
-    case Kdbx4HeaderField::kCompressionFlags: {
-      auto comp_flags = consume<uint32_t>(field);
-      if (comp_flags > static_cast<uint32_t>(kKdbxCompressionFlags::kCount))
-        throw FormatError("Unknown compression method in KDBX.");
-      db->set_compress(comp_flags == static_cast<uint32_t>(kKdbxCompressionFlags::kGzip));
-      break;
-    }
-    case Kdbx4HeaderField::kMasterSeed:
-      db->set_master_seed(consume<std::vector<uint8_t>>(field));
-      break;
-    case Kdbx4HeaderField::kEncryptionIv:
-      if (header_field.size == 16) {
-        db->set_init_vector(consume<std::array<uint8_t, 16>>(field));
-      } else if (header_field.size == 12) {
-        std::array<uint8_t, 16> iv{};
-        field.read(reinterpret_cast<char*>(iv.data()), 12);
-        if (!field)
-          throw IoError("Read error.");
-        db->set_init_vector(iv);
-      } else {
-        throw FormatError("Illegal initialization vector size in KDBX.");
-      }
-      break;
-    case Kdbx4HeaderField::kKdfParameters:
-      KdbxKdf::ParseParameters(field, *db);
-      break;
-    default:
-      throw FormatError("Illegal header field in KDBX.");
-    }
-
-    // The field stream transiently holds header material (KDF salt, seed).
-    WipeStream(field);
-  }
+  // Parse and validate the KDBX 4 outer header fields.
+  KdbxHeader::Parse4(src, *db);
 
   // Compute the header hash over all bytes up to (but not including) the
   // stored header hash and HMAC.
@@ -617,41 +364,71 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // In KDBX 4 the content is first encrypted and the ciphertext is then
   // wrapped in HMAC protected blocks. Read the HMAC blocks from the file and
-  // decrypt the payload inside them.
+  // decrypt the payload inside them, block by block, so that a large database
+  // never requires the whole ciphertext to be materialized in memory at once.
   hmac_istreambuf hmac_streambuf(src, hmac_key.data());
   std::istream hmac_stream(&hmac_streambuf);
 
   secure_zero(hmac_key.data(), hmac_key.size());
 
-  std::string ciphertext;
-  std::copy(std::istreambuf_iterator<char>(hmac_stream), std::istreambuf_iterator<char>(),
-            std::back_inserter(ciphertext));
-
   std::stringstream content;
   try {
     if (db->cipher() == Database::Cipher::kAes || db->cipher() == Database::Cipher::kTwofish) {
-      std::stringstream cipher_input(ciphertext);
-      decrypt_cbc(cipher_input, content, *cipher);
+      decrypt_cbc_stream(hmac_stream, content, *cipher);
     } else if (db->cipher() == Database::Cipher::kChaCha20) {
       // ChaCha20 is a stream cipher: the ciphertext is XORed with the
-      // keystream (RFC 8439, 96-bit nonce) and needs no padding.
-      std::array<uint8_t, 64> keystream{}, data{};
-      size_t offset = 0;
-      while (offset < ciphertext.size()) {
-        std::array<uint8_t, 64> zero{};
-        chacha_cipher->Process(zero, keystream);
-        size_t n = std::min<size_t>(64, ciphertext.size() - offset);
-        for (size_t i = 0; i < n; ++i)
-          data[i] = static_cast<uint8_t>(ciphertext[offset + i]) ^ keystream[i];
-        content.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(n));
-        offset += n;
+      // keystream (RFC 8439, 96-bit nonce) and needs no padding. Generate one
+      // 64-byte keystream block per 64 read ciphertext bytes and XOR the (final
+      // partial) block in place.
+      std::array<uint8_t, 64> chunk{}, pending{}, keystream{}, data{}, zero{};
+      std::size_t pending_n = 0;
+      while (true) {
+        hmac_stream.read(reinterpret_cast<char*>(chunk.data()), chunk.size());
+        const std::streamsize got = hmac_stream.gcount();
+        if (got == 0)
+          break;
+
+        std::size_t off = 0;
+        while (off < static_cast<std::size_t>(got)) {
+          const std::size_t fill =
+              std::min<std::size_t>(64 - pending_n, static_cast<std::size_t>(got) - off);
+          std::copy_n(chunk.begin() + off, fill, pending.begin() + pending_n);
+          pending_n += fill;
+          off += fill;
+
+          if (pending_n == 64) {
+            chacha_cipher->Process(zero, keystream);
+            for (std::size_t i = 0; i < pending_n; ++i)
+              data[i] = static_cast<uint8_t>(pending[i] ^ keystream[i]);
+            content.write(reinterpret_cast<const char*>(data.data()), 64);
+            pending_n = 0;
+          }
+        }
       }
-      // The block buffers transiently hold the decrypted payload.
-      secure_zero(data.data(), data.size());
+
+      if (pending_n > 0) {
+        // The final partial block needs one more keystream block; only the
+        // bytes that are actually present are written.
+        chacha_cipher->Process(zero, keystream);
+        for (std::size_t i = 0; i < pending_n; ++i)
+          data[i] = static_cast<uint8_t>(pending[i] ^ keystream[i]);
+        content.write(reinterpret_cast<const char*>(data.data()),
+                      static_cast<std::streamsize>(pending_n));
+      }
+
+      // The block buffers transiently hold ciphertext and the decrypted
+      // payload.
+      secure_zero(chunk.data(), chunk.size());
+      secure_zero(pending.data(), pending.size());
       secure_zero(keystream.data(), keystream.size());
+      secure_zero(data.data(), data.size());
     } else {
       throw FormatError("Unknown cipher in KDBX 4 database.");
     }
+  } catch (const IoError&) {
+    // A failed HMAC verification or a truncated block signals corruption (not
+    // a wrong password), so it must not be masked as a password error.
+    throw;
   } catch (std::exception&) {
     throw PasswordError();
   }
@@ -737,7 +514,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   RandomObfuscator obfuscator(RandomObfuscator::Type::kSalsa20, inner_random_stream_key);
   try {
     switch (inner_random_stream_id) {
-    case static_cast<uint32_t>(kKdbxRandomStream::kSalsa20):
+    case 2: // Salsa20
       obfuscator = RandomObfuscator(RandomObfuscator::Type::kSalsa20, inner_random_stream_key);
       break;
     case 3: // ChaCha20
@@ -764,10 +541,9 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   for (const auto& binary : inner_binaries)
     db->meta()->AddBinary(binary);
 
-  // The streams still hold the decrypted payload and the raw ciphertext.
+  // The streams still hold parts of the decrypted payload.
   WipeStream(plain);
   WipeStream(content);
-  WipeBuffer(&ciphertext);
 
   return db;
 }
@@ -815,58 +591,11 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   std::unique_ptr<Cipher<16>> cipher(new AesCipher(final_key.data(), db.init_vector()));
   secure_zero(final_key.data(), final_key.size());
 
-  // Write header to temporary stream so that we can compute the hash of it.
-  KdbxHeader header{};
-  header.signature0 = kKdbxSignature0;
-  header.signature1 = kKdbxSignature1;
-  header.version = kKdbxVersionCriticalMin;
-
-  std::stringstream header_stream;
-  conserve<KdbxHeader>(header_stream, header);
-
-  conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kCipherId, 16));
-  conserve<std::array<uint8_t, 16>>(header_stream, kKdbxCipherAes);
-
-  conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kCompressionFlags, 4));
-  conserve<uint32_t>(header_stream,
-                     db.compress() ? static_cast<uint32_t>(kKdbxCompressionFlags::kGzip) : 0);
-
-  if (db.master_seed().size() > std::numeric_limits<decltype(KdbxHeaderField::size)>::max()) {
-    assert(false);
-    throw InternalError("Master seed size exceeds KDBX maximum.");
-  }
-  conserve<KdbxHeaderField>(header_stream,
-                            KdbxHeaderField(KdbxHeaderField::kMasterSeed,
-                                            static_cast<uint16_t>(db.master_seed().size())));
-  conserve<std::vector<uint8_t>>(header_stream, db.master_seed());
-
-  conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kTransformSeed, 32));
-  conserve<std::array<uint8_t, 32>>(header_stream, db.transform_seed());
-
-  conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kTransformRounds, 8));
-  conserve<uint64_t>(header_stream, db.transform_rounds());
-
-  conserve<KdbxHeaderField>(header_stream,
-                            KdbxHeaderField(KdbxHeaderField::kExcryptionInitVec, 16));
-  conserve<std::array<uint8_t, 16>>(header_stream, db.init_vector());
-
-  conserve<KdbxHeaderField>(header_stream,
-                            KdbxHeaderField(KdbxHeaderField::kInnerRandomStreamKey, 32));
-  header_stream.write(reinterpret_cast<const char*>(db.inner_random_stream_key().data()), 32);
-
+  // Write header to a temporary buffer so that we can compute the hash of it.
   std::array<uint8_t, 32> content_start_bytes = random_array<32>();
-  conserve<KdbxHeaderField>(header_stream,
-                            KdbxHeaderField(KdbxHeaderField::kContentStreamStartBytes, 32));
-  conserve<std::array<uint8_t, 32>>(header_stream, content_start_bytes);
-
-  conserve<KdbxHeaderField>(header_stream,
-                            KdbxHeaderField(KdbxHeaderField::kInnerRandomStreamId, 4));
-  conserve<uint32_t>(header_stream, static_cast<uint32_t>(kKdbxRandomStream::kSalsa20));
-
-  conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kEndOfHeader, 0));
+  std::string header_data = KdbxHeader::Write3(db, content_start_bytes);
 
   // Compute the header hash.
-  std::string header_data = header_stream.str();
   EVP_MD_CTX* mdctx2 = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx2, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx2, header_data.c_str(), header_data.size());
@@ -875,13 +604,11 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   EVP_MD_CTX_free(mdctx2);
 
   // Write header to file.
-  std::copy(std::istreambuf_iterator<char>(header_stream), std::istreambuf_iterator<char>(),
-            std::ostreambuf_iterator<char>(dst));
+  dst.write(header_data.data(), static_cast<std::streamsize>(header_data.size()));
 
-  // The header buffers transiently hold key material (master seed, transform
+  // The header buffer transiently holds key material (master seed, transform
   // seed, inner random stream key).
   WipeBuffer(&header_data);
-  WipeStream(header_stream);
 
   // Prepare deobfuscation stream.
   std::array<uint8_t, 32> final_inner_random_stream_key{};
@@ -954,68 +681,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   }
   secure_zero(final_key.data(), final_key.size());
 
-  // Write header to a temporary stream so that we can compute the hash and
+  // Write header to a temporary buffer so that we can compute the hash and
   // HMAC of it.
-  KdbxHeader header{};
-  header.signature0 = kKdbxSignature0;
-  header.signature1 = kKdbxSignature1;
-  header.version = xml_.kdbx41() ? kKdbxVersion4_1 : kKdbxVersion4;
-
-  std::stringstream header_stream;
-  conserve<KdbxHeader>(header_stream, header);
-
-  conserve<Kdbx4HeaderField>(header_stream, Kdbx4HeaderField(Kdbx4HeaderField::kCipherId, 16));
-
-  const std::array<uint8_t, 16>* cipher_id = &kKdbxCipherAes;
-  if (db.cipher() == Database::Cipher::kChaCha20)
-    cipher_id = &kKdbxCipherChaCha20;
-  else if (db.cipher() == Database::Cipher::kTwofish)
-    cipher_id = &kKdbxCipherTwofish;
-
-  conserve<std::array<uint8_t, 16>>(header_stream, *cipher_id);
-
-  conserve<Kdbx4HeaderField>(header_stream,
-                             Kdbx4HeaderField(Kdbx4HeaderField::kCompressionFlags, 4));
-  conserve<uint32_t>(header_stream,
-                     db.compress() ? static_cast<uint32_t>(kKdbxCompressionFlags::kGzip) : 0);
-
-  if (db.master_seed().size() > std::numeric_limits<decltype(Kdbx4HeaderField::size)>::max()) {
-    assert(false);
-    throw InternalError("Master seed size exceeds KDBX maximum.");
-  }
-  conserve<Kdbx4HeaderField>(header_stream,
-                             Kdbx4HeaderField(Kdbx4HeaderField::kMasterSeed,
-                                              static_cast<uint32_t>(db.master_seed().size())));
-  conserve<std::vector<uint8_t>>(header_stream, db.master_seed());
-
-  // Serialize the KDF variant dictionary.
-  std::stringstream kdf_stream;
-  KdbxKdf::WriteParameters(kdf_stream, db);
-
-  std::string kdf_data = kdf_stream.str();
-  conserve<Kdbx4HeaderField>(
-      header_stream,
-      Kdbx4HeaderField(Kdbx4HeaderField::kKdfParameters, static_cast<uint32_t>(kdf_data.size())));
-  std::copy(kdf_data.begin(), kdf_data.end(), std::ostreambuf_iterator<char>(header_stream));
-
-  // The KDF serialization transiently holds the salt/seed material.
-  WipeBuffer(&kdf_data);
-  WipeStream(kdf_stream);
-
-  conserve<Kdbx4HeaderField>(
-      header_stream, Kdbx4HeaderField(Kdbx4HeaderField::kEncryptionIv,
-                                      db.cipher() == Database::Cipher::kChaCha20 ? 12 : 16));
-  if (db.cipher() == Database::Cipher::kChaCha20) {
-    header_stream.write(reinterpret_cast<const char*>(db.init_vector().data()), 12);
-  } else {
-    conserve<std::array<uint8_t, 16>>(header_stream, db.init_vector());
-  }
-
-  conserve<Kdbx4HeaderField>(header_stream, Kdbx4HeaderField(Kdbx4HeaderField::kEndOfHeader, 0));
+  std::string header_data = KdbxHeader::Write4(db, xml_.kdbx41());
 
   // Compute the header hash and HMAC.
-  std::string header_data = header_stream.str();
-
   EVP_MD_CTX* mdctx_h = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx_h, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx_h, header_data.c_str(), header_data.size());
@@ -1055,15 +725,13 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   secure_zero(header_hmac_key.data(), header_hmac_key.size());
 
   // Write header, stored hash and stored HMAC to the file.
-  std::copy(std::istreambuf_iterator<char>(header_stream), std::istreambuf_iterator<char>(),
-            std::ostreambuf_iterator<char>(dst));
+  dst.write(header_data.data(), static_cast<std::streamsize>(header_data.size()));
   conserve<std::array<uint8_t, 32>>(dst, xml_.header_hash());
   conserve<std::array<uint8_t, 32>>(dst, header_hmac);
 
-  // The header buffers transiently hold key material (master seed, KDF salt).
+  // The header buffer transiently holds key material (master seed, KDF salt).
   WipeBuffer(&header_data);
   secure_zero(header_hmac.data(), header_hmac.size());
-  WipeStream(header_stream);
 
   // Prepare deobfuscation stream using a freshly generated inner random
   // stream key. KDBX 4 uses ChaCha20 for the inner random stream.

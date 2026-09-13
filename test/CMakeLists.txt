@@ -82,3 +82,9 @@ add_executable(robustness robustness.cc)
 target_compile_features(robustness PUBLIC cxx_std_11)
 target_link_libraries(robustness PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.robustness COMMAND robustness)
+
+# Standalone (non-GTest) load benchmark. Not registered as a test so that it
+# never gates the build; run it explicitly or from CI to track load times.
+add_executable(benchmark benchmark.cc)
+target_compile_features(benchmark PUBLIC cxx_std_11)
+target_link_libraries(benchmark PRIVATE kruempelmann::libkeepass)

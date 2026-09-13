@@ -132,12 +132,12 @@ this doubles as a fast password check (`src/kdbx.cc:1164`).
 
 ## KDBX 4 payload layout
 
-Import path (`KdbxFile::Import4`, `src/kdbx.cc:1200`) — from ciphertext to XML:
+Import path (`KdbxFile::Import4`, `src/kdbx.cc`) — from ciphertext to XML:
 
 ```
 Encrypted payload (AES-256-CBC / Twofish-CBC / ChaCha20)
   <- wrapped in hmac_istreambuf         (HMAC-SHA256 over the ciphertext)
-  -> decrypt (CBC with PKCS#7, or ChaCha20 stream XOR)
+  -> decrypt (CBC with PKCS#7, or ChaCha20 stream XOR)   [streamed]
   -> gzip_istreambuf  (optional)
   -> inner header (random stream ID + key, binaries)
   -> XML document
@@ -151,6 +151,9 @@ Differences to KDBX 3:
     (inner header), not in the outer header.
 *   There is no separate `content_start_bytes` check; the header HMAC already
     verifies integrity and the password.
+*   The ciphertext is consumed from the HMAC stream incrementally and decrypted
+    block by block (`decrypt_cbc_stream`, `src/cipher.cc`) instead of being
+    copied in full first — see [streaming.md](streaming.md).
 
 Cipher IDs in the KDBX 4 header (`src/kdbx.cc:88`):
 

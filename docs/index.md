@@ -15,6 +15,8 @@ pieces fit together*.
   framed and integrity-protected (AES/Twofish/ChaCha20, hashed/HMAC blocks).
 - [KDBX Parsing Pipeline](kdbx-parsing.md) — the byte-level file format,
   header parsing, XML parsing and export.
+- [Streaming Parsing Evaluation](streaming.md) — where the pipeline streams
+  (HMAC/decrypt) and where it buffers (pugixml DOM), plus the load benchmark.
 
 ## High-level flow
 
