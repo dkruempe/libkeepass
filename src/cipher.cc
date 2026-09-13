@@ -71,36 +71,6 @@ void block_transform(std::istream& src, std::ostream& dst, BlockOperation<N>&& o
 
 namespace keepass {
 
-void encrypt_ecb(std::istream& src, std::ostream& dst, const Cipher<16>& cipher) {
-  static auto func = [&](const std::array<uint8_t, 16>& block_in,
-                         std::array<uint8_t, 16>& block_out, std::size_t src_len,
-                         bool) -> std::size_t {
-    if (src_len != 16) {
-      assert(false);
-      throw InternalError("ECB can only encrypt an even number of blocks.");
-    }
-
-    cipher.Encrypt(block_in, block_out);
-    return 16;
-  };
-  block_transform<16>(src, dst, func);
-}
-
-void decrypt_ecb(std::istream& src, std::ostream& dst, const Cipher<16>& cipher) {
-  static auto func = [&](const std::array<uint8_t, 16>& block_in,
-                         std::array<uint8_t, 16>& block_out, std::size_t src_len,
-                         bool) -> std::size_t {
-    if (src_len != 16) {
-      assert(false);
-      throw InternalError("ECB can only decrypt an even number of blocks.");
-    }
-
-    cipher.Decrypt(block_in, block_out);
-    return 16;
-  };
-  block_transform<16>(src, dst, func);
-}
-
 std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32>& src, const Cipher<16>& cipher) {
   std::array<uint8_t, 32> dst{};
 

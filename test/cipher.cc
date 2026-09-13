@@ -18,10 +18,13 @@
  */
 
 #include <random>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "libkeepass/cipher.hh"
+
+#include "libkeepass/exception.hh"
 
 using namespace keepass;
 
@@ -62,6 +65,26 @@ void GetRandomStream(std::ostream& dst, std::size_t min_len, std::size_t max_len
     uint8_t val = static_cast<uint8_t>(uniform_dist(engine));
     dst.write(reinterpret_cast<const char*>(&val), sizeof(val));
   }
+}
+
+// CBC-encrypts the given plaintext blocks starting from the cipher's init
+// vector, so that a test can feed deliberately malformed plaintext into the
+// decryption routines (whose final block must carry valid PKCS #7 padding).
+std::string BuildCbcCiphertext(AesCipher& cipher,
+                               const std::vector<std::array<uint8_t, 16>>& blocks) {
+  const std::array<uint8_t, 16>& iv = cipher.InitializationVector();
+
+  std::string out;
+  std::array<uint8_t, 16> previous = iv;
+  for (const auto& plain : blocks) {
+    std::array<uint8_t, 16> xored{}, encrypted{};
+    for (std::size_t i = 0; i < xored.size(); ++i)
+      xored[i] = static_cast<uint8_t>(plain[i] ^ previous[i]);
+    cipher.Encrypt(xored, encrypted);
+    out.append(reinterpret_cast<const char*>(encrypted.data()), encrypted.size());
+    previous = encrypted;
+  }
+  return out;
 }
 
 } // namespace
@@ -321,6 +344,71 @@ TEST(CipherTest, CbcWithFullPadding) {
 
   EXPECT_NO_THROW(decrypt_cbc(dst, tst, cipher));
   EXPECT_EQ(src.str(), tst.str());
+}
+
+TEST(CipherTest, DecryptCbcRejectsShortCiphertext) {
+  AesCipher cipher(GetRandomKey().data());
+
+  // One full block plus a trailing fragment that does not fill a block.
+  std::stringstream src(std::string("not a full block") + "x", std::ios::in | std::ios::binary);
+  std::stringstream dst;
+
+  EXPECT_THROW(decrypt_cbc(src, dst, cipher), IoError);
+}
+
+TEST(CipherTest, DecryptCbcRejectsBadPaddingMismatch) {
+  AesCipher cipher(GetRandomKey().data());
+
+  // Last plaintext block declares a pad length of 2, but the single padding
+  // byte before the terminator is not 2.
+  std::array<uint8_t, 16> block{};
+  block[14] = 3;
+  block[15] = 2;
+
+  std::stringstream src(BuildCbcCiphertext(cipher, {block}), std::ios::in | std::ios::binary);
+  std::stringstream dst;
+
+  EXPECT_THROW(decrypt_cbc(src, dst, cipher), IoError);
+}
+
+TEST(CipherTest, DecryptCbcStreamRejectsTruncatedInput) {
+  AesCipher cipher(GetRandomKey().data());
+
+  // Two full ciphertext blocks followed by bytes that do not fill a block.
+  std::string ciphertext =
+      BuildCbcCiphertext(cipher, {std::array<uint8_t, 16>{}, std::array<uint8_t, 16>{}});
+  ciphertext += "junk";
+
+  std::stringstream src(ciphertext, std::ios::in | std::ios::binary);
+  std::stringstream dst;
+
+  EXPECT_THROW(decrypt_cbc_stream(src, dst, cipher), IoError);
+}
+
+TEST(CipherTest, DecryptCbcStreamRejectsPaddingTooLarge) {
+  AesCipher cipher(GetRandomKey().data());
+
+  // The plaintext block's last byte would request a pad length above 16.
+  std::array<uint8_t, 16> block{};
+  block[15] = 17;
+
+  std::stringstream src(BuildCbcCiphertext(cipher, {block}), std::ios::in | std::ios::binary);
+  std::stringstream dst;
+
+  EXPECT_THROW(decrypt_cbc_stream(src, dst, cipher), IoError);
+}
+
+TEST(CipherTest, DecryptCbcStreamRejectsBadPaddingMismatch) {
+  AesCipher cipher(GetRandomKey().data());
+
+  std::array<uint8_t, 16> block{};
+  block[14] = 3;
+  block[15] = 2;
+
+  std::stringstream src(BuildCbcCiphertext(cipher, {block}), std::ios::in | std::ios::binary);
+  std::stringstream dst;
+
+  EXPECT_THROW(decrypt_cbc_stream(src, dst, cipher), IoError);
 }
 
 TEST(CipherTest, CbcWithRandomPadding) {
