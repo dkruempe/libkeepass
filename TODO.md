@@ -162,10 +162,14 @@ Group-Pools, Import/Export3/4). Aufteilung in kleinere Verantwortlichkeiten
 verbessert Testbarkeit und Wartbarkeit und ist Voraussetzung für einen
 sauberen 4.1-Support:
 
-- [ ] Header-Parser ausgliedern (KDBX 3 vs. 4)
+- [x] Header-Parser ausgliedern (KDBX 3 vs. 4)
+      (`src/include/libkeepass/kdbx_header.hh` + `src/kdbx_header.cc`, statische
+      `KdbxHeader`-Klasse: `ReadVersion`/`IsKdbx4`/`Parse3`/`Parse4`/`Write3`/`Write4`),
+      `kdbx.cc` refaktoriert auf das Modul
 - [x] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
 - [x] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
-- [ ] Öffentliche Fläche (`libkeepass/*.hh`) stabil halten (ABI-kompatibel erweitern)
+- [x] Öffentliche Fläche (`libkeepass/*.hh`) stabil halten (ABI-kompatibel erweitern;
+      `kdbx.hh` unverändert, Header-Modul nur additiv)
 
 ### 7. Streaming statt Voll-Import + Benchmark
 
@@ -176,10 +180,15 @@ sauberen 4.1-Support:
 `Open(std::istream)` lädt potenziell alles in den Speicher (XML via pugixml
 in-memory). Für große Datenbanken und Netzwerk-/in-memory-I/O:
 
-- [ ] Strom-basiertes Parsen evaluieren (pugixml ohne komplettes DOM)
-- [ ] HMAC-Blöcke nicht komplett puffern
-- [ ] Reproduzierbarer Benchmark (`test/benchmark.cc`) als Referenz und Anti-Regression
-- [ ] Einen Load-Benchmark in CI-Schritt (wird nicht hart bewertet)
+- [x] Strom-basiertes Parsen evaluieren (pugixml ohne komplettes DOM)
+      → Entscheidung dokumentiert in `docs/streaming.md`: pugixml bleibt DOM
+      (kein SAX), gestreamt wird die Krypto-Schicht
+- [x] HMAC-Blöcke nicht komplett puffern
+      (`decrypt_cbc_stream` in `src/cipher.cc`, Chunked-ChaCha20 in `Import4`,
+      `src/kdbx.cc`; Fehlersemantik erhalten, Truncation-Tests grün)
+- [x] Reproduzierbarer Benchmark (`test/benchmark.cc`) als Referenz und Anti-Regression
+- [x] Einen Load-Benchmark in CI-Schritt (wird nicht hart bewertet)
+      (`.github/workflows/cmake.yml`, `continue-on-error: true`)
 
 ---
 

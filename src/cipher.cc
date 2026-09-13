@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <functional>
+#include <vector>
 
 #include "libkeepass/exception.hh"
 #include "libkeepass/secure.hh"
@@ -68,36 +70,6 @@ void block_transform(std::istream& src, std::ostream& dst, BlockOperation<N>&& o
 } // namespace
 
 namespace keepass {
-
-void encrypt_ecb(std::istream& src, std::ostream& dst, const Cipher<16>& cipher) {
-  static auto func = [&](const std::array<uint8_t, 16>& block_in,
-                         std::array<uint8_t, 16>& block_out, std::size_t src_len,
-                         bool) -> std::size_t {
-    if (src_len != 16) {
-      assert(false);
-      throw InternalError("ECB can only encrypt an even number of blocks.");
-    }
-
-    cipher.Encrypt(block_in, block_out);
-    return 16;
-  };
-  block_transform<16>(src, dst, func);
-}
-
-void decrypt_ecb(std::istream& src, std::ostream& dst, const Cipher<16>& cipher) {
-  static auto func = [&](const std::array<uint8_t, 16>& block_in,
-                         std::array<uint8_t, 16>& block_out, std::size_t src_len,
-                         bool) -> std::size_t {
-    if (src_len != 16) {
-      assert(false);
-      throw InternalError("ECB can only decrypt an even number of blocks.");
-    }
-
-    cipher.Decrypt(block_in, block_out);
-    return 16;
-  };
-  block_transform<16>(src, dst, func);
-}
 
 std::array<uint8_t, 32> encrypt_ecb(const std::array<uint8_t, 32>& src, const Cipher<16>& cipher) {
   std::array<uint8_t, 32> dst{};
@@ -210,6 +182,80 @@ void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher)
                         prv = block_in;
                         return 16;
                       });
+}
+
+void decrypt_cbc_stream(std::istream& src, std::ostream& dst, const Cipher<16>& cipher) {
+  std::array<uint8_t, 16> prv = cipher.InitializationVector();
+
+  // The plaintext of a block is only written once the next ciphertext block is
+  // in hand, so that the final block can be validated and its PKCS #7 padding
+  // stripped before it reaches the output.
+  std::array<uint8_t, 16> pending_out{};
+  bool have_pending = false;
+
+  // Ciphertext bytes not yet grouped into a full (16-byte) block.
+  std::vector<uint8_t> bytes;
+  bytes.reserve(64 + 16);
+
+  std::array<uint8_t, 64> chunk{};
+  while (true) {
+    src.read(reinterpret_cast<char*>(chunk.data()), chunk.size());
+    const std::streamsize got = src.gcount();
+    if (got == 0)
+      break;
+    bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + got);
+
+    // Decrypt every complete block read so far.
+    std::size_t consumed = 0;
+    while (bytes.size() - consumed >= 16) {
+      std::array<uint8_t, 16> block_in{};
+      std::array<uint8_t, 16> block_out{};
+      std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(consumed), 16, block_in.begin());
+      consumed += 16;
+
+      cipher.Decrypt(block_in, block_out);
+      for (std::size_t i = 0; i < block_out.size(); ++i)
+        block_out[i] = static_cast<uint8_t>(block_out[i] ^ prv[i]);
+
+      if (have_pending) {
+        dst.write(reinterpret_cast<const char*>(pending_out.data()), pending_out.size());
+        secure_zero(pending_out.data(), pending_out.size());
+      }
+      pending_out = block_out;
+      have_pending = true;
+      prv = block_in;
+
+      // The block buffers transiently hold plaintext and ciphertext.
+      secure_zero(block_out.data(), block_out.size());
+      secure_zero(block_in.data(), block_in.size());
+    }
+
+    if (consumed > 0)
+      bytes.erase(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(consumed));
+  }
+
+  // A trailing amount that does not fill a complete block is malformed.
+  if (!bytes.empty())
+    throw IoError("Decryption error.");
+  secure_zero(bytes.data(), bytes.size());
+  secure_zero(chunk.data(), chunk.size());
+
+  // Strip PKCS #7 padding from the final block.
+  if (have_pending) {
+    uint32_t pad_len = pending_out[15];
+    if (pad_len > 16)
+      throw IoError("Decryption error.");
+
+    for (std::size_t i = 16 - pad_len; i < 16; ++i) {
+      if (pending_out[i] != pad_len)
+        throw IoError("Decryption error.");
+    }
+
+    dst.write(reinterpret_cast<const char*>(pending_out.data()), 16 - pad_len);
+    secure_zero(pending_out.data(), pending_out.size());
+  }
+
+  secure_zero(prv.data(), prv.size());
 }
 
 AesCipher::AesCipher(const uint8_t* key, const std::array<uint8_t, 16>& init_vec)

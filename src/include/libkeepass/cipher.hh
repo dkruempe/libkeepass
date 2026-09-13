@@ -84,6 +84,24 @@ LIBKEEPASS_API void encrypt_cbc(std::istream& src, std::ostream& dst, const Ciph
 LIBKEEPASS_API void decrypt_cbc(std::istream& src, std::ostream& dst, const Cipher<16>& cipher);
 
 /**
+ * @brief Decrypts a stream using CBC mode with PKCS #7 padding removal.
+ *
+ * Unlike \c decrypt_cbc this variant reads from a non-seekable input stream
+ * and decrypts incrementally in bounded-size chunks, so that a large payload
+ * never has to be materialized in memory at once. The ciphertext is expected
+ * to be a multiple of the block size; every block is decrypted as soon as it
+ * has been read, only the final block is held back until EOF so that its
+ * PKCS #7 padding can be validated and stripped.
+ *
+ * @param src Input stream containing the ciphertext.
+ * @param dst Output stream receiving the plaintext.
+ * @param cipher The block cipher used for each block decryption.
+ * @throws IoError If decryption fails, padding is invalid, or an I/O error occurs.
+ */
+LIBKEEPASS_API void decrypt_cbc_stream(std::istream& src, std::ostream& dst,
+                                       const Cipher<16>& cipher);
+
+/**
  * @brief Abstract base class for 16-byte block ciphers.
  *
  * @tparam N The block size in bytes (always 16 for the ciphers in this library).
