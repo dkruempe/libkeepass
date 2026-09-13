@@ -238,4 +238,7 @@ Coverage wird bereits via `lcov/gcov` in der CI erzeugt und hochgeladen.
 - [x] KDBX 4.1-Migrationsstrategie (gelöst: 4.1 nur bei Bedarf schreiben, wie KeePass), siehe #4
 - [ ] C++-Standard-Politik dokumentieren (aktuell C++11; bleibt das, oder 14/17 für Streams/optional?)
 - [ ] Changelog-Einträge pro Roadmap-Item (Keep a Changelog + SemVer)
-- [ ] Nach Umsetzung von #4: `CHANGELOG.md` und `docs/kdbx-parsing.md` aktualisieren
+- [x] Nach Umsetzung von #4: `CHANGELOG.md` und `docs/kdbx-parsing.md` aktualisieren
+      (KDBX-4.1-Einträge in `CHANGELOG.md` vorhanden; `docs/kdbx-parsing.md` auf die
+      modulare Architektur aus #6/#7 umgestellt: `KdbxHeader`/`KdbxKdf`/`KdbxXml`
+      statt monolithischem `kdbx.cc`, aktuelle Linienreferenzen)
