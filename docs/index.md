@@ -19,6 +19,9 @@ pieces fit together*.
   (HMAC/decrypt) and where it buffers (pugixml DOM), plus the load benchmark.
 - [Third-party Interoperability](interop.md) — verified KeePassXC/Strongbox
   interop and known provider divergences.
+- [Hardware Tokens / YubiKey](hardware-tokens.md) — a documented decision to
+  keep hardware-token support out of scope and leave the `Key` extension point
+  open.
 
 ## High-level flow
 

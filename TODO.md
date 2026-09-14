@@ -103,8 +103,16 @@ KeePass unterstützt externe Key-Quellen (YubiKey/Challenge-Response). Für
 libkeepass als Library keine unmittelbare Priorität; als Grundsatzentscheidung
 dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 
-- [ ] Kein zeitlicher Horizont; Architektur-Hook in `key.hh` bewusst offen lassen
-- [ ] Abhängigkeits- und Lizenzaufwand evaluieren (externer Dev-Lib), Entscheidung hier festhalten
+- [x] Kein zeitlicher Horizont; Architektur-Hook in `key.hh` bewusst offen lassen
+- [x] Abhängigkeits- und Lizenzaufwand evaluieren (externer Dev-Lib), Entscheidung hier festhalten
+
+Umgesetzt und abgeschlossen:
+
+Entscheidung: kein Hardware-Token-Support in absehbarer Zeit. Das `Key`-Modell
+bleibt offen als Erweiterungspunkt (weiterer Sub-Key im Composite-Hash, analog
+Password/Keyfile); ein KDBX-Format-Bedarf besteht nicht. Dokumentation inkl.
+Abhängigkeiten/Lizenz (BSD-2-kompatibel) und Aufwandseinschätzung in
+`docs/hardware-tokens.md`.
 
 ---
 
@@ -116,5 +124,8 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
-- [ ] Entry-History: API (`save_history`/`delete_history`) vorhanden, CLI-/(.json?)-
-      Sichtbarkeit bewusst noch nicht erweitert
+- [x] Entry-History: API (`save_history`/`delete_history`) vorhanden;
+      CLI-/(.json?)-Sichtbarkeit **bewusst nicht** erweitert — Entscheidung:
+      History vollständig roundtrip-fähig, aber nicht Teil der
+      Tagesansicht/des Audits; Interessenten nutzen die öffentliche API
+      direkt (siehe Docstring von `Entry::history()`)
