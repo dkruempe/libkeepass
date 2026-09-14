@@ -1,6 +1,6 @@
 # Architecture
 
-This is the architecture documentation for **libkeepass**, a C++11 library for
+This is the architecture documentation for **libkeepass**, a C++17 library for
 importing and exporting [KeePass](https://keepass.info) password databases.
 
 It complements the generated API reference

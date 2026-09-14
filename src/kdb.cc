@@ -69,8 +69,8 @@ void WipeStream(std::stringstream& stream) {
 }
 
 // Zeroizes the contents of a contiguous container (std::string or
-// std::vector<char/uint8_t>) in place. std::string::data() returns a const
-// pointer in C++11, so cast it away for the wipe; writing zeros never
+// std::vector<char/uint8_t>) in place. std::string_view::data() is const even
+// in C++17, so cast it away for the wipe; writing zeros never
 // invalidates the container invariants.
 template <typename Container> void WipeBuffer(Container* buffer) {
   if (buffer != nullptr && !buffer->empty()) {

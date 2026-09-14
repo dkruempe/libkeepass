@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the language standard baseline is now C++17 (previously the
+  library still declared C++11 as its minimum while CI and the documentation
+  already built with C++17). The CMake targets enforce this via
+  `target_compile_features(... cxx_std_17)`, and the Conan recipes
+  (`conanfile.py`, ConanCenter recipe) check the minimum standard in
+  `validate()`.
+
 ### Infrastructure
 
 - ConanCenter-Rezept auf die CCI-v2-Konventionen angehoben (`test_package` statt
