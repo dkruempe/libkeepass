@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Third-party interoperability for KeePassXC: real KeePassXC test-corpus
+  fixtures are imported in the new `libkeepass.compat` test binary
+  (`test/compat.cc`, fixtures under `test/data/compat/`) covering KDBX 4.0
+  (ChaCha20 + Argon2d + gzip), KDBX 3.1 protected strings and the recycle-bin
+  group layout. The verification matrix and the Strongbox analysis (16-byte
+  Argon2 salts, Argon2 `K`/`A` parameters, keyfile variants) are documented in
+  `docs/interop.md` together with the import tolerance policy.
+
+### Fixed
+
+- The recycle-bin metadata now points to the group that actually holds the
+  recycled entries. Because `Meta` (parsed before the group tree) could
+  resolve `RecycleBinUUID`/`EntryTemplatesGroup` to a placeholder instance,
+  `ParseGroup` previously inserted a *separate* group into the UUID pool
+  (`std::map::insert` keeps the existing entry), so `Metadata::recycle_bin()`
+  returned an empty group while the tree group carried the entries.
+  `ParseGroup` now reuses a pooled placeholder when the UUID was already
+  resolved.
+
 ### Changed
 
 - **Breaking:** the language standard baseline is now C++17 (previously the

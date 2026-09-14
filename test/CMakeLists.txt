@@ -83,6 +83,11 @@ target_compile_features(secure PUBLIC cxx_std_17)
 target_link_libraries(secure PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.secure COMMAND secure)
 
+add_executable(compat compat.cc)
+target_compile_features(compat PUBLIC cxx_std_17)
+target_link_libraries(compat PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.compat COMMAND compat)
+
 add_executable(robustness robustness.cc)
 target_compile_features(robustness PUBLIC cxx_std_17)
 target_link_libraries(robustness PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)

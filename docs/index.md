@@ -17,6 +17,8 @@ pieces fit together*.
   header parsing, XML parsing and export.
 - [Streaming Parsing Evaluation](streaming.md) — where the pipeline streams
   (HMAC/decrypt) and where it buffers (pugixml DOM), plus the load benchmark.
+- [Third-party Interoperability](interop.md) — verified KeePassXC/Strongbox
+  interop and known provider divergences.
 
 ## High-level flow
 

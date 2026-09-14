@@ -46,18 +46,25 @@ entfernt.
 
 ## P1 - Format- & Feature-Ausbau (v0.4.x)
 
-### 1. Kompatibilität mit KeePassXC / Strongbox verifizieren
+### 1. Kompatibilität mit KeePassXC / Strongbox
 
 **Kategorie:** Feat
 **Aufwand:** M
 **Ziel-Version:** v0.4.x
 
-Bisherige Format-Verifikation basiert auf KeePass-Referenzdaten. Für breite
-Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
+Umgesetzt und abgeschlossen:
 
-- [ ] KeePassXC-Fixtures erzeugen (KDBX 4.1, Argon2-Parameter-Randfälle, Keyfiles, Recycle-Bin)
-- [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
-- [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
+- [x] KeePassXC-Verifikation über reales Testkorpus (nicht generierbar: `keepassxc-cli`
+      braucht GUI-Libs, daher echte Fixtures aus `keepassxreboot/keepassxc` `tests/data/`
+      eingepflegt): KDBX 4.0 ChaCha20+Argon2d+gzip, KDBX 3.1 Protected-Strings,
+      Recycle-Bin; neues Testbinary `libkeepass.compat` (`test/data/compat/`)
+- [x] Abweichungen dokumentiert (`docs/interop.md`), inkl. Strongbox: 16-Byte-Argon2-Salz
+      (fixture-seitig abgedeckt), Argon2-`K`/`A`-Parameter (werden importseitig ignoriert),
+      Keyfile-Formate (XML + 64-Hex unterstützt; 32-Byte-Raw/Digest-SHA256-Fallback eine
+      dokumentierte Lücke)
+- [x] Von der Verifikation ausgelöster Bugfix: `RecycleBinUUID` zeigte auf eine leere
+      Platzhalter-Gruppe statt auf die Gruppe mit den Einträgen (Metadata wird vor dem
+      Gruppenbaum geparst; `ParseGroup` reicht das Platzhalter-Objekt nun weiter)
 
 ### 2. `kpx`: Passwort-Audit
 
@@ -91,8 +98,9 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 
 ## Entscheidungen / Offene Punkte
 
-- [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #1)
+- [x] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
+      KDF-/Cipher-OIDs: festgelegt und in `docs/interop.md` dokumentiert
+      (integrritätsrelevant: Fehler; optional/unkritisch: ignorieren)
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
