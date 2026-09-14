@@ -21,7 +21,10 @@ Abgeschlossene Grundlage (Details siehe `CHANGELOG.md`):
 - **Architektur:** `KdbxFile` in `KdbxHeader`/`KdbxKdf`/`KdbxXml` zerlegt,
   gestreamte KDBX-4-Entschlüsselung, Load-Benchmark in der CI
 - **Ökosystem:** CI auf Linux/macOS/Windows, CodeQL, Doxygen/GitHub Pages,
-  Issue-/PR-Templates
+  Issue-/PR-Templates; ConanCenter-Rezept auf CCI-v2-Konventionen gehoben und
+  als PR eingereicht
+  ([conan-io/conan-center-index#30962](https://github.com/conan-io/conan-center-index/pull/30962)),
+  `conanfile.py`/`test_package` lokal via `conan create` verifiziert
 
 Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
 Ökosystem-Integration** (v0.4.0) sowie gezielte Formatausbauten.
@@ -40,20 +43,7 @@ Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
 
 ## P0 - Release-Reife (v0.4.0)
 
-### 1. ConanCenter-Veröffentlichung
-
-**Kategorie:** Erreichbarkeit
-**Aufwand:** M
-**Ziel-Version:** v0.4.0
-
-Das CCI-Rezept wurde auf v0.3.0 angehoben und auf die CCI-v2-Konventionen
-angeglichen (Branch `feature/conan-center`). Die Einreichung steht aus.
-
-- [ ] Rezept final reviewen (Varianten static/shared, `test_package`, Header-Pfade)
-- [ ] PR an `conan-io/conan-center-index` einreichen
-- [ ] `conanfile.py`/`test_package` im Repo mitführen und bei Releases abgleichen
-
-### 2. C++-Standard-Politik festlegen und dokumentieren
+### 1. C++-Standard-Politik festlegen und dokumentieren
 
 **Kategorie:** Architektur
 **Aufwand:** S-M
@@ -66,7 +56,7 @@ Offene Grundsatzfrage: aktuell C++11. Entscheidung treffen (11 belassen vs.
 - [ ] Pro/Contra bewerten (ABI-/Compiler-Basis, Conan 2-Keinstellung, STL-Unterbau)
 - [ ] Entscheidung dokumentieren; bei Wechsel: Migration planen und im Changelog als Breaking kennzeichnen
 
-### 3. Doku & Changelog für v0.3.0 abschließen
+### 2. Doku & Changelog für v0.3.0 abschließen
 
 **Kategorie:** Erreichbarkeit
 **Aufwand:** S
@@ -81,7 +71,7 @@ Offene Grundsatzfrage: aktuell C++11. Entscheidung treffen (11 belassen vs.
 
 ## P1 - Sicherheit & Architektur (v0.4.x)
 
-### 4. `Database`-Seeds auf sichere Container umstellen
+### 3. `Database`-Seeds auf sichere Container umstellen
 
 **Kategorie:** Sicherheit
 **Aufwand:** M-L
@@ -98,7 +88,7 @@ KDF-Salts/Seeds, Wiping nach Release wünschenswert.
 - [ ] ABI-/API-Verträglichkeit der öffentlichen Setter/Getter beachten
 - [ ] Wipe-Verifikation in `test/secure.cc` ergänzen
 
-### 5. BLAKE2b-Argon2-KDF evaluieren
+### 4. BLAKE2b-Argon2-KDF evaluieren
 
 **Kategorie:** Feat / Sicherheit
 **Aufwand:** M (nach Evaluation)
@@ -117,7 +107,7 @@ Verfügbarkeit/Bedeutung erst gegen KeePass 2.6x empirisch verifizieren
 
 ## P1 - Format- & Feature-Ausbau (v0.4.x)
 
-### 6. Kompatibilität mit KeePassXC / Strongbox verifizieren
+### 5. Kompatibilität mit KeePassXC / Strongbox verifizieren
 
 **Kategorie:** Feat
 **Aufwand:** M
@@ -130,7 +120,7 @@ Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
 - [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
 - [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
 
-### 7. `kpx`: Passwort-Audit
+### 6. `kpx`: Passwort-Audit
 
 **Kategorie:** Erreichbarkeit / Nutzbarkeit
 **Aufwand:** S-M
@@ -145,7 +135,7 @@ Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
 ## P2 - Erreichbarkeit / Ökosystem
 
-### 8. Hardware-Token / YubiKey (Evaluation, langfristig)
+### 7. Hardware-Token / YubiKey (Evaluation, langfristig)
 
 **Kategorie:** Feat
 **Aufwand:** XL
@@ -162,9 +152,9 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 
 ## Entscheidungen / Offene Punkte
 
-- [ ] C++-Standard-Politik (11 belassen vs. 14/17), siehe #2
+- [ ] C++-Standard-Politik (11 belassen vs. 14/17), siehe #1
 - [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #6)
+      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #5)
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)

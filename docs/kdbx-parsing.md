@@ -7,6 +7,26 @@ disk to an in-memory `Database` object (and back). The entry points are
 > The legacy KDB 1.x format uses a different binary layout and is implemented
 > in `src/kdb.cc`; this document covers KDBX (KeePass 2).
 
+## Modules
+
+`KdbxFile` is a thin orchestrator. The wire formats live in dedicated,
+stateless modules:
+
+*   `KdbxHeader` (`src/include/libkeepass/kdbx_header.hh`, `src/kdbx_header.cc`)
+    — file signature/version prefix, the per-version outer header field
+    layout, cipher identifiers, compression and inner-random-stream enums, and
+    the size caps used against malformed files.
+*   `KdbxKdf` (`src/include/libkeepass/kdbx_kdf.hh`, `src/kdbx_kdf.cc`) — the
+    KDF dispatcher: (de)serializes the KDF parameters into/from the KDBX 4
+    variant dictionary and runs `Key::Transform` for the database's KDF
+    (AES-KDF, Argon2d/id).
+*   `KdbxXml` (`src/include/libkeepass/kdbx_xml.hh`, `src/kdbx_xml.cc`) — the
+    KDBX XML body parser/serializer (pugixml), including the binary/icon/group
+    pools and the stored header hash.
+*   `KdbxFile` (`src/kdbx.cc`) — the crypto pipeline around them: key
+    derivation, block/HMAC verification, (de)encryption, gzip and the KDBX 4
+    inner header.
+
 ## File layout
 
 ```
@@ -26,7 +46,7 @@ disk to an in-memory `Database` object (and back). The entry points are
 ```
 
 The version's critical mask `0xffff0000` selects the parser
-(`KdbxFile::Import`, `src/kdbx.cc:1008`):
+(`KdbxFile::Import`, `src/kdbx.cc:150`):
 
 *   `0x00030000` → `Import3` (KDBX 3)
 *   `0x00040000` → `Import4` (KDBX 4.0)
@@ -36,9 +56,13 @@ The version's critical mask `0xffff0000` selects the parser
 
 ## Header fields
 
+All header parsing lives in `KdbxHeader` (`src/kdbx_header.cc`); each field is
+read into its own (wiped) buffer before parsing so that a declared size never
+overruns into the payload ("Corrupt header field size in KDBX").
+
 ### KDBX 3 — `KdbxHeaderField { uint8 id; uint16 size; }`
 
-Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
+Fields are read as `id(size) data` (`src/kdbx_header.cc:108`). Recognized IDs:
 
 | ID | Field | Content |
 |---|---|---|
@@ -46,7 +70,7 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
 | 3 | Compression flags | `0` = none, `1` = gzip |
 | 4 | Master seed | byte vector |
 | 5 | Transform seed | 32 bytes |
-| 6 | Transform rounds | uint64 |
+| 6 | Transform rounds | uint64 (capped at `Database::kMaxTransformRounds`) |
 | 7 | Encryption IV | 16 bytes |
 | 8 | Inner random stream key | 32 bytes |
 | 9 | Content stream start bytes | 32 bytes |
@@ -54,6 +78,10 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
 | 0 | End of header | — |
 
 ### KDBX 4 — `Kdbx4HeaderField { uint8 id; uint32 size; }`
+
+Fields are read as `id(size) data` (`src/kdbx_header.cc:134`); each declared
+size is capped at 1 MiB (`kMaxOuterHeaderFieldSize`) to reject crafted files
+before any unbounded allocation runs.
 
 | ID | Field | Content |
 |---|---|---|
@@ -66,16 +94,19 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
 
 ## Import pipeline
 
-### `KdbxFile::Import` (`src/kdbx.cc:1008`)
+### `KdbxFile::Import` (`src/kdbx.cc:150`)
 
-1.  `Reset()` all internal pools (see below).
-2.  Read and validate the signature + version.
+1.  `Reset()` shared state (delegates to `KdbxXml::Reset`,
+    `src/kdbx_xml.cc:148`).
+2.  Read and validate the signature + version (`KdbxHeader::ReadVersion`,
+    `src/kdbx_header.cc:159`).
 3.  Delegate to `Import3` or `Import4`.
 
-### `Import3` (`src/kdbx.cc:1038`)
+### `Import3` (`src/kdbx.cc:169`)
 
-1.  **Parse header fields** into a fresh `Database` (cipher, compression,
-    seeds, IV, inner stream key, start bytes).
+1.  **Parse header fields** into a fresh `Database` (`KdbxHeader::Parse3`,
+    `src/kdbx_header.cc:172`: cipher, compression, seeds, IV, inner stream
+    key, start bytes).
 2.  **Header hash**: SHA-256 over all bytes from the start of the file up to
     (but not including) the end of the header.
 3.  **Derive keys**: `transformed_key = AES-KDF(transform_seed, rounds)`;
@@ -85,14 +116,15 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
 5.  **Verify start bytes**: the first 32 decrypted bytes must equal the header's
     start bytes, otherwise `PasswordError`.
 6.  **Unwrap blocks**: `hashed_istreambuf`, then optional `gzip_istreambuf`.
-7.  **Parse XML** via `ParseXml`.
+7.  **Parse XML** via `KdbxXml::Parse`.
 8.  **Verify stored header hash** against `<Meta><HeaderHash>`; this happens
     after the XML is parsed because the hash is stored inside the XML.
 
-### `Import4` (`src/kdbx.cc:1200`)
+### `Import4` (`src/kdbx.cc:268`)
 
 1.  **Parse header fields**, including the KDF `VariantDictionary`
-    (Argon2/AES parameters).
+    (`KdbxHeader::Parse4`, `src/kdbx_header.cc:260`; Argon2/AES parameters via
+    `KdbxKdf::ParseParameters`, `src/kdbx_kdf.cc:48`).
 2.  Compute header SHA-256 and compare with the **stored header hash**.
 3.  **Derive keys**: `transformed_key` = AES-KDF or Argon2;
     `hmac_key` and `header_hmac_key` per `key-derivation.md`.
@@ -100,10 +132,11 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
     `PasswordError`).
 5.  `final_key = SHA-256(master_seed || transformed_key)`.
 6.  **Read ciphertext through `hmac_istreambuf`** (HMAC framing is the outer
-    layer, over the ciphertext).
-7.  **Decrypt** (AES/Twofish CBC or ChaCha20 stream).
-8.  Optional **gzip** decompress of the *entire* payload.
-9.  **Parse inner header** (`src/kdbx.cc:1451`):
+    layer, over the ciphertext) and decrypt it block by block so a large
+    database is never fully materialized: `decrypt_cbc_stream` for AES/Twofish
+    (`src/cipher.cc`), a chunked 64-byte keystream loop for ChaCha20.
+7.  Optional **gzip** decompress of the *entire* payload.
+8.  **Parse inner header** (`src/kdbx.cc:452`):
 
     | ID | Field | Content |
     |---|---|---|
@@ -112,11 +145,11 @@ Fields are read as `id(size) data`. Recognized IDs (`src/kdbx.cc:143`):
     | 3 | Binaries | one entry per attachment: `flags u8` (`0x01` = protected) then data |
     | 0 | End | — |
 
-    Binaries are collected into `binary_pool_` and later added to the
-    database meta so they survive round-trips.
-10. **Parse XML** (which follows the inner header in the same payload).
+    Binaries are collected into the XML module's `binary_pool_` and later added
+    to the database meta so they survive round-trips.
+9.  **Parse XML** (which follows the inner header in the same payload).
 
-### `ParseXml` (`src/kdbx.cc:936`)
+### `KdbxXml::Parse` (`src/kdbx_xml.cc:977`)
 
 Uses **pugixml** (`parse_default | parse_trim_pcdata`). Required structure:
 
@@ -127,11 +160,11 @@ Uses **pugixml** (`parse_default | parse_trim_pcdata`). Required structure:
     <Group> ... </Group>   <!-- the root group; parsed recursively -->
 ```
 
-1.  `ParseMeta` (`src/kdbx.cc:335`) fills `Metadata`: generator, database
+1.  `ParseMeta` (`src/kdbx_xml.cc:292`) fills `Metadata`: generator, database
     name/description, memory protection flags, recycle bin, entry templates,
     history limits, custom icons and binaries, plus the stored `HeaderHash`.
-2.  `ParseGroup` (`src/kdbx.cc:825`) recursively builds the group tree and
-    calls `ParseEntry` (`src/kdbx.cc:593`).
+2.  `ParseGroup` (`src/kdbx_xml.cc:849`) recursively builds the group tree and
+    calls `ParseEntry` (`src/kdbx_xml.cc:589`).
 
     *   Groups are tracked in `group_pool_` (keyed by UUID string) so that
         cross-references such as `RecycleBinUUID` and the last-selected group
@@ -140,41 +173,42 @@ Uses **pugixml** (`parse_default | parse_trim_pcdata`). Required structure:
         attachments (resolved through `binary_pool_`) and history entries.
 3.  Because `LastSelectedGroup` / `LastTopVisibleGroup` reference parsed
     groups, they are resolved only *after* the group tree is complete
-    (`src/kdbx.cc:962`).
+    (`src/kdbx_xml.cc:1013`).
 
-### Protected strings (`src/kdbx.cc:308`)
+### Protected strings (`src/kdbx_xml.cc:261`)
 
 Fields marked `Protected="True"` are stored Base64-encoded and XORed with the
 inner random stream. `ParseProtectedString` decodes and deobfuscates them into
-`protect<std::string>`; `WriteProtectedString` does the reverse on export.
-The obfuscator is a `RandomObfuscator` (`src/random.cc`) over Salsa20 (KDBX 3)
-or Salsa20/ChaCha20 (KDBX 4).
+`protect<secure_string>`; `WriteProtectedString` (`src/kdbx_xml.cc:282`) does
+the reverse on export. The obfuscator is a `RandomObfuscator`
+(`src/random.cc`) over Salsa20 (KDBX 3) or Salsa20/ChaCha20 (KDBX 4).
 
 ## KDBX 4.1
 
 KDBX 4.1 (`0x00040001`) is read and written via the same `Import4`/`Export4`
 pipeline as KDBX 4.0; header, HMAC, cipher and inner stream are unchanged.
-Only the XML body schema is extended (`src/kdbx.cc:615`, `:733`, `:845`,
-`:900`):
+Only the XML body schema is extended (`src/kdbx_xml.cc`):
 
 *   `<Group><Tags>` — semicolon-joined group tags on the wire (KeePass 2.48+);
     the API surface is space-separated, the conversion happens at the XML
-    boundary in `TagsFromXml`/`TagsToXml` (`src/kdbx.cc:117`).
+    boundary in `TagsFromXml`/`TagsToXml` (`src/kdbx_xml.cc:103`, `:120`).
 *   `<Entry><QualityCheck>` — "false" disables the password quality warning
-    (`Entry::quality_check`).
+    (`Entry::quality_check`; parsed `src/kdbx_xml.cc:602`, written `:745`).
 *   `<Entry>`/`<Group><PreviousParentGroup>` — UUID of the previous parent
-    group (`Entry::previous_parent_group`/`Group::previous_parent_group`).
+    group (`Entry::previous_parent_group`/`Group::previous_parent_group`;
+    parsed `src/kdbx_xml.cc:605`/`:863`, written `:747`/`:926`).
 *   `<Icon><Name>`/`<LastModificationTime>` — custom icon metadata
-    (`Icon::name`/`Icon::last_modification_time`).
+    (`Icon::name`/`Icon::last_modification_time`; `src/kdbx_xml.cc:357`, `:522`).
 *   `<CustomData><Item><LastModificationTime>` — per-item modification time
-    (`Metadata::Field::last_modification_time`).
+    (`Metadata::Field::last_modification_time`; `src/kdbx_xml.cc:420`, `:583`).
 *   `<Root><DeletedObjects><DeletedObject>` (UUID + DeletionTime) — deletion
     tombstones for groups, entries and (since 4.1) icons
-    (`Metadata::DeletedObject`).
+    (`Metadata::DeletedObject`; `src/kdbx_xml.cc:998`, `:1063`).
 
 `Export4` writes `0x00040001` only when the database uses 4.1-only features,
 otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`, verified against
-KeePass 2.57). Two rules differ from a naive reading of the format:
+KeePass 2.57; the decision is `RequiresKdbx41` in `src/kdbx.cc:116`). Two rules
+differ from a naive reading of the format:
 
 *   A `PreviousParentGroup` reference does **not** enforce KDBX 4.1. KeePass
     keeps the file at `0x00040000` for a database whose only 4.1 feature is
@@ -187,26 +221,28 @@ KeePass 2.57). Two rules differ from a naive reading of the format:
 
 ## Export pipeline
 
-### `KdbxFile::Export` (`src/kdbx.cc:1520`)
+### `KdbxFile::Export` (`src/kdbx.cc:559`)
 
 Writes KDBX 4 when forced via `set_write_kdbx4(true)` or when the database KDF
 is not AES; otherwise writes KDBX 3.
 
-### `Export3` (`src/kdbx.cc:1539`)
+### `Export3` (`src/kdbx.cc:574`)
 
 1.  Derive/reuse `transformed_key` and `final_key`.
-2.  Serialize the header fields into an in-memory stream, compute the SHA-256
+2.  Serialize the header fields via `KdbxHeader::Write3`
+    (`src/kdbx_header.cc:328`) into an in-memory stream, compute the SHA-256
     header hash, write the header to the file.
 3.  Build the content: `start_bytes(32) || hashed_ostreambuf( XML )`.
     XML is optionally gzip-compressed inside the hashed stream.
 4.  `encrypt_cbc` the content stream.
 
-### `Export4` (`src/kdbx.cc:1655`)
+### `Export4` (`src/kdbx.cc:651`)
 
 1.  Derive/reuse `transformed_key`; compute `final_key`, `hmac_key` and the
     header HMAC.
-2.  Serialize the header (including the KDF `VariantDictionary`), compute and
-    write header SHA-256 + HMAC.
+2.  Serialize the header via `KdbxHeader::Write4` (`src/kdbx_header.cc:387`,
+    incl. the KDF `VariantDictionary`), compute and write header SHA-256 + HMAC.
+    The version field is `0x00040001` iff `KdbxXml::kdbx41()` was set.
 3.  Collect all binaries used by entries into `binary_pool_` (deduplicated,
     in a stable order).
 4.  Build the inner header: random stream ID (ChaCha20) + freshly generated
@@ -215,16 +251,19 @@ is not AES; otherwise writes KDBX 3.
 6.  Encrypt (`encrypt_cbc` or ChaCha20) the payload, then wrap the ciphertext
     in `hmac_ostreambuf`.
 
-## Internal state — `KdbxFile`
+## Internal state — `KdbxXml` / `KdbxFile`
 
-One `KdbxFile` instance is stateful across a single import/export (`Reset()`,
-`src/kdbx.cc:198`):
+`KdbxFile` is stateful across a single import/export; it delegates the
+bookkeeping objects to `KdbxXml` (`KdbxXml::Reset`, `src/kdbx_xml.cc:148`):
 
 *   `binary_pool_`, `icon_pool_`, `group_pool_` — UUID-keyed caches used to
-    preserve object identity across `<Meta>` fields and the group tree.
+    preserve object identity across `<Meta>` fields, the group tree and the
+    KDBX 4 inner header (owned by `KdbxXml`).
 *   `header_hash_` — the last computed/stored header hash (written back into
-    `<Meta><HeaderHash>` on export).
-*   `kdbx4_` / `write_kdbx4_` — the active format and the forced-format flag.
+    `<Meta><HeaderHash>` on export; owned by `KdbxXml`).
+*   `kdbx4_` / `kdbx41_` — the active format and whether the KDBX 4.1 XML
+    schema should be written (owned by `KdbxXml`).
+*   `write_kdbx4_` — the forced-format flag on `KdbxFile` for export.
 
 The pools are intentionally *not* part of the public `Database` API; they are
 bookkeeping that makes parsing and re-serialization faithful.
