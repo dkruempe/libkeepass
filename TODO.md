@@ -27,7 +27,10 @@ Abgeschlossene Grundlage (Details siehe `CHANGELOG.md`):
   `conanfile.py`/`test_package` lokal via `conan create` verifiziert
 
 Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
-Ökosystem-Integration** (v0.4.0) sowie gezielte Formatausbauten.
+Ökosystem-Integration** sowie gezielte Formatausbauten. Die P0-Items der
+v0.4.0-Release-Reife (C++17-Standard-Politik, CHANGELOG-/Doku-Abschluss) sind
+umgesetzt (vergl. letzte Merge-Reihenfolge) und wurden aus dieser Liste
+entfernt.
 
 ---
 
@@ -41,37 +44,9 @@ Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
 
 ---
 
-## P0 - Release-Reife (v0.4.0)
-
-### 1. C++-Standard-Politik festlegen und dokumentieren
-
-**Kategorie:** Architektur
-**Aufwand:** S-M
-**Ziel-Version:** v0.4.0
-
-Offene Grundsatzfrage: aktuell C++11. Entscheidung treffen (11 belassen vs.
-14/17 für `std::optional`, bessere Stream-/String-Handling) und in
-`CONTRIBUTING.md`/`docs/` dokumentieren.
-
-- [ ] Pro/Contra bewerten (ABI-/Compiler-Basis, Conan 2-Keinstellung, STL-Unterbau)
-- [ ] Entscheidung dokumentieren; bei Wechsel: Migration planen und im Changelog als Breaking kennzeichnen
-
-### 2. Doku & Changelog für v0.3.0 abschließen
-
-**Kategorie:** Erreichbarkeit
-**Aufwand:** S
-**Ziel-Version:** v0.4.0
-
-- [x] `docs/kdbx-parsing.md` an die modulare Architektur angepasst
-      (Branch `docs/kdbx-parsing`, Mergen nach Review)
-- [ ] Changelog-Einträge je Roadmap-Item prüfen (Keep a Changelog + SemVer),
-      v0.3.0-Releasenotes aus `[Unreleased]` ziehen und v0.3.0 taggen
-
----
-
 ## P1 - Sicherheit & Architektur (v0.4.x)
 
-### 3. `Database`-Seeds auf sichere Container umstellen
+### 1. `Database`-Seeds auf sichere Container umstellen
 
 **Kategorie:** Sicherheit
 **Aufwand:** M-L
@@ -88,7 +63,7 @@ KDF-Salts/Seeds, Wiping nach Release wünschenswert.
 - [ ] ABI-/API-Verträglichkeit der öffentlichen Setter/Getter beachten
 - [ ] Wipe-Verifikation in `test/secure.cc` ergänzen
 
-### 4. BLAKE2b-Argon2-KDF evaluieren
+### 2. BLAKE2b-Argon2-KDF evaluieren
 
 **Kategorie:** Feat / Sicherheit
 **Aufwand:** M (nach Evaluation)
@@ -107,7 +82,7 @@ Verfügbarkeit/Bedeutung erst gegen KeePass 2.6x empirisch verifizieren
 
 ## P1 - Format- & Feature-Ausbau (v0.4.x)
 
-### 5. Kompatibilität mit KeePassXC / Strongbox verifizieren
+### 3. Kompatibilität mit KeePassXC / Strongbox verifizieren
 
 **Kategorie:** Feat
 **Aufwand:** M
@@ -120,7 +95,7 @@ Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
 - [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
 - [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
 
-### 6. `kpx`: Passwort-Audit
+### 4. `kpx`: Passwort-Audit
 
 **Kategorie:** Erreichbarkeit / Nutzbarkeit
 **Aufwand:** S-M
@@ -135,7 +110,7 @@ Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
 ## P2 - Erreichbarkeit / Ökosystem
 
-### 7. Hardware-Token / YubiKey (Evaluation, langfristig)
+### 5. Hardware-Token / YubiKey (Evaluation, langfristig)
 
 **Kategorie:** Feat
 **Aufwand:** XL
@@ -152,9 +127,8 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 
 ## Entscheidungen / Offene Punkte
 
-- [ ] C++-Standard-Politik (11 belassen vs. 14/17), siehe #1
 - [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #5)
+      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #3)
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
