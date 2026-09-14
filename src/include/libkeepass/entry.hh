@@ -318,8 +318,7 @@ public:
 
   /// Sets the UUID of the previous parent group (KDBX 4.1); pass @c std::nullopt
   /// to unset.
-  void set_previous_parent_group(
-      const std::optional<std::array<uint8_t, 16>>& uuid) {
+  void set_previous_parent_group(const std::optional<std::array<uint8_t, 16>>& uuid) {
     previous_parent_group_ = uuid;
   }
 
