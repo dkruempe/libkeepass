@@ -23,9 +23,11 @@
  */
 
 #pragma once
+#include <array>
 #include <ctime>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -224,7 +226,7 @@ private:
   protect<secure_string> notes_;
   std::string tags_;
   bool quality_check_ = true;
-  std::array<uint8_t, 16> previous_parent_group_ = {{0}};
+  std::optional<std::array<uint8_t, 16>> previous_parent_group_;
   std::time_t creation_time_ = 0;
   std::time_t modification_time_ = 0;
   std::time_t access_time_ = 0;
@@ -309,11 +311,15 @@ public:
   /// Sets whether the password quality warning is enabled for this entry.
   void set_quality_check(bool quality_check) { quality_check_ = quality_check; }
 
-  /// Returns the UUID of the previous parent group (all-zero if unset).
-  const std::array<uint8_t, 16>& previous_parent_group() const { return previous_parent_group_; }
+  /// Returns the UUID of the previous parent group (KDBX 4.1); empty if unset.
+  const std::optional<std::array<uint8_t, 16>>& previous_parent_group() const {
+    return previous_parent_group_;
+  }
 
-  /// Sets the UUID of the previous parent group (KDBX 4.1); all-zero to unset.
-  void set_previous_parent_group(const std::array<uint8_t, 16>& uuid) {
+  /// Sets the UUID of the previous parent group (KDBX 4.1); pass @c std::nullopt
+  /// to unset.
+  void set_previous_parent_group(
+      const std::optional<std::array<uint8_t, 16>>& uuid) {
     previous_parent_group_ = uuid;
   }
 
