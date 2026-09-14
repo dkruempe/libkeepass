@@ -383,6 +383,13 @@ public:
   const std::vector<std::shared_ptr<Attachment>>& attachments() const { return attachments_; }
 
   /// Returns the list of historical (previous) versions of this entry.
+  /// Returns the entry history (previous versions saved by `save_history`).
+  /**
+   * The history is fully preserved during import/export but deliberately
+   * hidden from the `kpx` CLI print output (text/JSON/CSV) and the audit
+   * command.  This keeps the day-to-day view clean; consumers who need
+   * history can call this API directly.
+   */
   const std::vector<std::shared_ptr<Entry>>& history() const { return history_; }
 
   /// Returns the list of custom fields.
