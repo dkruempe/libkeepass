@@ -119,7 +119,7 @@ bool RequiresKdbx41(const Database& db) {
 
   if (db.meta()) {
     for (const auto& icon : db.meta()->icons()) {
-      if (!icon->name().empty() || icon->last_modification_time() != 0)
+      if (!icon->name().empty() || icon->last_modification_time().has_value())
         return true;
     }
 

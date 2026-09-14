@@ -353,8 +353,9 @@ std::shared_ptr<Metadata> KdbxXml::ParseMeta(const pugi::xml_node& meta_node,
 
       std::shared_ptr<Icon> icon = std::make_shared<Icon>(uuid, data);
       icon->set_name(icon_node.child_value("Name"));
-      icon->set_last_modification_time(
-          ParseDateTime(icon_node.child_value("LastModificationTime")));
+      if (icon_node.child("LastModificationTime"))
+        icon->set_last_modification_time(
+            ParseDateTime(icon_node.child_value("LastModificationTime")));
       meta->AddIcon(icon);
 
       icon_pool_.insert(std::make_pair(icon_node.child_value("UUID"), icon));
@@ -416,8 +417,9 @@ std::shared_ptr<Metadata> KdbxXml::ParseMeta(const pugi::xml_node& meta_node,
       }
 
       Metadata::Field field(key, value);
-      field.set_last_modification_time(
-          ParseDateTime(item_node.child_value("LastModificationTime")));
+      if (item_node.child("LastModificationTime"))
+        field.set_last_modification_time(
+            ParseDateTime(item_node.child_value("LastModificationTime")));
       meta->AddField(field);
     }
   }
@@ -518,10 +520,10 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     if (kdbx41_) {
       if (!icon->name().empty())
         icon_node.append_child("Name").text().set(icon->name().c_str());
-      if (icon->last_modification_time() != 0)
+      if (icon->last_modification_time().has_value())
         icon_node.append_child("LastModificationTime")
             .text()
-            .set(WriteDateTime(icon->last_modification_time()).c_str());
+            .set(WriteDateTime(icon->last_modification_time().value()).c_str());
     }
   }
 
@@ -579,10 +581,10 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     item_node.append_child("Key").text().set(field.key().c_str());
     item_node.append_child("Value").text().set(field.value().c_str());
 
-    if (kdbx41_ && field.last_modification_time() != 0)
+    if (kdbx41_ && field.last_modification_time().has_value())
       item_node.append_child("LastModificationTime")
           .text()
-          .set(WriteDateTime(field.last_modification_time()).c_str());
+          .set(WriteDateTime(field.last_modification_time().value()).c_str());
   }
 }
 
