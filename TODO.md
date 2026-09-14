@@ -46,24 +46,7 @@ entfernt.
 
 ## P1 - Sicherheit & Architektur (v0.4.x)
 
-### 1. `Database`-Seeds auf sichere Container umstellen
-
-**Kategorie:** Sicherheit
-**Aufwand:** M-L
-**Ziel-Version:** v0.4.x
-
-Bewusst zurückgestellter Restposten aus der RAM-Wiping-Aktion (v0.3.0):
-`master_seed_`/`argon2_salt_` (beide `std::vector<uint8_t>`) und
-`transform_seed_` (`std::array<uint8_t,32>`) liegen weiter auf ungeschütztem
-Speicher (`TestData`-seitig auch auf der wipbaren Fläche). Kandidaten für
-KDF-Salts/Seeds, Wiping nach Release wünschenswert.
-
-- [ ] Seeds in `protect<SecureBuffer>` o.ä. überführen, Getter-Semantik klären
-      (vgl. `Database::set_master_seed` etc. in `src/include/libkeepass/database.hh`)
-- [ ] ABI-/API-Verträglichkeit der öffentlichen Setter/Getter beachten
-- [ ] Wipe-Verifikation in `test/secure.cc` ergänzen
-
-### 2. BLAKE2b-Argon2-KDF evaluieren
+### 1. BLAKE2b-Argon2-KDF evaluieren
 
 **Kategorie:** Feat / Sicherheit
 **Aufwand:** M (nach Evaluation)
@@ -82,7 +65,7 @@ Verfügbarkeit/Bedeutung erst gegen KeePass 2.6x empirisch verifizieren
 
 ## P1 - Format- & Feature-Ausbau (v0.4.x)
 
-### 3. Kompatibilität mit KeePassXC / Strongbox verifizieren
+### 2. Kompatibilität mit KeePassXC / Strongbox verifizieren
 
 **Kategorie:** Feat
 **Aufwand:** M
@@ -95,7 +78,7 @@ Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
 - [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
 - [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
 
-### 4. `kpx`: Passwort-Audit
+### 3. `kpx`: Passwort-Audit
 
 **Kategorie:** Erreichbarkeit / Nutzbarkeit
 **Aufwand:** S-M
@@ -110,7 +93,7 @@ Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
 ## P2 - Erreichbarkeit / Ökosystem
 
-### 5. Hardware-Token / YubiKey (Evaluation, langfristig)
+### 4. Hardware-Token / YubiKey (Evaluation, langfristig)
 
 **Kategorie:** Feat
 **Aufwand:** XL
@@ -128,7 +111,7 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 ## Entscheidungen / Offene Punkte
 
 - [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #3)
+      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #2)
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
