@@ -855,8 +855,18 @@ void KdbxXml::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscato
 
 std::shared_ptr<Group> KdbxXml::ParseGroup(const pugi::xml_node& group_node,
                                            RandomObfuscator& obfuscator) {
-  std::shared_ptr<Group> group = std::make_shared<Group>();
-  group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
+  // Metadata-referenced groups (RecycleBinUUID, EntryTemplatesGroup) may have
+  // been created as placeholders by GetGroup before the tree is parsed. Reuse
+  // that instance so the metadata link stays valid; otherwise the parsed tree
+  // group would differ from the group the metadata points to.
+  std::shared_ptr<Group> group;
+  auto pool_it = group_pool_.find(group_node.child_value("UUID"));
+  if (pool_it == group_pool_.end()) {
+    group = std::make_shared<Group>();
+    group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
+  } else {
+    group = pool_it->second;
+  }
 
   std::array<uint8_t, 16> uuid = {0};
   base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
