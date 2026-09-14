@@ -74,8 +74,20 @@ Umgesetzt und abgeschlossen:
 
 Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
-- [ ] `--audit`: schwache (Länge/Zeichensatz) und wiederverwendete Passwörter erkennen
-- [ ] Ausgabe in Text/JSON/CSV (für CI-/Scripting-Nutzung)
+- [x] `--audit`: schwache (Länge/Zeichensatz) und wiederverwendete Passwörter erkennen
+- [x] Ausgabe in Text/JSON/CSV (für CI-/Scripting-Nutzung)
+
+Umgesetzt und abgeschlossen:
+
+- `RunAudit` klassifiziert Einträge als *empty*, *short (N)*, *single-character-class* /
+  *digits-only*, *based-on-title* / *based-on-username* (>=4 Zeichen),
+  *common-password* (eine Ausschlussliste der häufigsten Passwörter); Wieder-
+  verwendung wird als *reused (N entries)* gemeldet
+- Formate: Text, JSON, CSV; CLI `--group` begrenzt den Geltungsbereich auf den
+  Untergeordneten Baum; `--with-passwords` zeigt Passwörter im Abschnitt
+  *Reused passwords* (Text) und im JSON-Array der Wiederverwendung
+- Tests decken alle Ausgabeformate, den Gruppenbereich, ohne-Fund und JSON
+  mit/ohne Passwörter ab
 
 ---
 

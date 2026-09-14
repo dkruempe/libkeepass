@@ -198,6 +198,11 @@ kpx -p password rm --title "Obsolete" database.kdbx
 # Export to a new KeePass file (.kdb / .kdbx)
 kpx -p password -e output.kdbx database.kdb
 
+# Audit the password quality and reuse of all entries (or of one subtree)
+kpx -p password --audit database.kdbx
+kpx -p password --audit --group Internet database.kdbx
+kpx -p password --audit -f json --with-passwords database.kdbx
+
 # Passwords can also come from an environment variable or an interactive prompt
 KEEPASS_PASSWORD=secret kpx database.kdbx
 ```

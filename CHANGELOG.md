@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   group layout. The verification matrix and the Strongbox analysis (16-byte
   Argon2 salts, Argon2 `K`/`A` parameters, keyfile variants) are documented in
   `docs/interop.md` together with the import tolerance policy.
+- The `kpx --audit` command reports weak and reused passwords. It prints text
+  by default and supports `-f json`/`-f csv`, a `--group` subtree scope and a
+  `--with-passwords` flag to include the literal password in the JSON reuse
+  section and the text output. Findings cover empty passwords, passwords below
+  the 12-character minimum, a single character class (digits- or letters-only),
+  passwords based on the title or username and entries of a common-passwords
+  list; reuse groups every occurrence of a password used by several entries.
 
 ### Fixed
 
