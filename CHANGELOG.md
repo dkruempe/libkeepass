@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `target_compile_features(... cxx_std_17)`, and the Conan recipes
   (`conanfile.py`, ConanCenter recipe) check the minimum standard in
   `validate()`.
+- **Breaking:** `Icon::last_modification_time` and
+  `Metadata::Field::last_modification_time` now return
+  `std::optional<std::time_t>` instead of `std::time_t`; absent
+  `<LastModificationTime>` elements map to `std::nullopt` instead of 0, and
+  `set_last_modification_time(std::nullopt)` unsets the value.
+- **Breaking:** `Entry::previous_parent_group` and
+  `Group::previous_parent_group` now return
+  `std::optional<std::array<uint8_t, 16>>` instead of an all-zero array; use
+  `has_value()` to test for presence.
+- The `base64_decode` helpers now take `std::string_view`, avoiding temporary
+  `std::string` allocations when decoding pugixml node text and attribute
+  values; `KdbxXml::ParseDateTime` no longer copies its input.
 
 ### Infrastructure
 

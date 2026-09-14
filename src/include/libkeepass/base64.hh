@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <locale>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "exception.hh"
@@ -85,7 +86,7 @@ std::string base64_encode(InputIterator first, InputIterator last) {
  * @throws FormatError if the input is not valid base64.
  */
 template <typename OutputIterator, typename Type>
-void base64_decode(const std::string& src, OutputIterator result) {
+void base64_decode(std::string_view src, OutputIterator result) {
   static const std::string kBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                      "abcdefghijklmnopqrstuvwxyz"
                                      "0123456789+/";
@@ -140,7 +141,7 @@ inline std::string base64_encode(const std::string& src) {
 }
 
 /// Convenience overload that decodes a base64 string into a @c std::string.
-inline std::string base64_decode(const std::string& src) {
+inline std::string base64_decode(std::string_view src) {
   std::string dst;
   base64_decode<std::back_insert_iterator<std::string>, char>(src, std::back_inserter(dst));
   return dst;

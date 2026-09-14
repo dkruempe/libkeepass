@@ -23,6 +23,7 @@
 #include <cassert>
 #include <ctime>
 #include <sstream>
+#include <string_view>
 #ifdef DEBUG
 #include <iostream>
 #endif
@@ -188,7 +189,7 @@ int64_t KdbxXml::NeverSeconds() {
 }
 
 std::time_t KdbxXml::ParseDateTime(const char* text) const {
-  std::string str(text);
+  std::string_view str(text);
 
   // Check for the special KeePass 1x "never" timestamp.
   if (str == "2999-12-28T22:59:59Z")
