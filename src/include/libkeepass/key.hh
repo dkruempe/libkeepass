@@ -135,7 +135,7 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  SecureBuffer<32> Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
+  SecureBuffer<32> Transform(const SecureBuffer<32>& seed, uint64_t rounds,
                              SubKeyResolution resolution) const;
 
   /// Derives the composite key using Argon2 for KDBX 4 databases.
@@ -149,7 +149,7 @@ public:
    * @param resolution Strategy for resolving sub keys before transformation.
    * @return The derived 32-byte composite key.
    */
-  SecureBuffer<32> TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt, uint64_t iterations,
+  SecureBuffer<32> TransformArgon2(Kdf kdf, const SecureBytes& salt, uint64_t iterations,
                                    uint64_t memory_bytes, uint32_t parallelism,
                                    uint32_t argon2_version, SubKeyResolution resolution) const;
 };

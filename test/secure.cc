@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 #include "libkeepass/binary.hh"
+#include "libkeepass/database.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/secure.hh"
 #include "libkeepass/security.hh"
@@ -194,6 +195,125 @@ TEST(SecureStringTest, MoveWipesSource) {
   secure_string b(std::move(a));
   EXPECT_EQ(b, "sensitive-value");
   EXPECT_TRUE(a.empty()); // NOLINT(bugprone-use-after-move)
+}
+
+TEST(SecureBytesTest, DefaultConstruction) {
+  SecureBytes bytes;
+  EXPECT_TRUE(bytes.empty());
+  EXPECT_EQ(bytes.size(), 0U);
+  EXPECT_EQ(bytes.begin(), bytes.end());
+}
+
+TEST(SecureBytesTest, ConstructionFromVector) {
+  const std::vector<uint8_t> source = {0x01, 0x02, 0x03, 0x04};
+  SecureBytes bytes(source);
+  EXPECT_EQ(bytes.size(), source.size());
+  EXPECT_EQ(std::vector<uint8_t>(bytes.begin(), bytes.end()), source);
+}
+
+TEST(SecureBytesTest, ConstructionFromRange) {
+  const uint8_t raw[] = {0xde, 0xad, 0xbe, 0xef, 0x01};
+  SecureBytes bytes(raw, sizeof(raw));
+  EXPECT_EQ(bytes.size(), sizeof(raw));
+  EXPECT_TRUE(std::equal(raw, raw + sizeof(raw), bytes.begin()));
+}
+
+TEST(SecureBytesTest, MoveConstructionWipesSource) {
+  SecureBytes a(std::vector<uint8_t>({0x7f, 0x7e}));
+  SecureBytes b(std::move(a));
+  EXPECT_EQ(b.size(), 2U);
+  EXPECT_EQ(b[0], 0x7fU);
+  EXPECT_TRUE(a.empty()); // NOLINT(bugprone-use-after-move)
+}
+
+TEST(SecureBytesTest, MoveAssignmentWipesPreviousAndSource) {
+  SecureBytes a(std::vector<uint8_t>({0x5a}));
+  SecureBytes b(std::vector<uint8_t>({0xff, 0xcc}));
+  b = std::move(a);
+  EXPECT_EQ(b.size(), 1U);
+  EXPECT_EQ(b[0], 0x5aU);
+  EXPECT_TRUE(a.empty()); // NOLINT(bugprone-use-after-move)
+}
+
+TEST(SecureBytesTest, AssignReplacesContent) {
+  SecureBytes bytes(std::vector<uint8_t>({0x01, 0x02}));
+  EXPECT_EQ(bytes.size(), 2U);
+  const uint8_t* old_storage = bytes.data();
+
+  bytes.Assign(std::vector<uint8_t>({0x03, 0x04, 0x05}));
+  EXPECT_EQ(bytes.size(), 3U);
+  EXPECT_NE(bytes.data(), old_storage);
+  EXPECT_EQ(std::vector<uint8_t>(bytes.begin(), bytes.end()),
+            (std::vector<uint8_t>{0x03, 0x04, 0x05}));
+}
+
+TEST(SecureBytesTest, ClearWipesContent) {
+  SecureBytes bytes(std::vector<uint8_t>({0x01, 0x02, 0x03}));
+  bytes.Clear();
+  EXPECT_TRUE(bytes.empty());
+  EXPECT_EQ(bytes.size(), 0U);
+}
+
+TEST(SecureBytesTest, CloneDeepCopy) {
+  SecureBytes a(std::vector<uint8_t>({0x11, 0x22, 0x33}));
+  SecureBytes b = a.Clone();
+  EXPECT_EQ(b, a);
+  b[0] = 0x00;
+  EXPECT_NE(b, a);
+  EXPECT_EQ(a[0], 0x11U);
+}
+
+TEST(SecureBytesTest, VectorAssignment) {
+  SecureBytes bytes;
+  bytes = std::vector<uint8_t>({0x42});
+  EXPECT_EQ(bytes.size(), 1U);
+  EXPECT_EQ(bytes[0], 0x42U);
+}
+
+TEST(SecureBytesTest, Equality) {
+  SecureBytes a(std::vector<uint8_t>({0x01, 0x02}));
+  SecureBytes b(std::vector<uint8_t>({0x01, 0x02}));
+  SecureBytes c(std::vector<uint8_t>({0x01, 0x03}));
+  SecureBytes d(std::vector<uint8_t>({0x01}));
+  SecureBytes empty1;
+  SecureBytes empty2;
+  EXPECT_EQ(a, b);
+  EXPECT_NE(a, c);
+  EXPECT_NE(a, d);
+  EXPECT_EQ(empty1, empty2);
+}
+
+TEST(DatabaseSeedsTest, StoredAndReplacedSecurely) {
+  Database db;
+
+  const std::array<uint8_t, 16> master_seed = {{0x11, 0x22, 0x33}};
+  const std::array<uint8_t, 32> transform_seed = {{0x44, 0x55}};
+  const std::vector<uint8_t> argon2_salt = {0x66, 0x77, 0x88};
+
+  db.set_master_seed(master_seed);
+  db.set_transform_seed(transform_seed);
+  db.set_argon2_salt(argon2_salt);
+
+  EXPECT_EQ(db.master_seed().size(), 16U);
+  EXPECT_TRUE(std::equal(db.master_seed().begin(), db.master_seed().end(), master_seed.begin()));
+  EXPECT_EQ(db.transform_seed().size(), 32U);
+  EXPECT_TRUE(
+      std::equal(db.transform_seed().begin(), db.transform_seed().end(), transform_seed.begin()));
+  EXPECT_EQ(std::vector<uint8_t>(db.argon2_salt().begin(), db.argon2_salt().end()), argon2_salt);
+
+  // Replacing a seed must not alias the previous buffer: the fresh SecureBytes
+  // allocation replaces the old wiped one.
+  const std::vector<uint8_t> new_salt = {0xa1, 0xb2};
+  const uint8_t* old_salt_storage = db.argon2_salt().data();
+  db.set_argon2_salt(new_salt);
+  EXPECT_NE(db.argon2_salt().data(), old_salt_storage);
+  EXPECT_EQ(std::vector<uint8_t>(db.argon2_salt().begin(), db.argon2_salt().end()), new_salt);
+
+  // Moving in a secure buffer takes over its storage without copying.
+  SecureBytes moved_master(std::vector<uint8_t>({0x01, 0x02}));
+  db.set_master_seed(std::move(moved_master));
+  EXPECT_TRUE(moved_master.empty()); // NOLINT(bugprone-use-after-move)
+  EXPECT_EQ(db.master_seed().size(), 2U);
 }
 
 TEST(SecureStringTest, ClearWipesContent) {

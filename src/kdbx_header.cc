@@ -349,10 +349,13 @@ std::string KdbxHeader::Write3(const Database& db,
   conserve<KdbxHeaderField>(header_stream,
                             KdbxHeaderField(KdbxHeaderField::kMasterSeed,
                                             static_cast<uint16_t>(db.master_seed().size())));
-  conserve<std::vector<uint8_t>>(header_stream, db.master_seed());
+  if (!db.master_seed().empty())
+    header_stream.write(reinterpret_cast<const char*>(db.master_seed().data()),
+                        static_cast<std::streamsize>(db.master_seed().size()));
 
   conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kTransformSeed, 32));
-  conserve<std::array<uint8_t, 32>>(header_stream, db.transform_seed());
+  header_stream.write(reinterpret_cast<const char*>(db.transform_seed().data()),
+                      static_cast<std::streamsize>(db.transform_seed().size()));
 
   conserve<KdbxHeaderField>(header_stream, KdbxHeaderField(KdbxHeaderField::kTransformRounds, 8));
   conserve<uint64_t>(header_stream, db.transform_rounds());
@@ -415,7 +418,9 @@ std::string KdbxHeader::Write4(const Database& db, bool kdbx41) {
   conserve<Kdbx4HeaderField>(header_stream,
                              Kdbx4HeaderField(Kdbx4HeaderField::kMasterSeed,
                                               static_cast<uint32_t>(db.master_seed().size())));
-  conserve<std::vector<uint8_t>>(header_stream, db.master_seed());
+  if (!db.master_seed().empty())
+    header_stream.write(reinterpret_cast<const char*>(db.master_seed().data()),
+                        static_cast<std::streamsize>(db.master_seed().size()));
 
   // Serialize the KDF variant dictionary.
   std::stringstream kdf_stream;

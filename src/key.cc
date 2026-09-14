@@ -166,7 +166,7 @@ void Key::SetKeyFile(const std::string& path) {
   secure_zero(data.data(), data.size());
 }
 
-SecureBuffer<32> Key::Transform(const std::array<uint8_t, 32>& seed, uint64_t rounds,
+SecureBuffer<32> Key::Transform(const SecureBuffer<32>& seed, uint64_t rounds,
                                 SubKeyResolution resolution) const {
   if (has_transformed_key_)
     return transformed_key_.Clone();
@@ -213,10 +213,9 @@ SecureBuffer<32> Key::Transform(const std::array<uint8_t, 32>& seed, uint64_t ro
   return transformed_key;
 }
 
-SecureBuffer<32> Key::TransformArgon2(Kdf kdf, const std::vector<uint8_t>& salt,
-                                      uint64_t iterations, uint64_t memory_bytes,
-                                      uint32_t parallelism, uint32_t argon2_version,
-                                      SubKeyResolution resolution) const {
+SecureBuffer<32> Key::TransformArgon2(Kdf kdf, const SecureBytes& salt, uint64_t iterations,
+                                      uint64_t memory_bytes, uint32_t parallelism,
+                                      uint32_t argon2_version, SubKeyResolution resolution) const {
   if (has_transformed_key_)
     return transformed_key_.Clone();
 

@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The `base64_decode` helpers now take `std::string_view`, avoiding temporary
   `std::string` allocations when decoding pugixml node text and attribute
   values; `KdbxXml::ParseDateTime` no longer copies its input.
+- **Breaking:** the database seeds are no longer kept on unprotected heap
+  memory. `Database::master_seed` and `Database::argon2_salt` now return
+  `const SecureBytes&`, and `Database::transform_seed` returns
+  `const SecureBuffer<32>&`; all three are erased when the database is
+  destroyed or the seed is replaced. `Key::Transform`
+  (`const SecureBuffer<32>&`) and `Key::TransformArgon2`
+  (`const SecureBytes&`) accept the secure containers directly, and
+  `SecureBytes` (a new wiped, best-effort locked dynamic byte buffer) is
+  exposed for callers that need to hold seed material.
+  A new `SecureBuffer` constructor accepts a
+  `std::array<uint8_t, N>` for callers converting existing header data.
 
 ### Infrastructure
 
