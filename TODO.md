@@ -1,8 +1,33 @@
 # libkeepass - Roadmap
 
-> Priorisierte Liste (P0 höchste zuerst) für die weitere Entwicklung. Die
-> erledigten Aufgaben aus der initialen TODO-Liste (Doku, CI, Versionierung,
-> Packaging, Doxygen, CodeQL, ...) sind abgeschlossen und wurden entfernt.
+> Priorisierte Liste (P0 höchste zuerst) für die weitere Entwicklung. Die alte
+> Roadmap (Sicherheits-Fundament, KDBX 4.1, kpx-CLI, Architektur, Templates) ist
+> vollständig umgesetzt, wurde hier entfernt und nachfolgend zusammengefasst.
+
+---
+
+## Stand v0.3.0
+
+Abgeschlossene Grundlage (Details siehe `CHANGELOG.md`):
+
+- **Sicherheit:** HMAC-/Header-Integrität beim Import verifiziert
+  (Encrypt-then-MAC), Binary-/Attachment-Payloads und transiente
+  Schlüssel/Klartexte gewipt, libFuzzer-Targets + Robustheits-/Negative-Tests,
+  Cap-Limits gegen OOM/CPU-Burn
+- **Format:** KDB, KDBX 3, KDBX 4.0 und KDBX 4.1 read/write; 4.1 gegen
+  KeePass-2.57-Fixtures verifiziert, Version nur bei Bedarf geschrieben
+- **CLI (`kpx`):** Text/JSON/CSV, Export, Keyfiles, `--search`/`--group`,
+  `--generate`, `add`/`update`/`rm`, dokumentierte Exit-Codes
+- **Architektur:** `KdbxFile` in `KdbxHeader`/`KdbxKdf`/`KdbxXml` zerlegt,
+  gestreamte KDBX-4-Entschlüsselung, Load-Benchmark in der CI
+- **Ökosystem:** CI auf Linux/macOS/Windows, CodeQL, Doxygen/GitHub Pages,
+  Issue-/PR-Templates; ConanCenter-Rezept auf CCI-v2-Konventionen gehoben und
+  als PR eingereicht
+  ([conan-io/conan-center-index#30962](https://github.com/conan-io/conan-center-index/pull/30962)),
+  `conanfile.py`/`test_package` lokal via `conan create` verifiziert
+
+Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
+Ökosystem-Integration** (v0.4.0) sowie gezielte Formatausbauten.
 
 ---
 
@@ -16,234 +41,122 @@
 
 ---
 
-## P0 - Sicherheit von Grund auf
+## P0 - Release-Reife (v0.4.0)
 
-Ein solides, verifizierendes und speicher-schonendes Fundament als
-Voraussetzung für alle nachgelagerten Features.
-
-### 1. HMAC-/Header-Integrität beim Import verifizieren
-
-**Kategorie:** Sicherheit
-**Aufwand:** S (Rest), Großteil erledigt
-**Ziel-Version:** v0.3.0
-
-**Status: implementiert.** Beim Import wird verifiziert, bevor entschlüsselt/
-geparst wird (Encrypt-then-MAC):
-
-- [x] Block-Checksummen KDBX 3 (`hashed_istreambuf`, `src/stream.cc`)
-- [x] Block-HMACs KDBX 4 (`hmac_istreambuf`, `src/stream.cc`) - wirft bei Manipulation
-- [x] Header-Hash KDBX 3 (`KdbxFile::Import3`, `src/kdbx.cc`)
-- [x] Header-Hash + Header-HMAC KDBX 4 (`KdbxFile::Import4`, `src/kdbx.cc`)
-
-Korruptions-Testfälle: in `test/robustness.cc` abgedeckt (siehe #3).
-
-### 2. Binary-/Attachment-Payloads vollständig wipen
-
-**Kategorie:** Sicherheit
-**Aufwand:** S (Rest), Großteil erledigt
-**Ziel-Version:** v0.3.0
-
-**Status: implementiert.** `Binary` speichert seine Payloads bereits in
-`protect<secure_string>` (`src/include/libkeepass/binary.hh`), also in
-gewipter, best-effort gelockter Memory. Transiente Schlüssel/HMAC-Keys werden
-nach letzter Nutzung gezeroist.
-
-Verbleibende Prüfung:
-
-- [x] Transiente Puffer im Import-/Export-Pfad auditieren (insb. `kdbx.cc`/`stream.cc`);
-      Review abgeschlossen, Fixes ausgerollt: Inner-random-stream-Key KDBX-4-Import
-      (exception-sicher) + Export (gewipt), entschlüsselter Klartext-Stream in
-      `kdb.cc` Import/Export gewipt
-- [x] Restliche Audit-Funde schließen: KDB-Entry-Felder (`consume<std::string>`,
-      `.str()`-Kopien), Binary-/Base64-Temporaries in `kdbx.cc`/`kdb.cc` gewipt
-      (KDBX-3-Meta-/Entry-Binaries Import+Export, KDB-Passwort/Attachment Import+Export,
-      KDBX-4-Binaries bereits behandelt); `Database`-Seeds
-      (`master_seed_`/`argon2_salt_`/`transform_seed_`) auf sichere Container noch offen
-      (größerer Umbau, bewusst zurückgestellt)
-- [x] `test/secure.cc`/KDBX-Tests um Attachment-Roundtrip inkl. Wipe-Verifikation
-      erweitern (Binary-/Attachment-Suites in `test/secure.cc`, KDBX-3-Roundtrip in
-      `test/kdbx.cc`; KDBX-4-Roundtrips bereits vorhanden)
-
-### 3. Fuzzing + negative Test-Fixtures
-
-**Kategorie:** Sicherheit
-**Aufwand:** M-L
-**Ziel-Version:** kontinuierlich
-
-Für eine Parsing-Bibliothek ist dynamische Eingabe-Absicherung wichtig
-(CodeQL deckt nur statisch ab):
-
-**Status: Kern erledigt** (Commits `359e15b`, Format-/Tidy-Fixes):
-
-- [x] `libFuzzer`-Targets für Import (`fuzz/fuzz_kdbx.cc`, `fuzz/fuzz_kdb.cc`)
-- [x] CI-Workflow `.github/workflows/fuzz.yml` (zwei Jobs, Seeds aus `test/data/`, 60s Laufzeit)
-- [x] Negative/"corrupted"-Tests in `test/robustness.cc` (oversized Header/Variant-Dict,
-      AES-KDF-/Argon2-Caps, truncated Ciphertext; KDB/KDBX3/KDBX4)
-- [x] Cap-Limits gegen CPU-Burn-/OOM-DoS (Header-Feld 1 MiB, Variant-Dict 16 MiB,
-      Transform-Rounds 2^28, Argon2 1 GiB / 2^20 Iterationen), siehe
-      `src/include/libkeepass/database.hh` + `src/variantdictionary.cc`
-- [x] Memory-Leak-Fix im KDBX-4-Import (Ciphertext-Puffer), `src/kdbx.cc`
-- [x] Block-größen-Bound in HMAC-/Hashed-Streams gegen OOM, `src/stream.cc`
-- [x] OSS-Fuzz-Integration evaluiert: Prüfung ergeben, aber Integration bewusst
-      zurückgestellt (erfordert hermetischen Non-Conan-Build und OSS-Fuzz-PR)
-
----
-
-## P1 - KDBX 4.1-Support (Format-Core)
-
-### 4. KDBX 4.1 lesen und schreiben
-
-**Kategorie:** Feat / Erreichbarkeit
-**Aufwand:** M (L mit allen Feinschliffen)
-**Ziel-Version:** v0.3.0
-
-KeePass 2.48+ speichert bei bestimmten Features im Format 4.1 (`0x00040001`).
-KDBX 4.1 ändert gegenüber 4.0 **nur das XML-Body-Schema** - Container,
-Header, HMAC, Verschlüsselung und Inner-Stream (Salsa20/ChaCha20) sind
-identisch. Der in der früheren Planung angenommene SHA-256-Inner-Stream
-**existiert nicht** (verifiziert gegen KeePass 2.61.1:
-`CryptoRandomStream.cs` unterstützt nur ArcFourVariant=1, Salsa20=2,
-ChaCha20=3). Version `0x00040001` ist bereits importierbar; der Export
-schreibt die Version passend zu den enthaltenen Features (wie KeePass'
-`GetMinKdbxVersion`).
-
-- [x] Group-`<Tags>` serialisieren/parsen (`Group::tags`/`set_tags`)
-- [x] Entry-`<QualityCheck>` (DE) serialisieren/parsen (`Entry::quality_check`/`set_quality_check`)
-- [x] `<PreviousParentGroup>` für Entries und Groups
-- [x] `Name`/`LastModificationTime` für CustomIcons; Deletion-Tombstones (`<DeletedObjects>`)
-- [x] `LastModificationTime` für CustomData-Items
-- [x] Version `0x00040001` schreiben, wenn 4.1-Features vorhanden sind
-- [x] Roundtrip-Tests für alle 4.1-Features (inkl. Version-Verifikation)
-- [x] Test-Vektoren gegen echte KeePass-2.48+-Dateien: Fixtures von KeePass 2.57
-      (`test/data/kdbx4/kdbx41/`, Generator `tools/kdbx41_fixturegen/`) mit neuen
-      Import-Tests in `test/kdbx4.cc`. Dabei empirisch verifiziert gegen KeePass:
-      `PreviousParentGroup` erzwingt **kein** 4.1 (File bleibt 4.0, Element wird
-      verworfen), jedes `<CustomData>`-Item erzwingt 4.1, Entry-Tags erzwingen
-      kein 4.1; Tags sind im XML `;`-getrennt (API bleibt space-getrennt,
-      Konvertierung an der XML-Grenze). `RequiresKdbx41`/`GroupRequiresKdbx41`
-      entsprechend an KeePass' `GetMinKdbxVersion` angeglichen.
-
-Entscheidung zur Migrationsstrategie (getroffen): **Wie KeePass selbst wird
-4.1 nur geschrieben, wenn 4.1-Features tatsächlich genutzt werden**; ohne
-solche Features bleibt es bei `0x00040000`. Damit bleiben 4.0-Reader maximal
-kompatibel und es gibt keine automatische Migration des Formats.
-
----
-
-## P1 - CLI-Features (Erreichbarkeit)
-
-### 5. `kpx` um Such-, Generierungs- und Editier-Befehle erweitern
-
-**Kategorie:** Erreichbarkeit / Nutzbarkeit
-**Aufwand:** M
-**Ziel-Version:** v0.3.0
-
-Das CLI ist bereits solide (Text/JSON/CSV, Export, Keyfile). Erweiterungen
-mit viel Alltagsnutzen für Scripting- und CLI-Workflows:
-
-- [x] Suche/Filtern: `--search <query>`, `--group <name>`
-- [x] Passwort-Generator: `--generate [länge]`
-- [x] Einträge anlegen/ändern/löschen: `add`, `update`, `rm`
-- [x] Exit-Codes und strukturierte Fehlermeldungen für Scripting dokumentieren/prüfen
-- [x] Tests in `test/kpx.cc` für die neuen Optionen ergänzen
-
----
-
-## P2 - Architektur
-
-### 6. `KdbxFile` in verantwortliche Module zerlegen
+### 1. C++-Standard-Politik festlegen und dokumentieren
 
 **Kategorie:** Architektur
-**Aufwand:** L
-**Ziel-Version:** v0.3.x (Vor-/Begleitmaßnahme zu #4)
+**Aufwand:** S-M
+**Ziel-Version:** v0.4.0
 
-`KdbxFile` ist eine monolithische Klasse (~28 private Methoden, Binary-/Icon-/
-Group-Pools, Import/Export3/4). Aufteilung in kleinere Verantwortlichkeiten
-verbessert Testbarkeit und Wartbarkeit und ist Voraussetzung für einen
-sauberen 4.1-Support:
+Offene Grundsatzfrage: aktuell C++11. Entscheidung treffen (11 belassen vs.
+14/17 für `std::optional`, bessere Stream-/String-Handling) und in
+`CONTRIBUTING.md`/`docs/` dokumentieren.
 
-- [x] Header-Parser ausgliedern (KDBX 3 vs. 4)
-      (`src/include/libkeepass/kdbx_header.hh` + `src/kdbx_header.cc`, statische
-      `KdbxHeader`-Klasse: `ReadVersion`/`IsKdbx4`/`Parse3`/`Parse4`/`Write3`/`Write4`),
-      `kdbx.cc` refaktoriert auf das Modul
-- [x] KDF-Dispatcher (AES-KDF, Argon2d/id, später BLAKE2b-Argon2)
-- [x] XML-Serializer (Meta/Gruppen/Einträge/geschützte Strings) isolieren
-- [x] Öffentliche Fläche (`libkeepass/*.hh`) stabil halten (ABI-kompatibel erweitern;
-      `kdbx.hh` unverändert, Header-Modul nur additiv)
+- [ ] Pro/Contra bewerten (ABI-/Compiler-Basis, Conan 2-Keinstellung, STL-Unterbau)
+- [ ] Entscheidung dokumentieren; bei Wechsel: Migration planen und im Changelog als Breaking kennzeichnen
 
-### 7. Streaming statt Voll-Import + Benchmark
+### 2. Doku & Changelog für v0.3.0 abschließen
 
-**Kategorie:** Performance / Architektur
-**Aufwand:** M-L
-**Ziel-Version:** v0.3.x
+**Kategorie:** Erreichbarkeit
+**Aufwand:** S
+**Ziel-Version:** v0.4.0
 
-`Open(std::istream)` lädt potenziell alles in den Speicher (XML via pugixml
-in-memory). Für große Datenbanken und Netzwerk-/in-memory-I/O:
-
-- [x] Strom-basiertes Parsen evaluieren (pugixml ohne komplettes DOM)
-      → Entscheidung dokumentiert in `docs/streaming.md`: pugixml bleibt DOM
-      (kein SAX), gestreamt wird die Krypto-Schicht
-- [x] HMAC-Blöcke nicht komplett puffern
-      (`decrypt_cbc_stream` in `src/cipher.cc`, Chunked-ChaCha20 in `Import4`,
-      `src/kdbx.cc`; Fehlersemantik erhalten, Truncation-Tests grün)
-- [x] Reproduzierbarer Benchmark (`test/benchmark.cc`) als Referenz und Anti-Regression
-- [x] Einen Load-Benchmark in CI-Schritt (wird nicht hart bewertet)
-      (`.github/workflows/cmake.yml`, `continue-on-error: true`)
+- [x] `docs/kdbx-parsing.md` an die modulare Architektur angepasst
+      (Branch `docs/kdbx-parsing`, Mergen nach Review)
+- [ ] Changelog-Einträge je Roadmap-Item prüfen (Keep a Changelog + SemVer),
+      v0.3.0-Releasenotes aus `[Unreleased]` ziehen und v0.3.0 taggen
 
 ---
 
-## P3 - Erreichbarkeit / Ökosystem
+## P1 - Sicherheit & Architektur (v0.4.x)
 
-### 8. ConanCenter-Veröffentlichung
+### 3. `Database`-Seeds auf sichere Container umstellen
 
-**Kategorie:** Erreichbarkeit
+**Kategorie:** Sicherheit
+**Aufwand:** M-L
+**Ziel-Version:** v0.4.x
+
+Bewusst zurückgestellter Restposten aus der RAM-Wiping-Aktion (v0.3.0):
+`master_seed_`/`argon2_salt_` (beide `std::vector<uint8_t>`) und
+`transform_seed_` (`std::array<uint8_t,32>`) liegen weiter auf ungeschütztem
+Speicher (`TestData`-seitig auch auf der wipbaren Fläche). Kandidaten für
+KDF-Salts/Seeds, Wiping nach Release wünschenswert.
+
+- [ ] Seeds in `protect<SecureBuffer>` o.ä. überführen, Getter-Semantik klären
+      (vgl. `Database::set_master_seed` etc. in `src/include/libkeepass/database.hh`)
+- [ ] ABI-/API-Verträglichkeit der öffentlichen Setter/Getter beachten
+- [ ] Wipe-Verifikation in `test/secure.cc` ergänzen
+
+### 4. BLAKE2b-Argon2-KDF evaluieren
+
+**Kategorie:** Feat / Sicherheit
+**Aufwand:** M (nach Evaluation)
+**Ziel-Version:** v0.4.x
+
+Im KDF-Dispatcher (`KdbxKdf`, `src/include/libkeepass/kdbx_kdf.hh`) für "später"
+vorgemerkt. KeePass-Quellcode interpretert BLAKE2 in der Referenzumsatz;
+Verfügbarkeit/Bedeutung erst gegen KeePass 2.6x empirisch verifizieren
+(wie bei CryptoRandomStream/`GetMinKdbxVersion`), bevor implementiert wird.
+
+- [ ] Referenzverhalten gegen KeePass prüfen (tatsächlich genutzte KDF-OIDs?)
+- [ ] Bei Bestätigung: Argon2-Variante mit BLAKE2b im Random-Obfuscator/Im- und Export testen
+- [ ] Fixtures + Roundtrip-Tests in `test/kdbx4.cc`
+
+---
+
+## P1 - Format- & Feature-Ausbau (v0.4.x)
+
+### 5. Kompatibilität mit KeePassXC / Strongbox verifizieren
+
+**Kategorie:** Feat
 **Aufwand:** M
-**Ziel-Version:** v0.3.0
+**Ziel-Version:** v0.4.x
 
-Das CCI-Rezept liegt vorbereitet in `conan-center-index/`; die Einreichung
-als PR an `conan-io/conan-center-index` erfolgte bereits.
+Bisherige Format-Verifikation basiert auf KeePass-Referenzdaten. Für breite
+Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
 
-- [x] Rezept reviewen und auf den aktuellen Stand bringen (CCI-V2-Konventionen:
-      `test_package` statt `test_v1_package`, `implements = ["auto_shared_fpic"]`,
-      `check_min_cppstd` in `validate()`, SPDX-Lizenz `GPL-3.0-only`,
-      Version auf v0.3.0 aktualisiert; static + shared Builds lokal verifiziert)
-- [x] PR an `conan-io/conan-center-index` einreichen
-      ([#30962](https://github.com/conan-io/conan-center-index/pull/30962))
-- [x] `conanfile.py`/`test_package` im Repo mitführen (parallel zum CCI-Rezept;
-      `conan create` lokal verifiziert)
+- [ ] KeePassXC-Fixtures erzeugen (KDBX 4.1, Argon2-Parameter-Randfälle, Keyfiles, Recycle-Bin)
+- [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
+- [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
 
-### 9. GitHub Issue- und PR-Templates
+### 6. `kpx`: Passwort-Audit
 
-**Kategorie:** Erreichbarkeit
-**Aufwand:** S
-**Ziel-Version:** v0.3.0
+**Kategorie:** Erreichbarkeit / Nutzbarkeit
+**Aufwand:** S-M
+**Ziel-Version:** v0.4.x
 
-Strukturiertes Feedback von Nutzern und Contributors ermöglichen.
+Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
-- [x] Bug-Report-Template (`.github/ISSUE_TEMPLATE/bug_report.md`)
-- [x] Feature-Request-Template (`.github/ISSUE_TEMPLATE/feature_request.md`)
-- [x] PR-Template (`.github/PULL_REQUEST_TEMPLATE.md`)
-- [x] Issue-Templates in `CONTRIBUTING.md` erwähnen
+- [ ] `--audit`: schwache (Länge/Zeichensatz) und wiederverwendete Passwörter erkennen
+- [ ] Ausgabe in Text/JSON/CSV (für CI-/Scripting-Nutzung)
 
-### 10. Codecov-Account verbinden
+---
 
-**Kategorie:** Erreichbarkeit
-**Aufwand:** S
-**Ziel-Version:** v0.3.0
+## P2 - Erreichbarkeit / Ökosystem
 
-Coverage wird bereits via `lcov/gcov` in der CI erzeugt und hochgeladen.
+### 7. Hardware-Token / YubiKey (Evaluation, langfristig)
 
-- [x] Codecov-Account anlegen und Repository verbinden
-- [x] Badge-Status im README prüfen (Badge existiert in `README.md`, Codecov-Seite erreichbar)
+**Kategorie:** Feat
+**Aufwand:** XL
+**Ziel-Version:** offen
+
+KeePass unterstützt externe Key-Quellen (YubiKey/Challenge-Response). Für
+libkeepass als Library keine unmittelbare Priorität; als Grundsatzentscheidung
+dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
+
+- [ ] Kein zeitlicher Horizont; Architektur-Hook in `key.hh` bewusst offen lassen
+- [ ] Abhängigkeits- und Lizenzaufwand evaluieren (externer Dev-Lib), Entscheidung hier festhalten
 
 ---
 
 ## Entscheidungen / Offene Punkte
 
-- [x] KDBX 4.1-Migrationsstrategie (gelöst: 4.1 nur bei Bedarf schreiben, wie KeePass), siehe #4
-- [ ] C++-Standard-Politik dokumentieren (aktuell C++11; bleibt das, oder 14/17 für Streams/optional?)
-- [ ] Changelog-Einträge pro Roadmap-Item (Keep a Changelog + SemVer)
-- [x] Nach Umsetzung von #4: `CHANGELOG.md` und `docs/kdbx-parsing.md` aktualisieren
-      (KDBX-4.1-Einträge in `CHANGELOG.md` vorhanden; `docs/kdbx-parsing.md` auf die
-      modulare Architektur aus #6/#7 umgestellt: `KdbxHeader`/`KdbxKdf`/`KdbxXml`
-      statt monolithischem `kdbx.cc`, aktuelle Linienreferenzen)
+- [ ] C++-Standard-Politik (11 belassen vs. 14/17), siehe #1
+- [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
+      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #5)
+- [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
+      Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
+      taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
+- [ ] Entry-History: API (`save_history`/`delete_history`) vorhanden, CLI-/(.json?)-
+      Sichtbarkeit bewusst noch nicht erweitert
