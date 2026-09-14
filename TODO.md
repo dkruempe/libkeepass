@@ -44,28 +44,9 @@ entfernt.
 
 ---
 
-## P1 - Sicherheit & Architektur (v0.4.x)
-
-### 1. BLAKE2b-Argon2-KDF evaluieren
-
-**Kategorie:** Feat / Sicherheit
-**Aufwand:** M (nach Evaluation)
-**Ziel-Version:** v0.4.x
-
-Im KDF-Dispatcher (`KdbxKdf`, `src/include/libkeepass/kdbx_kdf.hh`) für "später"
-vorgemerkt. KeePass-Quellcode interpretert BLAKE2 in der Referenzumsatz;
-Verfügbarkeit/Bedeutung erst gegen KeePass 2.6x empirisch verifizieren
-(wie bei CryptoRandomStream/`GetMinKdbxVersion`), bevor implementiert wird.
-
-- [ ] Referenzverhalten gegen KeePass prüfen (tatsächlich genutzte KDF-OIDs?)
-- [ ] Bei Bestätigung: Argon2-Variante mit BLAKE2b im Random-Obfuscator/Im- und Export testen
-- [ ] Fixtures + Roundtrip-Tests in `test/kdbx4.cc`
-
----
-
 ## P1 - Format- & Feature-Ausbau (v0.4.x)
 
-### 2. Kompatibilität mit KeePassXC / Strongbox verifizieren
+### 1. Kompatibilität mit KeePassXC / Strongbox verifizieren
 
 **Kategorie:** Feat
 **Aufwand:** M
@@ -78,7 +59,7 @@ Einsetzbarkeit die beiden anderen großen Ökosysteme abprüfen.
 - [ ] Strongbox-/Mobile-Fixtures prüfen (abweichende Feld-Behandlung/Fehlerfälle)
 - [ ] Abweichungen dokumentieren und ggf. Toleranz-Politik (s. Entscheidungen) schärfen
 
-### 3. `kpx`: Passwort-Audit
+### 2. `kpx`: Passwort-Audit
 
 **Kategorie:** Erreichbarkeit / Nutzbarkeit
 **Aufwand:** S-M
@@ -93,7 +74,7 @@ Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
 
 ## P2 - Erreichbarkeit / Ökosystem
 
-### 4. Hardware-Token / YubiKey (Evaluation, langfristig)
+### 3. Hardware-Token / YubiKey (Evaluation, langfristig)
 
 **Kategorie:** Feat
 **Aufwand:** XL
@@ -111,7 +92,7 @@ dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
 ## Entscheidungen / Offene Punkte
 
 - [ ] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #2)
+      KDF-/Cipher-OIDs: Fehler vs. ignorieren (relevant für #1)
 - [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
       Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
       taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
