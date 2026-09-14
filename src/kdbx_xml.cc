@@ -521,10 +521,12 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     if (kdbx41_) {
       if (!icon->name().empty())
         icon_node.append_child("Name").text().set(icon->name().c_str());
-      if (icon->last_modification_time().has_value())
+      const auto& mod_time = icon->last_modification_time();
+      if (mod_time.has_value()) {
         icon_node.append_child("LastModificationTime")
             .text()
-            .set(WriteDateTime(icon->last_modification_time().value()).c_str());
+            .set(WriteDateTime(mod_time.value()).c_str());
+      }
     }
   }
 
@@ -582,10 +584,12 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     item_node.append_child("Key").text().set(field.key().c_str());
     item_node.append_child("Value").text().set(field.value().c_str());
 
-    if (kdbx41_ && field.last_modification_time().has_value())
+    const auto& mod_time = field.last_modification_time();
+    if (kdbx41_ && mod_time.has_value()) {
       item_node.append_child("LastModificationTime")
           .text()
-          .set(WriteDateTime(field.last_modification_time().value()).c_str());
+          .set(WriteDateTime(mod_time.value()).c_str());
+    }
   }
 }
 
@@ -747,12 +751,11 @@ void KdbxXml::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscato
   if (!entry->quality_check())
     entry_node.append_child("QualityCheck").text().set(false);
   entry_node.append_child("Tags").text().set(TagsToXml(entry->tags()).c_str());
-  if (kdbx41_ && entry->previous_parent_group().has_value() &&
-      !IsZeroUuid(entry->previous_parent_group().value())) {
-    const auto& prev = entry->previous_parent_group().value();
+  const auto& previous_parent_group = entry->previous_parent_group();
+  if (kdbx41_ && previous_parent_group.has_value() && !IsZeroUuid(previous_parent_group.value())) {
     entry_node.append_child("PreviousParentGroup")
         .text()
-        .set(base64_encode(prev.begin(), prev.end()).c_str());
+        .set(base64_encode(previous_parent_group->begin(), previous_parent_group->end()).c_str());
   }
 
   if (auto icon = entry->custom_icon().lock()) {
@@ -927,12 +930,11 @@ void KdbxXml::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscato
       base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
   group_node.append_child("Name").text().set(group->name().c_str());
   group_node.append_child("Notes").text().set(group->notes().c_str());
-  if (kdbx41_ && group->previous_parent_group().has_value() &&
-      !IsZeroUuid(group->previous_parent_group().value())) {
-    const auto& prev = group->previous_parent_group().value();
+  const auto& previous_parent_group = group->previous_parent_group();
+  if (kdbx41_ && previous_parent_group.has_value() && !IsZeroUuid(previous_parent_group.value())) {
     group_node.append_child("PreviousParentGroup")
         .text()
-        .set(base64_encode(prev.begin(), prev.end()).c_str());
+        .set(base64_encode(previous_parent_group->begin(), previous_parent_group->end()).c_str());
   }
   if (!group->tags().empty())
     group_node.append_child("Tags").text().set(TagsToXml(group->tags()).c_str());

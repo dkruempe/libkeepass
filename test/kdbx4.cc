@@ -465,7 +465,8 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   EXPECT_EQ(personal->name(), "Personal");
   EXPECT_EQ(personal->uuid(), PatternUuid({0x12}));
   EXPECT_TRUE(personal->previous_parent_group().has_value());
-  EXPECT_EQ(personal->previous_parent_group().value(), PatternUuid({0x99, 0x01}));
+  EXPECT_EQ(personal->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(PatternUuid({0x99, 0x01}))));
 
   ASSERT_EQ(finance->Entries().size(), 1U);
   std::shared_ptr<Entry> bank = finance->Entries()[0];
@@ -477,7 +478,8 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   EXPECT_EQ(bank->uuid(), PatternUuid({0x21}));
   EXPECT_FALSE(bank->quality_check());
   EXPECT_TRUE(bank->previous_parent_group().has_value());
-  EXPECT_EQ(bank->previous_parent_group().value(), PatternUuid({0x88, 0x02}));
+  EXPECT_EQ(bank->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(PatternUuid({0x88, 0x02}))));
   EXPECT_TRUE(bank->expires());
   EXPECT_EQ(bank->creation_time(), 1700000100);
   std::shared_ptr<Icon> bank_icon = bank->custom_icon().lock();
@@ -1092,9 +1094,11 @@ TEST(Kdbx4Test, Kdbx41MetaAndTreeFeatures) {
   EXPECT_EQ(reimported->meta()->deleted_objects()[0].deletion_time(), 1700000700);
 
   EXPECT_TRUE(reimported->root()->Entries().front()->previous_parent_group().has_value());
-  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group().value(), icon_uuid);
+  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(icon_uuid)));
   EXPECT_TRUE(reimported->root()->Groups().front()->previous_parent_group().has_value());
-  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group().value(), deleted_uuid);
+  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(deleted_uuid)));
 
   std::remove(dst_path.c_str());
 }
