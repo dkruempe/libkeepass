@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Infrastructure
+
+- ConanCenter-Rezept auf die CCI-v2-Konventionen angehoben (`test_package` statt
+  `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
+  SPDX-Lizenz `GPL-3.0-only`); `conan create` static und shared lokal verifiziert
+
+### Docs
+
+- `docs/kdbx-parsing.md` in die modulare Architektur überführt (`KdbxHeader`,
+  `KdbxKdf`, `KdbxXml` statt monolithischem `KdbxFile`)
+
+## [0.3.0] - 2026-09-13
+
 ### Added
 
 - Unified `KeePass` API (`libkeepass/keepass.hh`) for opening and saving
@@ -162,7 +175,8 @@ First public release with semantic versioning.
 - Unit and integration tests covering KDB/KDBX roundtrips and key derivation
 - GitHub Pages deployment of the generated API documentation
 
-[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dkruempe/libkeepass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.1.0
