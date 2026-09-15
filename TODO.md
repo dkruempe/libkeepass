@@ -1,131 +1,132 @@
 # libkeepass - Roadmap
 
-> Priorisierte Liste (P0 höchste zuerst) für die weitere Entwicklung. Die alte
-> Roadmap (Sicherheits-Fundament, KDBX 4.1, kpx-CLI, Architektur, Templates) ist
-> vollständig umgesetzt, wurde hier entfernt und nachfolgend zusammengefasst.
+> Prioritized list (P0 highest first) for further development. The old roadmap
+> (security foundation, KDBX 4.1, kpx CLI, architecture, templates) is fully
+> implemented, was removed here and is summarized below.
 
 ---
 
-## Stand v0.3.0
+## Status v0.3.0
 
-Abgeschlossene Grundlage (Details siehe `CHANGELOG.md`):
+Completed foundation (details in `CHANGELOG.md`):
 
-- **Sicherheit:** HMAC-/Header-Integrität beim Import verifiziert
-  (Encrypt-then-MAC), Binary-/Attachment-Payloads und transiente
-  Schlüssel/Klartexte gewipt, libFuzzer-Targets + Robustheits-/Negative-Tests,
-  Cap-Limits gegen OOM/CPU-Burn
-- **Format:** KDB, KDBX 3, KDBX 4.0 und KDBX 4.1 read/write; 4.1 gegen
-  KeePass-2.57-Fixtures verifiziert, Version nur bei Bedarf geschrieben
-- **CLI (`kpx`):** Text/JSON/CSV, Export, Keyfiles, `--search`/`--group`,
-  `--generate`, `add`/`update`/`rm`, dokumentierte Exit-Codes
-- **Architektur:** `KdbxFile` in `KdbxHeader`/`KdbxKdf`/`KdbxXml` zerlegt,
-  gestreamte KDBX-4-Entschlüsselung, Load-Benchmark in der CI
-- **Ökosystem:** CI auf Linux/macOS/Windows, CodeQL, Doxygen/GitHub Pages,
-  Issue-/PR-Templates; ConanCenter-Rezept auf CCI-v2-Konventionen gehoben und
-  als PR eingereicht
+- **Security:** HMAC-/header integrity verified on import (encrypt-then-MAC),
+  binary/attachment payloads and transient keys/plaintexts wiped, libFuzzer
+  targets plus robustness/negative tests, cap limits against OOM/CPU-burn
+- **Format:** KDB, KDBX 3, KDBX 4.0 and KDBX 4.1 read/write; 4.1 verified
+  against KeePass-2.57 fixtures, version only written when needed
+- **CLI (`kpx`):** text/JSON/CSV, export, keyfiles, `--search`/`--group`,
+  `--generate`, `add`/`update`/`rm`, documented exit codes
+- **Architecture:** `KdbxFile` split into `KdbxHeader`/`KdbxKdf`/`KdbxXml`,
+  streamed KDBX-4 decryption, load benchmark in CI
+- **Ecosystem:** CI on Linux/macOS/Windows, CodeQL, Doxygen/GitHub Pages,
+  issue/PR templates; ConanCenter recipe raised to CCI-v2 conventions and
+  submitted as PR
   ([conan-io/conan-center-index#30962](https://github.com/conan-io/conan-center-index/pull/30962)),
-  `conanfile.py`/`test_package` lokal via `conan create` verifiziert
+  `conanfile.py`/`test_package` verified locally via `conan create`
 
-Der Fokus verschiebt sich von "mehr Features" auf **Release-Reife und
-Ökosystem-Integration** sowie gezielte Formatausbauten. Die P0-Items der
-v0.4.0-Release-Reife (C++17-Standard-Politik, CHANGELOG-/Doku-Abschluss) sind
-umgesetzt (vergl. letzte Merge-Reihenfolge) und wurden aus dieser Liste
-entfernt.
-
----
-
-## Legende
-
-- **Feat** = Feature / Format-Kompatibilität
-- **Sicherheit** = Security
-- **Architektur** = Code-/API-Struktur
-- **Erreichbarkeit** = Sichtbarkeit / Integration / Nutzbarkeit
-- **Performance** = Leistung
+The focus shifts from "more features" to **release readiness and ecosystem
+integration** plus targeted format extensions. The P0 items of the v0.4.0
+release-readiness (C++17 standard policy, CHANGELOG/documentation wrap-up) are
+implemented (see the last merge order) and were removed from this list.
 
 ---
 
-## P1 - Format- & Feature-Ausbau (v0.4.x)
+## Legend
 
-### 1. Kompatibilität mit KeePassXC / Strongbox
-
-**Kategorie:** Feat
-**Aufwand:** M
-**Ziel-Version:** v0.4.x
-
-Umgesetzt und abgeschlossen:
-
-- [x] KeePassXC-Verifikation über reales Testkorpus (nicht generierbar: `keepassxc-cli`
-      braucht GUI-Libs, daher echte Fixtures aus `keepassxreboot/keepassxc` `tests/data/`
-      eingepflegt): KDBX 4.0 ChaCha20+Argon2d+gzip, KDBX 3.1 Protected-Strings,
-      Recycle-Bin; neues Testbinary `libkeepass.compat` (`test/data/compat/`)
-- [x] Abweichungen dokumentiert (`docs/interop.md`), inkl. Strongbox: 16-Byte-Argon2-Salz
-      (fixture-seitig abgedeckt), Argon2-`K`/`A`-Parameter (werden importseitig ignoriert),
-      Keyfile-Formate (XML + 64-Hex unterstützt; 32-Byte-Raw/Digest-SHA256-Fallback eine
-      dokumentierte Lücke)
-- [x] Von der Verifikation ausgelöster Bugfix: `RecycleBinUUID` zeigte auf eine leere
-      Platzhalter-Gruppe statt auf die Gruppe mit den Einträgen (Metadata wird vor dem
-      Gruppenbaum geparst; `ParseGroup` reicht das Platzhalter-Objekt nun weiter)
-
-### 2. `kpx`: Passwort-Audit
-
-**Kategorie:** Erreichbarkeit / Nutzbarkeit
-**Aufwand:** S-M
-**Ziel-Version:** v0.4.x
-
-Auf der vorhandenen Such-/Traversal-Infrastruktur aufbauend:
-
-- [x] `--audit`: schwache (Länge/Zeichensatz) und wiederverwendete Passwörter erkennen
-- [x] Ausgabe in Text/JSON/CSV (für CI-/Scripting-Nutzung)
-
-Umgesetzt und abgeschlossen:
-
-- `RunAudit` klassifiziert Einträge als *empty*, *short (N)*, *single-character-class* /
-  *digits-only*, *based-on-title* / *based-on-username* (>=4 Zeichen),
-  *common-password* (eine Ausschlussliste der häufigsten Passwörter); Wieder-
-  verwendung wird als *reused (N entries)* gemeldet
-- Formate: Text, JSON, CSV; CLI `--group` begrenzt den Geltungsbereich auf den
-  Untergeordneten Baum; `--with-passwords` zeigt Passwörter im Abschnitt
-  *Reused passwords* (Text) und im JSON-Array der Wiederverwendung
-- Tests decken alle Ausgabeformate, den Gruppenbereich, ohne-Fund und JSON
-  mit/ohne Passwörter ab
+- **Feature** = feature / format compatibility
+- **Security** = security
+- **Architecture** = code/API structure
+- **Reachability** = visibility / integration / usability
+- **Performance** = performance
 
 ---
 
-## P2 - Erreichbarkeit / Ökosystem
+## P1 - Format & feature expansion (v0.4.x)
 
-### 3. Hardware-Token / YubiKey (Evaluation, langfristig)
+### 1. KeePassXC / Strongbox compatibility
 
-**Kategorie:** Feat
-**Aufwand:** XL
-**Ziel-Version:** offen
+**Category:** Feature
+**Effort:** M
+**Target version:** v0.4.x
 
-KeePass unterstützt externe Key-Quellen (YubiKey/Challenge-Response). Für
-libkeepass als Library keine unmittelbare Priorität; als Grundsatzentscheidung
-dokumentieren, ob/wie das in die `Key`-Abstraktion passt.
+Implemented and completed:
 
-- [x] Kein zeitlicher Horizont; Architektur-Hook in `key.hh` bewusst offen lassen
-- [x] Abhängigkeits- und Lizenzaufwand evaluieren (externer Dev-Lib), Entscheidung hier festhalten
+- [x] KeePassXC verification via a real test corpus (not generatable:
+      `keepassxc-cli` needs GUI libs, therefore real fixtures from the
+      `keepassxreboot/keepassxc` `tests/data/` were imported): KDBX 4.0
+      ChaCha20+Argon2d+gzip, KDBX 3.1 protected strings, recycle bin; new test
+      binary `libkeepass.compat` (`test/data/compat/`)
+- [x] Divergences documented (`docs/interop.md`), incl. Strongbox: 16-byte
+      Argon2 salt (covered fixture-side), Argon2 `K`/`A` parameters (ignored on
+      import), keyfile formats (XML + 64-hex supported; 32-byte
+      raw/digest-SHA256 fallback is a documented gap)
+- [x] Bugfix triggered by verification: `RecycleBinUUID` pointed to an empty
+      placeholder group instead of the group holding the entries (metadata is
+      parsed before the group tree; `ParseGroup` now passes on the placeholder
+      object)
 
-Umgesetzt und abgeschlossen:
+### 2. `kpx`: password audit
 
-Entscheidung: kein Hardware-Token-Support in absehbarer Zeit. Das `Key`-Modell
-bleibt offen als Erweiterungspunkt (weiterer Sub-Key im Composite-Hash, analog
-Password/Keyfile); ein KDBX-Format-Bedarf besteht nicht. Dokumentation inkl.
-Abhängigkeiten/Lizenz (BSD-2-kompatibel) und Aufwandseinschätzung in
+**Category:** Reachability / usability
+**Effort:** S-M
+**Target version:** v0.4.x
+
+Building on the existing search/traversal infrastructure:
+
+- [x] `--audit`: detect weak (length/character set) and reused passwords
+- [x] Output in text/JSON/CSV (for CI/scripting use)
+
+Implemented and completed:
+
+- `RunAudit` classifies entries as *empty*, *short (N)*, *single-character-class* /
+  *digits-only*, *based-on-title* / *based-on-username* (>=4 characters),
+  *common-password* (a blocklist of the most common passwords); reuse is
+  reported as *reused (N entries)*
+- Formats: text, JSON, CSV; the CLI `--group` restricts the scope to the
+  subtree; `--with-passwords` shows passwords in the *Reused passwords* section
+  (text) and in the JSON reuse array
+- Tests cover all output formats, the group scope, the no-findings case and
+  JSON with/without passwords
+
+---
+
+## P2 - Reachability / ecosystem
+
+### 3. Hardware tokens / YubiKey (evaluation, long-term)
+
+**Category:** Feature
+**Effort:** XL
+**Target version:** open
+
+KeePass supports external key sources (YubiKey/challenge-response). No
+immediate priority for libkeepass as a library; documented as a fundamental
+decision, whether/how this fits the `Key` abstraction.
+
+- [x] No time horizon; architecture hook in `key.hh` intentionally left open
+- [x] Dependency and licensing effort evaluated (external dev lib), decision
+      recorded here
+
+Implemented and completed:
+
+Decision: no hardware-token support in the foreseeable future. The `Key` model
+stays open as an extension point (additional sub key in the composite hash,
+analogous to password/keyfile); no KDBX format work is required. Documentation
+incl. dependencies/licensing (BSD-2 compatible) and effort estimate in
 `docs/hardware-tokens.md`.
 
 ---
 
-## Entscheidungen / Offene Punkte
+## Decisions / open points
 
-- [x] Toleranz-Politik bei unbekannten/zukünftigen XML-Feldern und unbekannten
-      KDF-/Cipher-OIDs: festgelegt und in `docs/interop.md` dokumentiert
-      (integrritätsrelevant: Fehler; optional/unkritisch: ignorieren)
-- [ ] OSS-Fuzz-Integration: bewertet und zurückgestellt (hermetischer
-      Non-Conan-Build nötig); erneut prüfen, sobald der Conan-Build dafür
-      taugt (vgl. Fuzz-Workflow in `.github/workflows/fuzz.yml`)
-- [x] Entry-History: API (`save_history`/`delete_history`) vorhanden;
-      CLI-/(.json?)-Sichtbarkeit **bewusst nicht** erweitert — Entscheidung:
-      History vollständig roundtrip-fähig, aber nicht Teil der
-      Tagesansicht/des Audits; Interessenten nutzen die öffentliche API
-      direkt (siehe Docstring von `Entry::history()`)
+- [x] Tolerance policy for unknown/future XML fields and unknown
+      KDF/cipher OIDs: decided and documented in `docs/interop.md`
+      (integrity-relevant: error; optional/non-critical: ignore)
+- [ ] OSS-Fuzz integration: evaluated and deferred (a hermetic
+      non-Conan build is required); re-check as soon as the Conan build
+      qualifies (cf. fuzz workflow in `.github/workflows/fuzz.yml`)
+- [x] Entry history: API (`save_history`/`delete_history`) available;
+      CLI/(.json?)-visibility **deliberately not** extended — decision: history
+      is fully round-trippable but not part of the day-to-day view/the audit;
+      interested parties use the public API directly (see the
+      `Entry::history()` docstring)

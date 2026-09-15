@@ -1,58 +1,57 @@
 # Hardware Tokens / YubiKey
 
-**Entscheidung** (festgehalten am 14.09.2026): Ein Hardware-Token-Support
-(YubiKey Challenge-Response, FIDO2, ...) wird **vorerst nicht implementiert**.
-Die `Key`-Abstraktion bleibt bewusst offen für eine spätere Erweiterung als
-weitere Sub-Key-Quelle; ein Format-seitiger Eingriff ist dafür nicht nötig.
+**Decision** (recorded on 2026-09-14): Hardware-token support (YubiKey
+challenge-response, FIDO2, ...) will **not be implemented for the time being**.
+The `Key` abstraction intentionally stays open for a later extension as an
+additional sub-key source; no format-level work is required for that.
 
-## Ausgangslage
+## Background
 
-KeePass unterstützt Hardware-Token über Plugins, insbesondere YubiKey
-Challenge-Response (HMAC-SHA1): Der Nutzer legt Anwendungsschlüssel in einer
-KeePass-Ini/Plugin-Config ab, beim Öffnen schickt der Client eine
-25-Byte-Challenge an den Token und verknüpft die 160-Bit-Antwort mit den
-sub-keys (Passwort/Keyfile), bevor die KDF-Transformation angewendet wird.
-Die Token-Konfiguration wird ausschließlich client-/plugins-seitig verwaltet;
-im KDBX-Header oder in den Meta-Daten existiert dafür kein kanonischer,
-übergreifend verstandener Speicherort.
+KeePass supports hardware tokens through plugins, in particular YubiKey
+challenge-response (HMAC-SHA1): the user stores application secrets in a
+KeePass ini/plugin configuration; on open the client sends a 25-byte challenge
+to the token and combines the 160-bit response with the sub keys
+(password/keyfile) before applying the KDF transformation. The token
+configuration is managed exclusively client-/plugin-side; the KDBX header and
+metadata do not contain a canonical location for it that other tools
+understand.
 
-Bekannte Portal-Implementierungen:
+Known reference implementations:
 
-- **KeePass (Windows):** Plugins (`YubiKeyChallendgeResponse` etc.), HMAC-SHA1
-  über die proprietäre (aber quelloffene) YubiKey-API/U2F-Treiber
-- **KeePassXC:** Challenge-Response über die Bibliothek `libyubikey`/`yubikey`
-  (via `ykpers`); Funktionalität ist an die GUI (Setup-/Slot-Umschaltung)
-  gebunden, im `keepassxc-cli` nicht nutzbar
-- **Strongbox (iOS/macOS):** kein YubiKey-Support
+- **KeePass (Windows):** plugins (e.g. `YubiKeyChallengeResponse`), HMAC-SHA1
+  through the proprietary (but open source) YubiKey API / U2F drivers
+- **KeePassXC:** challenge-response via `libyubikey`/`yubikey` (through
+  `ykpers`); the functionality is tied to the GUI (setup/slot switching) and is
+  not usable from `keepassxc-cli`
+- **Strongbox (iOS/macOS):** no YubiKey support
 
-## Einordnung für libkeepass
+## Placement in libkeepass
 
-- Als **Library** ist der passende Erweiterungspunkt die Klasse
-  `keepass::Key` (`key.hh`): Sie kombiniert bereits Passwort- und
-  Keyfile-Sub-Keys zu einem Composite-Key
-  (`Key::SubKeyResolution::kHashSubKeys...`). Ein Hardware-Sub-Key würde an
-  derselben Stelle einlaufen: der Client liefert die Token-Antwort als weitere
-  20-Byte-Secret-Komponente, `Resolve()` hasht sie in den Composite-Hash ein.
-- **Kein Format-Bedarf:** Der KDBX-Standard kennt keine Header-/Meta-Felder
-  für Token-Slots. Das Öffnen einer mit Token geschützten Datei ist ohne
-  Plugin/Token-Hardware nicht möglich — das gilt auch für KeePass selbst und
-  ist keine Lücke von libkeepass.
-- **CLI (`kpx`):** Kein realisierbarer Setup-Flow ohne interaktiven
-  Slot-/Challenge-Austausch. Wenn später umgesetzt, wäre der erste Schritt ein
-  sekundärer Sub-Key-Eingang in `Key`, dann ein `--yubikey-slot N`-Flag am CLI.
+- As a **library**, the natural extension point is the `keepass::Key` class
+  (`key.hh`): it already combines password and keyfile sub keys into a
+  composite key (`Key::SubKeyResolution::kHashSubKeys...`). A hardware sub key
+  would enter at the same place: the client supplies the token response as an
+  additional 20-byte secret component, and `Resolve()` hashes it into the
+  composite hash.
+- **No format work needed:** the KDBX standard has no header/meta fields for
+  token slots. Opening a token-protected file is impossible without the
+  plugin/token hardware — this also holds for KeePass itself and is not a
+  gap in libkeepass.
+- **CLI (`kpx`):** no viable setup flow without interactive
+  slot/challenge exchange. If implemented later, the first step would be a
+  secondary sub-key input in `Key`, then a `--yubikey-slot N` flag on the CLI.
 
-## Aufwand / Abhängigkeiten / Lizenz
+## Effort / Dependencies / Licensing
 
-- Yubico-Bibliotheken (`libyubikey`, `libykpers`, `yubikey-personalization`,
-  `yubico-c`) sind in C gehalten (BSD-2-lizenziert) und auf Linux/macOS ohne
-  größere Probleme als Conan-Packages abbildbar; GPL-3.0-libkeepass ist mit
-  BSD-2 kompatibel. Ein neuer Conan-Peers/eingebetteter Build wäre der
-  Hauptaufwand, nicht die Lizenzfrage.
-- HMAC-SHA1 selbst ist in OpenSSL bereits vorhanden — eine reine
-  Challenge-Response-Verarbeitung bräuchte nur die Token-Anfrage-/Antwort-
-  Logik, nicht neue Krypto.
-- **Entscheidung:** Aufgrund fehlender Nutzungsperspektive (CLI-basiert,
-  KeepassXC-CLI ohne Support, kein Strongbox-Pendant) und des
-  Plattform-Aufwands (FIDO2/normalisierte OTP-Zugänge + Treiber auf Windows)
-  liegt der Aufwand nicht im Verhältnis; erneute Prüfung erst bei konkreter
-  Nachfrage.
+- The Yubico libraries (`libyubikey`, `libykpers`,
+  `yubikey-personalization`, `yubico-c`) are C (BSD-2 licensed) and can be
+  integrated on Linux/macOS as Conan packages without major issues;
+  GPL-3.0 libkeepass is compatible with BSD-2. A new Conan peer/embedded build
+  would be the main effort, not the licensing question.
+- HMAC-SHA1 itself is already available in OpenSSL — pure
+  challenge-response processing would only need the token request/response
+  logic, not new crypto.
+- **Decision:** because of the missing usage perspective (CLI-based; the
+  KeePassXC CLI has no support; no Strongbox counterpart) and the platform
+  effort (FIDO2/normalized OTP access plus drivers on Windows), the costs do
+  not justify the benefit; re-evaluate only when there is concrete demand.

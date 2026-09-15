@@ -69,14 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Infrastructure
 
-- ConanCenter-Rezept auf die CCI-v2-Konventionen angehoben (`test_package` statt
-  `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
-  SPDX-Lizenz `GPL-3.0-only`); `conan create` static und shared lokal verifiziert
+- ConanCenter recipe raised to the CCI-v2 conventions (`test_package` instead
+  of `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
+  SPDX license `GPL-3.0-only`); `conan create` verified locally for both static
+  and shared variants
 
 ### Docs
 
-- `docs/kdbx-parsing.md` in die modulare Architektur überführt (`KdbxHeader`,
-  `KdbxKdf`, `KdbxXml` statt monolithischem `KdbxFile`)
+- `docs/kdbx-parsing.md` folded into the modular architecture (`KdbxHeader`,
+  `KdbxKdf`, `KdbxXml` instead of the monolithic `KdbxFile`)
 
 ## [0.3.0] - 2026-09-13
 
