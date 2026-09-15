@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the 12-character minimum, a single character class (digits- or letters-only),
   passwords based on the title or username and entries of a common-passwords
   list; reuse groups every occurrence of a password used by several entries.
+- Dedicated `test/key.cc` (transformed-key short circuit, keyfile parsing
+  errors, uppercase hex keyfiles, Argon2 error paths) and `test/random.cc`
+  (random-obfuscator stream processing) raise the line coverage of `key.cc`
+  and `random.cc` from 76%/72% to 82%/95%.
 
 ### Fixed
 

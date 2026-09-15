@@ -57,6 +57,16 @@ target_compile_features(kdbx_header PUBLIC cxx_std_17)
 target_link_libraries(kdbx_header PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.kdbx_header COMMAND kdbx_header)
 
+add_executable(key key.cc)
+target_compile_features(key PUBLIC cxx_std_17)
+target_link_libraries(key PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.key COMMAND key)
+
+add_executable(random random.cc)
+target_compile_features(random PUBLIC cxx_std_17)
+target_link_libraries(random PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
+add_test(NAME libkeepass.random COMMAND random)
+
 add_executable(stream stream.cc)
 target_compile_features(stream PUBLIC cxx_std_17)
 target_link_libraries(stream PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
