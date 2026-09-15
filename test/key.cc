@@ -18,9 +18,14 @@
  */
 
 #include <array>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include <gtest/gtest.h>
 
@@ -35,6 +40,22 @@ namespace {
 
 std::string GetTmpPath(const std::string& name) {
   return std::string(PROJECT_ROOT_PATH) + "/tmp/" + name;
+}
+
+void SetEnv(const char* name, const char* value) {
+#ifdef _WIN32
+  _putenv_s(name, value);
+#else
+  setenv(name, value, 1);
+#endif
+}
+
+void UnsetEnv(const char* name) {
+#ifdef _WIN32
+  _putenv_s(name, "");
+#else
+  unsetenv(name);
+#endif
 }
 
 void WriteFile(const std::string& path, const std::string& content) {
@@ -171,4 +192,20 @@ TEST(KeyTest, Argon2InvalidParametersThrow) {
   EXPECT_THROW(key.TransformArgon2(Key::Kdf::kArgon2id, salt, 1, 1 << 20, 0, 0x13,
                                    Key::SubKeyResolution::kHashSubKeys),
                InternalError);
+}
+
+TEST(KeyTest, EvpAesKdfFallbackMatchesAesNi) {
+  // The AES-NI and the portable EVP paths must produce bit-identical results.
+  // The documented LIBKEEPASS_AES_NI=0 override forces the EVP fallback even on
+  // AES-NI-capable hosts, so this comparison exercises both implementations.
+  Key key("password");
+  const SecureBuffer<32> accelerated =
+      key.Transform(TransformSeed(), 1000, Key::SubKeyResolution::kHashSubKeys);
+
+  SetEnv("LIBKEEPASS_AES_NI", "0");
+  const SecureBuffer<32> fallback =
+      key.Transform(TransformSeed(), 1000, Key::SubKeyResolution::kHashSubKeys);
+  UnsetEnv("LIBKEEPASS_AES_NI");
+
+  EXPECT_TRUE(std::equal(accelerated.begin(), accelerated.end(), fallback.begin()));
 }
