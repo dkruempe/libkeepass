@@ -40,6 +40,7 @@
 #include <array>
 #include <cpuid.h>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 
 #include <emmintrin.h>
@@ -140,6 +141,13 @@ inline __m128i EncryptBlock(__m128i block, const Aes256RoundKeys& keys) {
 } // namespace
 
 bool aes_ni_supported() {
+  // Test/portability override: setting LIBKEEPASS_AES_NI=0 forces the portable
+  // EVP-based AES-KDF path even on AES-NI-capable hardware, mirroring how
+  // OpenSSL allows its SIMD accelerations to be switched off.
+  if (const char* override = std::getenv("LIBKEEPASS_AES_NI");
+      override != nullptr && std::strcmp(override, "0") == 0)
+    return false;
+
   unsigned int eax, ebx, ecx = 0, edx;
   if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx))
     return false;

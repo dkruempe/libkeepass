@@ -96,9 +96,8 @@ void KdbxKdf::WriteParameters(std::ostream& dst, const Database& db) {
     std::vector<uint8_t> uuid_vec(uuid.begin(), uuid.end());
     vdict.Set("$UUID", VariantDictionary::Type::kByteArray, std::move(uuid_vec));
 
-    std::array<uint8_t, 32> seed = db.transform_seed();
-    std::vector<uint8_t> seed_vec(seed.begin(), seed.end());
-    vdict.Set("S", VariantDictionary::Type::kByteArray, std::move(seed_vec));
+    std::vector<uint8_t> seed(db.transform_seed().begin(), db.transform_seed().end());
+    vdict.Set("S", VariantDictionary::Type::kByteArray, std::move(seed));
 
     std::vector<uint8_t> rounds(sizeof(uint64_t), 0);
     const uint64_t rounds_val = db.transform_rounds();
@@ -112,7 +111,7 @@ void KdbxKdf::WriteParameters(std::ostream& dst, const Database& db) {
     std::vector<uint8_t> uuid_vec(uuid.begin(), uuid.end());
     vdict.Set("$UUID", VariantDictionary::Type::kByteArray, std::move(uuid_vec));
 
-    std::vector<uint8_t> salt = db.argon2_salt();
+    std::vector<uint8_t> salt(db.argon2_salt().begin(), db.argon2_salt().end());
     vdict.Set("S", VariantDictionary::Type::kByteArray, std::move(salt));
 
     std::vector<uint8_t> iterations(sizeof(uint64_t), 0);

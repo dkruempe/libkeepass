@@ -10,7 +10,7 @@ if (NOT TARGET kruempelmann::libkeepass)
 endif ()
 
 add_executable(kpx kpx.cc)
-target_compile_features(kpx PUBLIC cxx_std_11)
+target_compile_features(kpx PUBLIC cxx_std_17)
 target_link_libraries(kpx PRIVATE kruempelmann::libkeepass)
 
 if (UNIX AND NOT APPLE)

@@ -5,4 +5,4 @@ find_package(libkeepass CONFIG REQUIRED)
 
 add_executable(test_package test_package.cpp)
 target_link_libraries(test_package PRIVATE kruempelmann::libkeepass)
-target_compile_features(test_package PRIVATE cxx_std_11)
+target_compile_features(test_package PRIVATE cxx_std_17)

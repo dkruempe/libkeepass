@@ -193,6 +193,97 @@ std::string CreateEditFixture(const std::string& name) {
   return path;
 }
 
+// Builds a database specifically for the --audit tests, containing a strong
+// entry, a short lowercase-only entry, an empty-password entry, two entries
+// sharing the same password (reuse) and a password based on the username.
+std::unique_ptr<keepass::Database> CreateAuditDatabase() {
+  keepass::KdbxFile reader;
+  std::unique_ptr<keepass::Database> meta_source =
+      reader.Import(GetDataPath("groups-2-random_entry-4-pw-aes.kdbx"), keepass::Key("password"));
+
+  std::unique_ptr<keepass::Database> db(new keepass::Database());
+  std::array<uint8_t, 16> master_seed{{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0,
+                                       0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01}};
+  db->set_master_seed(master_seed);
+  db->set_init_vector({{0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                        0x0e, 0x0f, 0x10, 0x11}});
+  db->set_meta(meta_source->meta());
+
+  auto root = std::make_shared<keepass::Group>();
+  root->set_name("root");
+
+  // Short + single-character-class (lowercase-only).
+  auto root_entry = std::make_shared<keepass::Entry>();
+  root_entry->set_title(protect<secure_string>("RootEntry", false));
+  root_entry->set_username(protect<secure_string>("rootuser", false));
+  root_entry->set_password(protect<secure_string>("toppass", true));
+  root_entry->set_url(protect<secure_string>("", false));
+  root_entry->set_notes(protect<secure_string>("", false));
+  root->AddEntry(root_entry);
+
+  // Empty password.
+  auto empty_pw = std::make_shared<keepass::Entry>();
+  empty_pw->set_title(protect<secure_string>("NoPw", false));
+  empty_pw->set_username(protect<secure_string>("", false));
+  empty_pw->set_password(protect<secure_string>("", true));
+  empty_pw->set_url(protect<secure_string>("", false));
+  empty_pw->set_notes(protect<secure_string>("", false));
+  root->AddEntry(empty_pw);
+
+  auto internet = std::make_shared<keepass::Group>();
+  internet->set_name("Internet");
+
+  auto mail = std::make_shared<keepass::Entry>();
+  mail->set_title(protect<secure_string>("mail", false));
+  mail->set_username(protect<secure_string>("alice", false));
+  mail->set_password(protect<secure_string>("s3cret", true));
+  mail->set_url(protect<secure_string>("", false));
+  mail->set_notes(protect<secure_string>("", false));
+  internet->AddEntry(mail);
+
+  // Shares password with mail, triggering reuse detection.
+  auto webmail = std::make_shared<keepass::Entry>();
+  webmail->set_title(protect<secure_string>("webmail", false));
+  webmail->set_username(protect<secure_string>("bob", false));
+  webmail->set_password(protect<secure_string>("s3cret", true));
+  webmail->set_url(protect<secure_string>("", false));
+  webmail->set_notes(protect<secure_string>("", false));
+  internet->AddEntry(webmail);
+
+  // Weak: password contains the username "builder" (>=4 chars).
+  auto gmail = std::make_shared<keepass::Entry>();
+  gmail->set_title(protect<secure_string>("Gmail", false));
+  gmail->set_username(protect<secure_string>("builder", false));
+  gmail->set_password(protect<secure_string>("bobbuilder123", true));
+  gmail->set_url(protect<secure_string>("", false));
+  gmail->set_notes(protect<secure_string>("", false));
+  internet->AddEntry(gmail);
+
+  // Strong: no issues.
+  auto vault = std::make_shared<keepass::Entry>();
+  vault->set_title(protect<secure_string>("Vault", false));
+  vault->set_username(protect<secure_string>("rootuser", false));
+  vault->set_password(protect<secure_string>("Xk9#mQ2!vL7$pR4z", true));
+  vault->set_url(protect<secure_string>("", false));
+  vault->set_notes(protect<secure_string>("", false));
+  internet->AddEntry(vault);
+
+  root->AddGroup(internet);
+  db->set_root(root);
+  return db;
+}
+
+std::string CreateAuditFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+  EXPECT_NO_THROW({
+    std::unique_ptr<keepass::Database> db = CreateAuditDatabase();
+    ExportDatabase(path, *db, keepass::Key("password"));
+  });
+  EXPECT_TRUE(std::ifstream(path).is_open());
+  return path;
+}
+
 class KpxTest : public ::testing::Test {
 protected:
   static void SetUpTestSuite() {
@@ -845,6 +936,106 @@ TEST_F(KpxTest, GenerateCharSetIsPrintable) {
         << "unexpected character '" << c << "'";
     EXPECT_TRUE(std::isprint(static_cast<unsigned char>(c)));
   }
+}
+
+TEST_F(KpxTest, AuditText) {
+  const std::string path = CreateAuditFixture("cli-audit-text.kdbx");
+  CliResult result = RunCli({"-p", "password", "--audit", path});
+  EXPECT_EQ(0, result.code);
+  // Findings for the individual entries.
+  EXPECT_NE(std::string::npos,
+            result.out.find("root/RootEntry: short (7); single-character-class"));
+  EXPECT_NE(std::string::npos, result.out.find("root/NoPw: empty"));
+  EXPECT_NE(std::string::npos,
+            result.out.find("root/Internet/mail: short (6); reused (2 entries)"));
+  EXPECT_NE(std::string::npos, result.out.find("root/Internet/Gmail: based-on-username"));
+  // The strong entry must not produce a finding.
+  EXPECT_EQ(std::string::npos, result.out.find("Vault"));
+  // Without --with-passwords the passwords stay hidden: no reuse section and
+  // no literal password value in the output.
+  EXPECT_EQ(std::string::npos, result.out.find("Reused passwords:"));
+  EXPECT_EQ(std::string::npos, result.out.find("s3cret"));
+  EXPECT_NE(std::string::npos,
+            result.out.find("Summary: 5 of 6 entries have issues, 1 reused password.\n"));
+}
+
+TEST_F(KpxTest, AuditTextWithPasswords) {
+  const std::string path = CreateAuditFixture("cli-audit-text-pw.kdbx");
+  CliResult result = RunCli({"-p", "password", "--audit", "--with-passwords", path});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("Reused passwords:\n"));
+  EXPECT_NE(std::string::npos,
+            result.out.find("  s3cret (2 entries): root/Internet/mail; root/Internet/webmail"));
+}
+
+TEST_F(KpxTest, AuditCsv) {
+  const std::string path = CreateAuditFixture("cli-audit-csv.kdbx");
+  CliResult result = RunCli({"-p", "password", "--audit", "-f", "csv", path});
+  EXPECT_EQ(0, result.code);
+  EXPECT_EQ(std::string::npos, result.out.find("Password"));
+  EXPECT_NE(std::string::npos, result.out.find("Group,Title,Issues\n"));
+  EXPECT_NE(std::string::npos,
+            result.out.find("root,RootEntry,short (7);single-character-class\n"));
+  EXPECT_NE(std::string::npos,
+            result.out.find("root/Internet,mail,short (6);reused (2 entries)\n"));
+}
+
+TEST_F(KpxTest, AuditJson) {
+  const std::string path = CreateAuditFixture("cli-audit-json.kdbx");
+  CliResult result = RunCli({"-p", "password", "--audit", "-f", "json", path});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("\"audited\":6"));
+  EXPECT_NE(std::string::npos, result.out.find("\"issues\":["));
+  EXPECT_NE(std::string::npos, result.out.find("\"reused\":"));
+  EXPECT_NE(std::string::npos, result.out.find("\"group\":\"root\",\"title\":\"RootEntry\""));
+  EXPECT_NE(std::string::npos,
+            result.out.find("\"issues\":[\"short (7)\",\"single-character-class\"]"));
+  // Passwords are hidden by default in the JSON reuse section.
+  EXPECT_NE(std::string::npos, result.out.find("\"password\":null"));
+  EXPECT_EQ(std::string::npos, result.out.find("\"password\":\""));
+}
+
+TEST_F(KpxTest, AuditJsonWithPasswords) {
+  const std::string path = CreateAuditFixture("cli-audit-json-pw.kdbx");
+  CliResult result = RunCli({"--audit", "-f", "json", "--with-passwords", "-p", "password", path});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("\"password\":\"s3cret\""));
+  EXPECT_EQ(std::string::npos, result.out.find("\"password\":null"));
+}
+
+TEST_F(KpxTest, AuditGroupScope) {
+  const std::string path = CreateAuditFixture("cli-audit-group.kdbx");
+  CliResult result = RunCli({"-p", "password", "--audit", "--group", "Internet", path});
+  EXPECT_EQ(0, result.code);
+  // Only the Internet subtree is audited: 3 of 4 entries have issues there.
+  EXPECT_NE(std::string::npos,
+            result.out.find("Summary: 3 of 4 entries have issues, 1 reused password.\n"));
+  EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
+}
+
+TEST_F(KpxTest, AuditNoIssues) {
+  // A database with a single strong entry must report no issues.
+  const std::string dst = GetTmpPath("cli-audit-nofindings.kdbx");
+  std::remove(dst.c_str());
+  {
+    std::unique_ptr<keepass::Database> db = CreateAuditDatabase();
+    // Replace the root group with one holding only the strong entry.
+    auto root = std::make_shared<keepass::Group>();
+    root->set_name("root");
+    auto strong = std::make_shared<keepass::Entry>();
+    strong->set_title(protect<secure_string>("Vault", false));
+    strong->set_username(protect<secure_string>("rootuser", false));
+    strong->set_password(protect<secure_string>("Xk9#mQ2!vL7$pR4z", true));
+    strong->set_url(protect<secure_string>("", false));
+    strong->set_notes(protect<secure_string>("", false));
+    root->AddEntry(strong);
+    db->set_root(root);
+    ExportDatabase(dst, *db, keepass::Key("password"));
+  }
+
+  CliResult result = RunCli({"-p", "password", "--audit", dst});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("No issues found (1 entry audited).\n"));
 }
 
 } // namespace

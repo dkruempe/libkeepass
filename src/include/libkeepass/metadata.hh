@@ -25,6 +25,7 @@
 #pragma once
 #include <ctime>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -97,7 +98,7 @@ public:
   private:
     std::string key_;
     std::string value_;
-    std::time_t last_modification_time_ = 0;
+    std::optional<std::time_t> last_modification_time_;
 
   public:
     /// Creates a metadata field with the given key and value.
@@ -119,11 +120,16 @@ public:
     /// Returns the field value.
     const std::string& value() const { return value_; }
 
-    /// Returns the field last modification time (KDBX 4.1); 0 if unset.
-    std::time_t last_modification_time() const { return last_modification_time_; }
+    /// Returns the field last modification time (KDBX 4.1); empty if unset.
+    const std::optional<std::time_t>& last_modification_time() const {
+      return last_modification_time_;
+    }
 
-    /// Sets the field last modification time (KDBX 4.1); 0 to unset.
-    void set_last_modification_time(std::time_t time) { last_modification_time_ = time; }
+    /// Sets the field last modification time (KDBX 4.1); pass @c std::nullopt
+    /// to unset.
+    void set_last_modification_time(std::optional<std::time_t> time) {
+      last_modification_time_ = time;
+    }
 
     /// Copy assignment.
     Field& operator=(const Field& other) = default;

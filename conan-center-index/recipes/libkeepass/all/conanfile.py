@@ -10,7 +10,7 @@ required_conan_version = ">=2.0.9"
 
 class LibkeepassConan(ConanFile):
     name = "libkeepass"
-    description = "C++11 library for reading and writing KeePass (KDB and KDBX) password databases"
+    description = "C++17 library for reading and writing KeePass (KDB and KDBX) password databases"
     license = "GPL-3.0-only"
     url = "https://github.com/conan-io/conan-center-index"
     homepage = "https://github.com/dkruempe/libkeepass"
@@ -23,7 +23,7 @@ class LibkeepassConan(ConanFile):
     implements = ["auto_shared_fpic"]
 
     def validate(self):
-        check_min_cppstd(self, 11)
+        check_min_cppstd(self, 17)
 
     def layout(self):
         cmake_layout(self, src_folder="src")

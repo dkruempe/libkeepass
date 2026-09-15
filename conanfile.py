@@ -3,6 +3,7 @@ import re
 
 from conan import ConanFile
 from conan.errors import ConanException
+from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
 from conan.tools.files import copy
 
@@ -12,7 +13,7 @@ class LibkeepassConan(ConanFile):
     license = "GPL-3.0-only"
     url = "https://github.com/dkruempe/libkeepass"
     homepage = "https://github.com/dkruempe/libkeepass"
-    description = "C++11 library for importing and exporting KeePass password databases"
+    description = "C++17 library for importing and exporting KeePass password databases"
     topics = ("keepass", "password", "database", "security", "kdbx")
 
     settings = "os", "arch", "compiler", "build_type"
@@ -55,6 +56,9 @@ class LibkeepassConan(ConanFile):
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
+
+    def validate(self):
+        check_min_cppstd(self, 17)
 
     def configure(self):
         if self.options.shared:

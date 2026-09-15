@@ -69,8 +69,8 @@ void WipeStream(std::stringstream& stream) {
 }
 
 // Zeroizes the contents of a contiguous container (std::string or
-// std::vector<char/uint8_t>) in place. std::string::data() returns a const
-// pointer in C++11, so cast it away for the wipe; writing zeros never
+// std::vector<char/uint8_t>) in place. std::string_view::data() is const even
+// in C++17, so cast it away for the wipe; writing zeros never
 // invalidates the container invariants.
 template <typename Container> void WipeBuffer(Container* buffer) {
   if (buffer != nullptr && !buffer->empty()) {
@@ -579,7 +579,7 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
 
   // Produce the final key used for decrypting the contents.
   SecureBuffer<32> transformed_key =
-      key.Transform(header.transform_seed, header.transform_rounds,
+      key.Transform(SecureBuffer<32>(header.transform_seed), header.transform_rounds,
                     Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   std::array<uint8_t, 32> final_key{};
 
@@ -813,7 +813,7 @@ void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   header.num_groups = num_groups;
   header.num_entries = num_entries;
   header.content_hash = content_hash;
-  header.transform_seed = db.transform_seed();
+  std::copy(db.transform_seed().begin(), db.transform_seed().end(), header.transform_seed.begin());
   header.transform_rounds = static_cast<uint32_t>(db.transform_rounds());
 
   conserve<KdbHeader>(dst, header);

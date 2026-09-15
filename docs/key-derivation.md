@@ -95,8 +95,33 @@ the KDF and the remaining entries carry the parameters:
 | `P` | UInt32 | — | parallelism |
 | `V` | UInt32 | — | Argon2 version |
 
-Parsed in `KdbxFile::Import4` (`src/kdbx.cc:1258`) and written back in
-`KdbxFile::Export4` (`src/kdbx.cc:1737`).
+Parsed in `KdbxKdf::ParseParameters` (`src/kdbx_kdf.cc:48`) and written back in
+`KdbxKdf::WriteParameters` (`src/kdbx_kdf.cc:91`).
+
+### Evaluation: "Argon2 + BLAKE2b" KDF
+
+The roadmap tracked a hypothesis that KeePass uses a BLAKE2-based Argon2
+variant. The evaluation against the KeePass documentation and source
+([KDBX 4 format](https://keepass.info/help/kb/kdbx_4.html),
+[KDBX file format specification](https://keepass.info/help/kb/kdbx.html)) and
+against KeePassXC's `KeePass2.cpp` concludes:
+
+* BLAKE2b is the **internal block hash of the Argon2 algorithm itself**
+  (Argon2d and Argon2id, versions 1.0 and 1.3), not a separate, user-selectable
+  KDF. KeePass does not expose any variant that substitutes another hash.
+* The complete set of KDF UUIDs KeePass understands built-in is the three OIDs
+  above (AES-KDF with the legacy KDBX 3 UUID `c9 d9 f3 9a …` aliasing the KDBX 4
+  UUID `7c 02 bb 82 …`) plus the Argon2d / Argon2id OIDs. **No fourth
+  "Argon2-with-BLAKE2b" OID exists**, so nothing needs to be added to the
+  `KdbxKdf` dispatcher.
+* libkeepass derives Argon2 through the reference `argon2` library, which
+  implements BLAKE2b internally, and passes the Argon2d and Argon2id imports of
+  every fixture (including the KeePass-2.57-generated KDBX 4.1 files) as well as
+  version `0x10`/`0x13` handling.
+* The optional Argon2 parameters `K` (secret key) and `A` (associated data) are
+  supported by the format but never written by KeePass itself; unknown variant
+  dictionary entries are ignored on import (tolerance policy, see TODO
+  "Entscheidungen").
 
 ## Deriving the final keys (KDBX 3 / 4)
 
