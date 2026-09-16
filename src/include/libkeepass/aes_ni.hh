@@ -46,6 +46,11 @@ namespace keepass {
 /**
  * @brief Returns whether the current CPU supports AES-NI hardware instructions.
  * @return @c true if AES-NI is available, else @c false.
+ *
+ * Setting the environment variable @c LIBKEEPASS_AES_NI to @c 0 forces a
+ * @c false result (used to verify the portable EVP-based AES-KDF fallback and
+ * to disable the acceleration on virtualized/misbehaving hosts). Any other
+ * value or an unset variable defers to the CPUID check.
  */
 LIBKEEPASS_API bool aes_ni_supported();
 

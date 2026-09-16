@@ -50,6 +50,7 @@ struct Options {
   bool regex = false;  // --regex
   std::string group;   // --group name
   int generate = 0;    // --generate[=n]; 0 = disabled, -1 = invalid
+  bool audit = false;  // --audit
   std::string title;   // entry field
   std::string user;
   std::string entry_password;
@@ -68,10 +69,10 @@ struct Options {
 
 /// Parses the command-line arguments into opt. Supports long options
 /// (--password, --keyfile, --format, --output, --export, --with-passwords,
-/// --search, --regex, --group, --generate, --title, --user, --pass, --url,
-/// --notes, --verbose, --help, --version, both with '=' and as separate value
-/// arguments), combined short options (-p, -k) and the "--" separator. The
-/// first positional argument may be the "add", "update" or "rm" command;
+/// --search, --regex, --group, --generate, --audit, --title, --user, --pass,
+/// --url, --notes, --verbose, --help, --version, both with '=' and as separate
+/// value arguments), combined short options (-p, -k) and the "--" separator.
+/// The first positional argument may be the "add", "update" or "rm" command;
 /// the following positional argument is the database path. Returns false and
 /// prints an error if an argument is unknown or malformed.
 bool ParseArgs(int argc, const char* argv[], Options& opt);

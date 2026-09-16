@@ -6,6 +6,7 @@ bin
 .idea
 *.pyc
 *.swp
+Testing
 TODO.md
 docs/*
 !docs/*.md

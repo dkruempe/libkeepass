@@ -17,6 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <fstream>
 
 #include <gtest/gtest.h>
@@ -888,6 +889,7 @@ TEST(KdbxTest, AttachmentRoundtrip) {
   attachment->set_binary(binary);
   entry->AddAttachment(attachment);
   db->meta()->AddBinary(binary);
+  db->meta()->AddField("custom-field", "custom-value");
 
   const std::string dst_path = GetTmpPath("kdbx3-attachment.kdbx");
   ASSERT_NO_THROW(file.Export(dst_path, *db, key));
@@ -895,6 +897,13 @@ TEST(KdbxTest, AttachmentRoundtrip) {
   std::unique_ptr<Database> reimported;
   ASSERT_NO_THROW({ reimported = file.Import(dst_path, key); });
   ASSERT_NE(reimported, nullptr);
+
+  const auto& fields = reimported->meta()->fields();
+  const auto field = std::find_if(fields.begin(), fields.end(), [](const Metadata::Field& f) {
+    return f.key() == "custom-field";
+  });
+  ASSERT_NE(field, fields.end());
+  EXPECT_EQ(field->value(), "custom-value");
 
   const auto& attachments = reimported->root()->Entries().front()->attachments();
   ASSERT_EQ(attachments.size(), 1U);
