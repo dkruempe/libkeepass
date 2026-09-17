@@ -56,9 +56,10 @@ few hot spots dominate memory and time.
   in `test/benchmark_baseline.json`; CI warns on significant deviation.
 
 ### P2 - Deduplicate the binary pool in O(n)
-- `KdbxFile::Export4` scans the collected binaries with a nested loop
+- [x] `KdbxFile::Export4` scanned the collected binaries with a nested loop
   (`src/kdbx.cc:744`) - O(n²) for databases with many attachments/entries.
-  Replace with an unordered_set/pointer-identity index.
+  Replaced with a `shared_ptr` identity set (O(n)), preserving
+  first-occurrence order.
 
 ### P2 - Vectorize hot byte loops
 - The inner random-stream XOR loop in `RandomObfuscator::Process`

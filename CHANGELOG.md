@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- KDBX 4 export deduplicates the binary pool in O(n) instead of O(n²),
+  speeding up `Save`/`Export4` for databases with many shared attachments
 - Migrated the `kpx` CLI to the unified `KeePass` API
 - Exporting databases without metadata or a root group no longer crashes
 - `Database::NewEntry`/`NewGroup`/`AddEntry`/`AddGroup`/`MoveEntry`/`MoveGroup`

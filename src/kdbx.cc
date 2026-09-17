@@ -24,6 +24,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -738,22 +739,19 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   std::array<uint8_t, 32> inner_random_stream_key = random_array<32>();
   RandomObfuscator obfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
 
-  // Collect all binaries used by entries into the inner header pool.
+  // Collect all binaries used by entries into the inner header pool. A set of
+  // seen binaries (shared_ptr hashing compares the pointee address) makes the
+  // deduplication O(n); the vector preserves the first-occurrence order so the
+  // pool references stay stable.
   xml_.binary_pool().clear();
   std::vector<std::shared_ptr<Binary>> ordered_binaries;
+  std::unordered_set<std::shared_ptr<Binary>> seen_binaries;
   const auto collect = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
     for (const auto& entry : group->Entries()) {
       const auto collect_entry = [&](const std::shared_ptr<Entry>& e) -> void {
         for (const auto& att : e->attachments()) {
           if (auto binary = att->binary()) {
-            bool found = false;
-            for (const auto& existing : ordered_binaries) {
-              if (existing == binary) {
-                found = true;
-                break;
-              }
-            }
-            if (!found)
+            if (seen_binaries.insert(binary).second)
               ordered_binaries.push_back(binary);
           }
         }
