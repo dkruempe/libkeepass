@@ -66,6 +66,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Introduced `keepass::detail::constant_time_eq` (backed by OpenSSL's
+  constant-time `CRYPTO_memcmp`) and switched every secret and
+  integrity-critical comparison to it: the KDBX4 stored-header HMAC, the
+  KDBX3/4 header-hash, content-start-byte and hashed/HMAC-block checks, the
+  KDB content-hash (password) check, `secure_string` equality and the
+  derived-key zero check (see `test/constant_time.cc`)
+- Centralized the duplicated `WipeStream`/`WipeBuffer` helpers into the shared
+  internal header `libkeepass/detail/secure_io.hh` with unit tests in
+  `test/secure.cc`
 - KDBX 4 export deduplicates the binary pool in O(n) instead of O(n²),
   speeding up `Save`/`Export4` for databases with many shared attachments
 - Migrated the `kpx` CLI to the unified `KeePass` API

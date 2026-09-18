@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 #include "libkeepass/binary.hh"
+#include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/secure.hh"
 #include "libkeepass/security.hh"
@@ -302,3 +303,40 @@ TEST(AttachmentTest, DeleteBinaryPropertyRemovesAttachment) {
   EXPECT_TRUE(entry.attachments().empty());
   EXPECT_TRUE(entry.get_binary_property("file.bin").empty());
 }
+
+TEST(WipeStreamTest, WipesStreamContents) {
+  std::stringstream stream;
+  stream << std::string(static_cast<std::size_t>(10) * 1024, '\xA5');
+  ASSERT_EQ(stream.str().size(), 10U * 1024);
+
+  keepass::detail::WipeStream(stream);
+
+  std::string wiped = stream.str();
+  ASSERT_EQ(wiped.size(), 10U * 1024);
+  for (char byte : wiped)
+    EXPECT_EQ(byte, 0);
+}
+
+TEST(WipeStreamTest, HandlesEmptyStream) {
+  std::stringstream stream;
+  keepass::detail::WipeStream(stream);
+  EXPECT_TRUE(stream.str().empty());
+}
+
+TEST(WipeBufferTest, WipesVector) {
+  std::vector<uint8_t> data(4096, 0xAA);
+  keepass::detail::WipeBuffer(&data);
+  EXPECT_EQ(data.size(), 4096U);
+  for (uint8_t byte : data)
+    EXPECT_EQ(byte, 0);
+}
+
+TEST(WipeBufferTest, WipesString) {
+  std::string str(4096, 'x');
+  keepass::detail::WipeBuffer(&str);
+  EXPECT_EQ(str.size(), 4096U);
+  for (char byte : str)
+    EXPECT_EQ(byte, 0);
+}
+
+TEST(WipeBufferTest, HandlesNull) { keepass::detail::WipeBuffer<std::vector<uint8_t>>(nullptr); }

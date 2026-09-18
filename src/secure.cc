@@ -19,6 +19,8 @@
 
 #include "libkeepass/secure.hh"
 
+#include "libkeepass/detail/constant_time.hh"
+
 #include <cstdlib>
 #include <new>
 #include <ostream>
@@ -76,9 +78,10 @@ void secure_free(void* data, std::size_t size) noexcept {
 
 namespace {
 
-/// Returns whether two byte ranges of equal length are identical.
+/// Returns whether two byte ranges of equal length are identical using a
+/// constant-time comparison.
 bool ByteEqual(const char* a, std::size_t a_size, const char* b, std::size_t b_size) {
-  return a_size == b_size && (a_size == 0 || std::memcmp(a, b, a_size) == 0);
+  return keepass::detail::constant_time_eq(a, a_size, b, b_size);
 }
 
 } // namespace

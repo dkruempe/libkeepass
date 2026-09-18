@@ -27,7 +27,7 @@ few hot spots dominate memory and time.
 
 ### P1 - Remove the whole-file buffer in `KeePass::Open(std::istream&)`
 > ⚡
-- `src/keepass.cc:58` reads the *entire* input into a `std::string` just to
+- `src/keepass.cc:61` reads the *entire* input into a `std::string` just to
   sniff the 8-byte format signature. For large databases this negates the
   streaming work done for decryption and doubles peak memory.
 - **Plan:** peek the signature from the stream (buffer only the first 12
@@ -35,7 +35,7 @@ few hot spots dominate memory and time.
   the in-memory fallback only for genuinely non-seekable streams.
 
 ### P1 - Single-pass, memory-bounded export
-- `KdbxFile::Export3`/`Export4` (`src/kdbx.cc:574`, `src/kdbx.cc:651`) chain
+- `KdbxFile::Export3`/`Export4` (`src/kdbx.cc:575`, `src/kdbx.cc:652`) chain
   several `std::stringstream`s (`inner_header_stream`, `plain_stream`,
   `cipher_input`, `hmac_input`) so the plaintext *and* a ciphertext copy are
   resident at the same time (~4× payload peak).
@@ -51,15 +51,11 @@ few hot spots dominate memory and time.
   inner header at once.
 
 ### P2 - Export benchmark and performance regression tracking
-- `test/benchmark.cc` only measures **import**. Add export timing and peak
-  memory (or approximate resident set via `getrusage`), and store baselines
-  in `test/benchmark_baseline.json`; CI warns on significant deviation.
-
-### P2 - Deduplicate the binary pool in O(n)
-- [x] `KdbxFile::Export4` scanned the collected binaries with a nested loop
-  (`src/kdbx.cc:744`) - O(n²) for databases with many attachments/entries.
-  Replaced with a `shared_ptr` identity set (O(n)), preserving
-  first-occurrence order.
+- `test/benchmark.cc` only measures **import** and nothing asserts
+  performance. Add export timing and peak memory (or approximate resident set
+  via `getrusage`), store baselines in `test/benchmark_baseline.json`, and add
+  a CI step that fails (or files an issue) on a >X% regression vs. the
+  baseline, using a dedicated runner so numbers stay comparable.
 
 ### P2 - Vectorize hot byte loops
 - The inner random-stream XOR loop in `RandomObfuscator::Process`
@@ -80,12 +76,15 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 
 ### P0 - Constant-time comparisons everywhere secrets are compared
 > ⚡
-- The stored-header HMAC is compared with `std::memcmp` (`src/kdbx.cc:329`),
-  but `secure_string` equality, the header hash comparison (`src/kdbx.cc:293`)
-  and `Key` comparison paths use early-exit byte comparisons.
-- **Plan:** introduce a `constant_time_eq` helper backed by
-  `CRYPTO_memcmp` (already linked via OpenSSL) and use it for all secret or
-  integrity-critical comparisons.
+- [x] All secret and integrity-critical comparisons now go through
+  `keepass::detail::constant_time_eq`
+  (`src/include/libkeepass/detail/constant_time.hh`), backed by
+  `CRYPTO_memcmp`: the KDBX4 stored-header HMAC (`src/kdbx.cc`), the KDBX3/4
+  header-hash, content-start-byte and per-block verification (`src/kdbx.cc`,
+  `src/stream.cc`), the KDB content-hash/password check (`src/kdb.cc`),
+  `secure_string` equality (`src/secure.cc`) and the derived-key zero check
+  (`src/key.cc`).
+- Unit tests in `test/constant_time.cc`.
 
 ### P1 - Bound decompressed payload size (zip-bomb protection)
 - gzip/hashed-block streams can expand a small database into a huge XML DOM.
@@ -120,25 +119,22 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   Dependabot for Conan/CMake/CI files. Keep the existing CodeQL workflow, and
   make sure the nightly security scan covers the CLI and tests.
 
-### P3 - Sanitizer-based CI gate
-- Run the full suite under ASan+UBSan (Linux) and LSan in CI so memory bugs
-  in new code are caught automatically (see also §6).
-
 ---
 
 ## 3. Architecture
 
 ### P1 - Centralize duplicated secure/stream helpers
 > ⚡
-- `WipeStream`/`WipeBuffer` are duplicated verbatim in `src/kdbx.cc:58`,
-  `src/kdbx_header.cc:39` and likely `src/kdb.cc`. Move them into a shared
-  internal header (e.g. `src/include/libkeepass/detail/secure_io.hh`) and add
-  unit tests.
+- [x] `WipeStream`/`WipeBuffer` were duplicated verbatim in `src/kdbx.cc`,
+  `src/kdbx_header.cc`, `src/kdb.cc` and `src/kdbx_xml.cc`. They now live in
+  the shared internal header `src/include/libkeepass/detail/secure_io.hh`
+  (`keepass::detail`) and are used by the KDB, KDBX and KDBX XML/header codecs.
+- Unit tests in `test/secure.cc`.
 
 ### P1 - Split the monoliths
 - Large translation units hurt review and testing:
   - `src/kdbx_xml.cc` (~1080 lines),
-  - `src/kdbx.cc` (~887),
+  - `src/kdbx.cc` (~885),
   - `src/kdb.cc` (~828),
   - `src/cipher.cc` (~772),
   - `cli/kpx.cc` (~800).
@@ -178,11 +174,15 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 ## 4. Modularity
 
 ### P1 - Split the `kpx` CLI into reusable components
-- Extract argument parsing, the output formatters (text/JSON/CSV) and the
+- Extract argument parsing, the remaining output formatters (CSV) and the
   edit commands (`add`/`update`/`rm`) so the CLI becomes a thin driver.
-- **Plan:** move JSON/CSV serialization into the library as first-class
-  `Database::ToJson(Format)`/`ToCsv` (format-tunable) so consumers do not need
-  the CLI binary.
+- **Status:** `ToJson()` is already public on `Database`/`Group`
+  (`src/include/libkeepass/database.hh:321`,
+  `src/include/libkeepass/group.hh:264`), but CSV output is still implemented
+  inside the CLI (`cli/kpx.cc:523`).
+- **Plan:** promote CSV serialization into the library as first-class
+  `Database::ToCsv(Format)` (format-tunable) so consumers do not need the CLI
+  binary.
 
 ### P2 - Pluggable cipher/KDF registry
 - Model ciphers and KDFs behind factory interfaces so external consumers can
@@ -241,19 +241,21 @@ Most-wanted commands that users of a KeePass tool expect:
 - `kpx otp` - display/export TOTP seeds stored in custom fields.
 
 ### P2 - CLI output improvements
-- Document the JSON/CSV field schema explicitly; make CSV escaping robust
-  (RFC 4180), support `--include-attachments`/base64 and a machine-readable
-  `--format json` error output (structured errors).
+- CSV escaping is already RFC 4180-quoted (`CsvField`, `cli/kpx.cc:506`).
+  Remaining: document the JSON/CSV field schema explicitly, support
+  `--include-attachments`/base64 and a machine-readable `--format json` error
+  output (structured errors).
 
 ### P2 - Better diagnostics and consistent exit codes
 - Print context ("while parsing group X", "offset 0x1234") on failures and
   document a stable exit-code mapping per error category.
 
 ### P2 - API ergonomics
-- `Key::FromStream`/`FromBytes` for in-memory keyfiles, `KeePass::Open`
-  overload taking a `const uint8_t*`/size pair, typed attachment accessors
-  and automatic invalidation of the cached transformed key when KDF
-  parameters are mutated on the model.
+- Automatic invalidation of the cached transformed key on KDF parameter
+  mutation is already implemented (`src/include/libkeepass/database.hh`).
+  Remaining: `Key::FromStream`/`FromBytes` for in-memory keyfiles, a
+  `KeePass::Open` overload taking a `const uint8_t*`/size pair and typed
+  attachment accessors.
 
 ### P2 - Documentation and migration guides
 - Format × feature support matrix (KDB / KDBX3 / KDBX4 × ciphers/KDFs/
@@ -294,11 +296,6 @@ Most-wanted commands that users of a KeePass tool expect:
 - Extend `test/robustness.cc` with a generated fixture set: truncated,
   oversized, unknown field ids, duplicate header fields, deep nesting, huge
   declared sizes, zip bombs, HMAC tampering and CBC bit-flips.
-
-### P2 - Benchmarks as regression guard
-- Baseline `test/benchmark_baseline.json`, exported scenario timing, and a CI
-  step that fails (or files an issue) on >X% regression vs. the baseline. Use
-  a dedicated runner to keep numbers comparable.
 
 ### P3 - Concurrency & resource tests
 - Concurrent open of the same file, no leakage of the cached transformed key

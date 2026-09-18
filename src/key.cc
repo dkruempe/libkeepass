@@ -39,7 +39,10 @@ namespace {
 
 /// Returns whether a secure buffer contains only zero bytes.
 bool IsZeroKey(const SecureBuffer<32>& key) {
-  return std::all_of(key.begin(), key.end(), [](uint8_t byte) { return byte == 0; });
+  uint8_t diff = 0;
+  for (uint8_t byte : key)
+    diff |= byte;
+  return diff == 0;
 }
 
 /// Decodes a single hexadecimal digit.
