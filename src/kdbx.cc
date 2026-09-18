@@ -21,9 +21,9 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -36,6 +36,8 @@
 #endif
 
 #include "libkeepass/cipher.hh"
+#include "libkeepass/detail/constant_time.hh"
+#include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
 #include "libkeepass/io.hh"
@@ -53,34 +55,10 @@ namespace keepass {
 
 namespace {
 
-// Zeroizes the buffered content of a stringstream in place, so that
-// decrypted plaintext does not linger in the heap after parsing.
-void WipeStream(std::stringstream& stream) {
-  std::streambuf* buffer = stream.rdbuf();
-  std::streamsize size =
-      buffer->pubseekoff(0, std::ios_base::end, std::ios_base::in | std::ios_base::out);
-  buffer->pubseekoff(0, std::ios_base::beg, std::ios_base::in | std::ios_base::out);
-
-  static constexpr std::streamsize kChunkSize = 4096;
-  char zeros[kChunkSize] = {};
-  while (size > 0) {
-    std::streamsize chunk = size < kChunkSize ? size : kChunkSize;
-    if (buffer->sputn(zeros, chunk) != chunk)
-      return;
-    size -= chunk;
-  }
-}
-
-// Zeroizes the contents of a contiguous container (std::string, std::string
-// view or std::vector<char/uint8_t>) in place.
-// std::string_view::data() is const even in C++17, so cast it away for the
-// wipe; writing zeros never invalidates the container invariants.
-template <typename Container> void WipeBuffer(Container* buffer) {
-  if (buffer != nullptr && !buffer->empty()) {
-    secure_zero(const_cast<typename Container::value_type*>(buffer->data()),
-                buffer->size() * sizeof(typename Container::value_type));
-  }
-}
+// WipeStream/WipeBuffer are shared with the other format codecs to keep the
+// sensitive-data wiping logic in one place; see detail/secure_io.hh.
+using keepass::detail::WipeBuffer;
+using keepass::detail::WipeStream;
 
 } // namespace
 
@@ -228,7 +206,8 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   std::array<uint8_t, 32> content_start_bytes_tst{};
   content.read(reinterpret_cast<char*>(content_start_bytes_tst.data()),
                content_start_bytes_tst.size());
-  if (!content.good() || content_start_bytes != content_start_bytes_tst)
+  if (!content.good() ||
+      !keepass::detail::constant_time_eq(content_start_bytes, content_start_bytes_tst))
     throw PasswordError();
 
   // Prepare deobfuscation stream.
@@ -259,7 +238,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   WipeStream(content);
 
   // Validate header hash.
-  if (xml_.header_hash() != header_hash)
+  if (!keepass::detail::constant_time_eq(xml_.header_hash(), header_hash))
     throw FormatError("Header checksum error in KDBX.");
 
   return db;
@@ -290,7 +269,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   const std::array<uint8_t, 32> stored_header_hash = consume<std::array<uint8_t, 32>>(src);
   const std::array<uint8_t, 32> stored_header_hmac = consume<std::array<uint8_t, 32>>(src);
 
-  if (stored_header_hash != header_hash)
+  if (!keepass::detail::constant_time_eq(stored_header_hash, header_hash))
     throw FormatError("Header checksum error in KDBX 4 database.");
 
   // Produce the transformed key used for both the final encryption key and
@@ -326,8 +305,8 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   HMAC(EVP_sha256(), header_hmac_key.data(), static_cast<int>(header_hmac_key.size()),
        reinterpret_cast<const unsigned char*>(header_data.data()),
        KEEPASS_HMAC_DATA_LEN(header_data.size()), computed_hmac, &computed_hmac_len);
-  if (computed_hmac_len != stored_header_hmac.size() ||
-      std::memcmp(computed_hmac, stored_header_hmac.data(), stored_header_hmac.size()) != 0) {
+  if (!keepass::detail::constant_time_eq(computed_hmac, computed_hmac_len,
+                                         stored_header_hmac.data(), stored_header_hmac.size())) {
     throw PasswordError();
   }
 
@@ -738,22 +717,19 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   std::array<uint8_t, 32> inner_random_stream_key = random_array<32>();
   RandomObfuscator obfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
 
-  // Collect all binaries used by entries into the inner header pool.
+  // Collect all binaries used by entries into the inner header pool. A set of
+  // seen binaries (shared_ptr hashing compares the pointee address) makes the
+  // deduplication O(n); the vector preserves the first-occurrence order so the
+  // pool references stay stable.
   xml_.binary_pool().clear();
   std::vector<std::shared_ptr<Binary>> ordered_binaries;
+  std::unordered_set<std::shared_ptr<Binary>> seen_binaries;
   const auto collect = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
     for (const auto& entry : group->Entries()) {
       const auto collect_entry = [&](const std::shared_ptr<Entry>& e) -> void {
         for (const auto& att : e->attachments()) {
           if (auto binary = att->binary()) {
-            bool found = false;
-            for (const auto& existing : ordered_binaries) {
-              if (existing == binary) {
-                found = true;
-                break;
-              }
-            }
-            if (!found)
+            if (seen_binaries.insert(binary).second)
               ordered_binaries.push_back(binary);
           }
         }

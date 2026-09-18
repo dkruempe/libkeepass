@@ -29,6 +29,8 @@
 
 #include "libkeepass/cipher.hh"
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/constant_time.hh"
+#include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
@@ -49,35 +51,10 @@ const uint32_t kKdbFlagTwofish = 0x00000008;
 
 namespace {
 
-// Zeroizes the buffered content of a stringstream in place, so that the
-// decrypted plaintext database does not linger in the heap after parsing or
-// encrypting.
-void WipeStream(std::stringstream& stream) {
-  std::streambuf* buffer = stream.rdbuf();
-  std::streamsize size =
-      buffer->pubseekoff(0, std::ios_base::end, std::ios_base::in | std::ios_base::out);
-  buffer->pubseekoff(0, std::ios_base::beg, std::ios_base::in | std::ios_base::out);
-
-  static constexpr std::streamsize kChunkSize = 4096;
-  char zeros[kChunkSize] = {};
-  while (size > 0) {
-    std::streamsize chunk = size < kChunkSize ? size : kChunkSize;
-    if (buffer->sputn(zeros, chunk) != chunk)
-      return;
-    size -= chunk;
-  }
-}
-
-// Zeroizes the contents of a contiguous container (std::string or
-// std::vector<char/uint8_t>) in place. std::string_view::data() is const even
-// in C++17, so cast it away for the wipe; writing zeros never
-// invalidates the container invariants.
-template <typename Container> void WipeBuffer(Container* buffer) {
-  if (buffer != nullptr && !buffer->empty()) {
-    secure_zero(const_cast<typename Container::value_type*>(buffer->data()),
-                buffer->size() * sizeof(typename Container::value_type));
-  }
-}
+// WipeStream/WipeBuffer are shared with the other format codecs to keep the
+// sensitive-data wiping logic in one place; see detail/secure_io.hh.
+using keepass::detail::WipeBuffer;
+using keepass::detail::WipeStream;
 
 } // namespace
 
@@ -635,7 +612,7 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   content.seekg(0, std::ios::beg);
 
   // Check if contents was successfully decrypted using the specified password.
-  if (content_hash != header.content_hash)
+  if (!keepass::detail::constant_time_eq(content_hash, header.content_hash))
     throw PasswordError();
 
   // Read groups and entries.

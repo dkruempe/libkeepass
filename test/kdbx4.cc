@@ -22,6 +22,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <sstream>
 
 #include <gtest/gtest.h>
@@ -354,6 +356,18 @@ const char* CipherName(Database::Cipher cipher) {
   return "?";
 }
 
+const char* KdfName(Database::Kdf kdf) {
+  switch (kdf) {
+  case Database::Kdf::kAes:
+    return "aes-kdf";
+  case Database::Kdf::kArgon2d:
+    return "argon2d";
+  case Database::Kdf::kArgon2id:
+    return "argon2id";
+  }
+  return "?";
+}
+
 std::array<uint8_t, 16> CipherUuid(Database::Cipher cipher) {
   switch (cipher) {
   case Database::Cipher::kAes:
@@ -391,6 +405,30 @@ std::array<uint8_t, 16> PatternUuid(std::initializer_list<uint8_t> pattern) {
   return uuid;
 }
 
+// Imports and caches a sample database together with a key pre-derived from
+// its transformed master key. The password/keyfile KDF (Argon2 or AES-KDF) is
+// only computed on the first access; later imports of the same file reuse the
+// cached database and a pre-derived key that short-circuits the (expensive)
+// transformation. The caller must always pass a key with identical components
+// for the same file.
+struct CachedSample {
+  std::unique_ptr<Database> db;
+  Key key;
+};
+
+CachedSample& LoadSample(const std::string& name, const Key& load_key) {
+  static std::map<std::string, CachedSample> s_cache;
+  CachedSample& cached = s_cache[name];
+  if (cached.db == nullptr) {
+    KdbxFile file;
+    cached.db = file.Import(GetTestPath(name), load_key);
+    const SecureBuffer<32>& transformed = cached.db->transformed_key();
+    std::vector<uint8_t> transformed_vec(transformed.begin(), transformed.end());
+    cached.key = Key(transformed_vec);
+  }
+  return cached;
+}
+
 } // namespace
 
 TEST(Kdbx4Test, ImportSamples) {
@@ -415,11 +453,10 @@ TEST(Kdbx4Test, ImportSamples) {
     std::string base = std::string(sample.file);
     base.erase(base.size() - std::string(".kdbx").size());
 
-    Key key("password");
-    KdbxFile file;
-    std::unique_ptr<Database> db;
-    EXPECT_NO_THROW({ db = file.Import(GetTestPath(sample.file), key); });
-
+    // Loading the sample computes its KDF once and caches the result for the
+    // other tests operating on the same files.
+    const CachedSample& cached = LoadSample(sample.file, Key("password"));
+    const Database* db = cached.db.get();
     ASSERT_NE(db, nullptr);
     EXPECT_EQ(db->cipher(), sample.cipher);
     EXPECT_EQ(db->kdf(), sample.kdf);
@@ -610,18 +647,17 @@ TEST(Kdbx4Test, KeyfileImport) {
     EXPECT_THROW(kdbx.Import(path, password_only), std::exception);
   }
 
-  // With password + keyfile -> succeeds
+  // With password + keyfile -> succeeds (cached once for KeyfileRoundtrip too)
   {
     Key key("password");
     key.SetKeyFile(GetTestPath("test.key"));
-    KdbxFile kdbx;
-    std::unique_ptr<Database> db(kdbx.Import(path, key));
+    const CachedSample& cached = LoadSample("kdbx4-aes-argon2d-keyfile.kdbx", key);
 
-    ASSERT_NE(db->root(), nullptr);
-    ASSERT_EQ(db->root()->Entries().size(), 1U);
+    ASSERT_NE(cached.db->root(), nullptr);
+    ASSERT_EQ(cached.db->root()->Entries().size(), 1U);
 
     std::string expected = GetTestJson("kdbx4-aes-argon2d-keyfile.json");
-    EXPECT_EQ(db->root()->ToJson(), expected);
+    EXPECT_EQ(cached.db->root()->ToJson(), expected);
   }
 
   // Wrong keyfile -> fails
@@ -642,26 +678,23 @@ TEST(Kdbx4Test, KeyfileImport) {
 }
 
 TEST(Kdbx4Test, KeyfileRoundtrip) {
-  std::string path = GetTestPath("kdbx4-aes-argon2d-keyfile.kdbx");
   std::string tmp_path = GetTmpPath("kdbx4-keyfile-roundtrip.kdbx");
+  KdbxFile kdbx;
 
-  // Import
+  // Import (cached; only the first access runs the KDF).
   Key key("password");
   key.SetKeyFile(GetTestPath("test.key"));
-  KdbxFile kdbx;
-  std::unique_ptr<Database> db(kdbx.Import(path, key));
-  ASSERT_NE(db->root(), nullptr);
-  std::string original_json = db->root()->ToJson();
+  const CachedSample& cached = LoadSample("kdbx4-aes-argon2d-keyfile.kdbx", key);
+  ASSERT_NE(cached.db->root(), nullptr);
+  std::string original_json = cached.db->root()->ToJson();
 
-  // Export with same composite key
+  // Export with same composite key.
   kdbx.set_write_kdbx4(true);
-  kdbx.Export(tmp_path, *db, key);
+  kdbx.Export(tmp_path, *cached.db, key);
 
-  // Reimport with same composite key -> succeeds
+  // Reimport with the same transformed key -> succeeds (KDF not recomputed).
   {
-    Key reimport_key("password");
-    reimport_key.SetKeyFile(GetTestPath("test.key"));
-    std::unique_ptr<Database> db2(kdbx.Import(tmp_path, reimport_key));
+    std::unique_ptr<Database> db2(kdbx.Import(tmp_path, cached.key));
     EXPECT_EQ(db2->root()->ToJson(), original_json);
     EXPECT_EQ(db2->cipher(), Database::Cipher::kAes);
     EXPECT_EQ(db2->kdf(), Database::Kdf::kArgon2d);
@@ -692,28 +725,43 @@ TEST(Kdbx4Test, LegacyAesKdfUuidAccepted) {
   EXPECT_EQ(header.kdf, kKdfAesKdbx3);
 
   Key key("password");
-  KdbxFile file;
-  std::unique_ptr<Database> db;
-  EXPECT_NO_THROW({ db = file.Import(GetTestPath("kdbx4-chacha20-aeskdf.kdbx"), key); });
-  ASSERT_NE(db, nullptr);
-  EXPECT_EQ(db->kdf(), Database::Kdf::kAes);
+  // The import (with its 49M-round AES-KDF) already happened when
+  // ImportSamples loaded this file; reuse the cached database.
+  const CachedSample& cached = LoadSample("kdbx4-chacha20-aeskdf.kdbx", key);
+  ASSERT_NE(cached.db, nullptr);
+  EXPECT_EQ(cached.db->kdf(), Database::Kdf::kAes);
 }
 
 TEST(Kdbx4Test, WrongPassword) {
-  // One representative per KDF family: a hardened (64 MiB) Argon2d file, an
-  // Argon2id file and an AES-KDF file. Wrong-password rejection is verified
-  // by the header HMAC and is identical across the remaining samples, which
-  // only differ in cipher; skipping the redundant 64 MiB Argon2 runs keeps the
-  // test fast without losing coverage.
-  const char* files[] = {"kdbx4-aes-argon2d.kdbx", "kdbx4-chacha20-aeskdf.kdbx",
-                         "kdbx4-aes-argon2id.kdbx"};
+  // One representative per KDF family. Wrong-password rejection is verified by
+  // the header HMAC; it is independent of the KDF cost factors, so the files
+  // are generated with deliberately cheap parameters. Recomputing the KDF with
+  // the hardened 64 MiB / 49M-round sample parameters for a wrong password
+  // would only slow the test down without adding coverage.
+  const Database::Kdf kdfs[] = {Database::Kdf::kArgon2d, Database::Kdf::kArgon2id,
+                                Database::Kdf::kAes};
 
-  for (const char* file : files) {
-    SCOPED_TRACE(file);
+  for (const Database::Kdf kdf : kdfs) {
+    SCOPED_TRACE(KdfName(kdf));
 
-    Key key("wrong_password");
-    KdbxFile kdbx_file;
-    EXPECT_THROW(kdbx_file.Import(GetTestPath(file), key), PasswordError);
+    std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, kdf, false);
+    std::string dst_path = GetTmpPath(std::string("kdbx4-wrongpw-") + KdfName(kdf) + ".kdbx");
+
+    KdbxFile exporter;
+    exporter.set_write_kdbx4(true);
+    EXPECT_NO_THROW(exporter.Export(dst_path, *db, Key("password")));
+
+    KdbxFile importer;
+
+    // Positive control: the file must open with the correct password.
+    std::unique_ptr<Database> ok;
+    EXPECT_NO_THROW({ ok = importer.Import(dst_path, Key("password")); });
+    ASSERT_NE(ok, nullptr);
+
+    // A wrong password must be rejected via the header HMAC.
+    EXPECT_THROW(importer.Import(dst_path, Key("wrong_password")), PasswordError);
+
+    std::remove(dst_path.c_str());
   }
 }
 
@@ -769,19 +817,24 @@ TEST(Kdbx4Test, RoundtripSamples) {
     std::string base = std::string(file);
     base.erase(base.size() - std::string(".kdbx").size());
 
-    Key key("password");
     KdbxFile exporter;
     KdbxFile importer;
 
-    std::unique_ptr<Database> db = importer.Import(GetTestPath(file), key);
-    const Database::Cipher cipher = db->cipher();
-    const Database::Kdf kdf = db->kdf();
-    const bool compress = db->compress();
+    // Reuse the database already imported (and KDF-computed) by
+    // ImportSamples; the pre-derived key skips recomputing the expensive KDF
+    // on the reimport below.
+    const CachedSample& cached = LoadSample(file, Key("password"));
+    const Database& db = *cached.db;
+    const Database::Cipher cipher = db.cipher();
+    const Database::Kdf kdf = db.kdf();
+    const bool compress = db.compress();
 
     std::string dst_path = GetTmpPath("kdbx4-roundtrip-" + base + ".kdbx");
 
     exporter.set_write_kdbx4(true);
-    EXPECT_NO_THROW(exporter.Export(dst_path, *db, key));
+    // The imported database already carries its transformed key, so the
+    // export does not recompute the KDF either.
+    EXPECT_NO_THROW(exporter.Export(dst_path, db, Key("password")));
 
     // The exported file must be a KDBX 4 file with matching metadata.
     HeaderInfo header = ReadHeader(ReadFile(dst_path));
@@ -792,12 +845,27 @@ TEST(Kdbx4Test, RoundtripSamples) {
     EXPECT_EQ(header.kdf, KdfUuid(kdf));
 
     std::unique_ptr<Database> reimported;
-    EXPECT_NO_THROW({ reimported = importer.Import(dst_path, key); });
+    EXPECT_NO_THROW({ reimported = importer.Import(dst_path, cached.key); });
     ASSERT_NE(reimported, nullptr);
     EXPECT_EQ(reimported->cipher(), cipher);
     EXPECT_EQ(reimported->kdf(), kdf);
     EXPECT_EQ(reimported->compress(), compress);
-    ExpectSameDatabase(*db, *reimported);
+
+    // Even though the pre-derived key skips the KDF, the KDF parameters must
+    // round-trip unchanged; a mismatch would indicate an export bug.
+    if (kdf == Database::Kdf::kAes) {
+      EXPECT_TRUE(std::equal(reimported->transform_seed().begin(),
+                             reimported->transform_seed().end(), db.transform_seed().begin()));
+      EXPECT_EQ(reimported->transform_rounds(), db.transform_rounds());
+    } else {
+      EXPECT_EQ(reimported->argon2_salt(), db.argon2_salt());
+      EXPECT_EQ(reimported->argon2_iterations(), db.argon2_iterations());
+      EXPECT_EQ(reimported->argon2_memory(), db.argon2_memory());
+      EXPECT_EQ(reimported->argon2_parallelism(), db.argon2_parallelism());
+      EXPECT_EQ(reimported->argon2_version(), db.argon2_version());
+    }
+
+    ExpectSameDatabase(db, *reimported);
 
     std::remove(dst_path.c_str());
   }

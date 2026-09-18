@@ -33,6 +33,7 @@
 #define KEEPASS_HMAC_DATA_LEN(x) (x)
 #endif
 
+#include "libkeepass/detail/constant_time.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
 #include "libkeepass/secure.hh"
@@ -87,7 +88,7 @@ int hashed_istreambuf::underflow() {
     }
 
     // Verify the block integrity.
-    if (GetBlockHash() != header.block_hash)
+    if (!keepass::detail::constant_time_eq(GetBlockHash(), header.block_hash))
       throw IoError("Block checksum error.");
 
     setg(block_.data(), block_.data(), block_.data() + block_.size());
@@ -218,7 +219,7 @@ int hmac_istreambuf::underflow() {
 
     std::array<uint8_t, 32> computed{};
     std::copy(digest, digest + 32, computed.begin());
-    if (block_hmac != computed)
+    if (!keepass::detail::constant_time_eq(block_hmac, computed))
       throw IoError("Block checksum error.");
 
     secure_zero(key_64.data(), key_64.size());

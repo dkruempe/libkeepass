@@ -23,6 +23,7 @@
 #include <cassert>
 #include <sstream>
 
+#include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/io.hh"
 #include "libkeepass/kdbx_kdf.hh"
@@ -33,33 +34,10 @@ namespace keepass {
 
 namespace {
 
-// Zeroizes the buffered content of a stringstream in place, so that transient
-// header material (master seed, transform seed, inner random stream key) does
-// not linger in the heap after parsing.
-void WipeStream(std::stringstream& stream) {
-  std::streambuf* buffer = stream.rdbuf();
-  std::streamsize size =
-      buffer->pubseekoff(0, std::ios_base::end, std::ios_base::in | std::ios_base::out);
-  buffer->pubseekoff(0, std::ios_base::beg, std::ios_base::in | std::ios_base::out);
-
-  static constexpr std::streamsize kChunkSize = 4096;
-  char zeros[kChunkSize] = {};
-  while (size > 0) {
-    std::streamsize chunk = size < kChunkSize ? size : kChunkSize;
-    if (buffer->sputn(zeros, chunk) != chunk)
-      return;
-    size -= chunk;
-  }
-}
-
-// Zeroizes the contents of a contiguous container (std::string or
-// std::vector<char/uint8_t>) in place.
-template <typename Container> void WipeBuffer(Container* buffer) {
-  if (buffer != nullptr && !buffer->empty()) {
-    secure_zero(const_cast<typename Container::value_type*>(buffer->data()),
-                buffer->size() * sizeof(typename Container::value_type));
-  }
-}
+// WipeStream/WipeBuffer are shared with the other format codecs to keep the
+// sensitive-data wiping logic in one place; see detail/secure_io.hh.
+using keepass::detail::WipeBuffer;
+using keepass::detail::WipeStream;
 
 constexpr std::uint32_t kKdbxVersionCriticalMin = 0x00030001;
 constexpr std::uint32_t kKdbxVersion4_1 = 0x00040001;
