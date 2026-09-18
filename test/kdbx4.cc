@@ -356,6 +356,18 @@ const char* CipherName(Database::Cipher cipher) {
   return "?";
 }
 
+const char* KdfName(Database::Kdf kdf) {
+  switch (kdf) {
+  case Database::Kdf::kAes:
+    return "aes-kdf";
+  case Database::Kdf::kArgon2d:
+    return "argon2d";
+  case Database::Kdf::kArgon2id:
+    return "argon2id";
+  }
+  return "?";
+}
+
 std::array<uint8_t, 16> CipherUuid(Database::Cipher cipher) {
   switch (cipher) {
   case Database::Cipher::kAes:
@@ -457,7 +469,6 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   // kdbx41-all.kdbx was generated with KeePass 2.57 from a database that uses
   // every KDBX 4.1 feature, so the file must carry version 0x00040001.
   const std::string path = GetTestPath("kdbx41/kdbx41-all.kdbx");
-  const std::array<uint8_t, 16> zero_uuid = {{0}};
 
   HeaderInfo header = ReadHeader(ReadFile(path));
   EXPECT_EQ(header.version, kKdbxVersion4_1);
@@ -484,13 +495,15 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   // KeePass stores tags semicolon-separated ("banking;finance"); the public
   // API contract is space-separated, which is what the importer delivers.
   EXPECT_EQ(finance->tags(), "banking finance");
-  EXPECT_EQ(finance->previous_parent_group(), zero_uuid);
+  EXPECT_FALSE(finance->previous_parent_group().has_value());
 
   std::shared_ptr<Group> personal = root->Groups()[1];
   ASSERT_NE(personal, nullptr);
   EXPECT_EQ(personal->name(), "Personal");
   EXPECT_EQ(personal->uuid(), PatternUuid({0x12}));
-  EXPECT_EQ(personal->previous_parent_group(), PatternUuid({0x99, 0x01}));
+  EXPECT_TRUE(personal->previous_parent_group().has_value());
+  EXPECT_EQ(personal->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(PatternUuid({0x99, 0x01}))));
 
   ASSERT_EQ(finance->Entries().size(), 1U);
   std::shared_ptr<Entry> bank = finance->Entries()[0];
@@ -501,7 +514,9 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   EXPECT_TRUE(bank->password().is_protected());
   EXPECT_EQ(bank->uuid(), PatternUuid({0x21}));
   EXPECT_FALSE(bank->quality_check());
-  EXPECT_EQ(bank->previous_parent_group(), PatternUuid({0x88, 0x02}));
+  EXPECT_TRUE(bank->previous_parent_group().has_value());
+  EXPECT_EQ(bank->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(PatternUuid({0x88, 0x02}))));
   EXPECT_TRUE(bank->expires());
   EXPECT_EQ(bank->creation_time(), 1700000100);
   std::shared_ptr<Icon> bank_icon = bank->custom_icon().lock();
@@ -515,7 +530,7 @@ TEST(Kdbx4Test, RealKeePass41AllFeatures) {
   EXPECT_EQ(plain->title()->str(), "Plain Entry");
   EXPECT_EQ(plain->username()->str(), "alice");
   EXPECT_EQ(plain->password()->str(), "plain_password");
-  EXPECT_EQ(plain->previous_parent_group(), zero_uuid);
+  EXPECT_FALSE(plain->previous_parent_group().has_value());
   EXPECT_TRUE(plain->quality_check());
   EXPECT_FALSE(plain->expires());
   EXPECT_EQ(plain->creation_time(), 1700000220);
@@ -549,7 +564,6 @@ TEST(Kdbx4Test, RealKeePass41PrevParentMigration) {
   // version 4.1; the file stays at 0x00040000 and KeePass drops the
   // PreviousParentGroup element from the 4.0 output.
   const std::string path = GetTestPath("kdbx41/kdbx41-prevparent-only.kdbx");
-  const std::array<uint8_t, 16> zero_uuid = {{0}};
 
   HeaderInfo header = ReadHeader(ReadFile(path));
   EXPECT_EQ(header.version, kKdbxVersion4);
@@ -568,7 +582,7 @@ TEST(Kdbx4Test, RealKeePass41PrevParentMigration) {
   std::shared_ptr<Group> moved = root->Groups()[0];
   ASSERT_NE(moved, nullptr);
   EXPECT_EQ(moved->name(), "Moved Group");
-  EXPECT_EQ(moved->previous_parent_group(), zero_uuid);
+  EXPECT_FALSE(moved->previous_parent_group().has_value());
   EXPECT_EQ(moved->tags(), "");
 
   ASSERT_EQ(moved->Entries().size(), 1U);
@@ -578,7 +592,7 @@ TEST(Kdbx4Test, RealKeePass41PrevParentMigration) {
   EXPECT_EQ(entry->username()->str(), "bob");
   EXPECT_EQ(entry->password()->str(), "moved_password");
   EXPECT_TRUE(entry->quality_check());
-  EXPECT_EQ(entry->previous_parent_group(), zero_uuid);
+  EXPECT_FALSE(entry->previous_parent_group().has_value());
 
   ASSERT_NE(db->meta(), nullptr);
   EXPECT_TRUE(db->meta()->icons().empty());
@@ -664,7 +678,6 @@ TEST(Kdbx4Test, KeyfileImport) {
 }
 
 TEST(Kdbx4Test, KeyfileRoundtrip) {
-  std::string path = GetTestPath("kdbx4-aes-argon2d-keyfile.kdbx");
   std::string tmp_path = GetTmpPath("kdbx4-keyfile-roundtrip.kdbx");
   KdbxFile kdbx;
 
@@ -729,15 +742,10 @@ TEST(Kdbx4Test, WrongPassword) {
                                 Database::Kdf::kAes};
 
   for (const Database::Kdf kdf : kdfs) {
-    SCOPED_TRACE(kdf == Database::Kdf::kArgon2d   ? "argon2d"
-                 : kdf == Database::Kdf::kArgon2id ? "argon2id"
-                                                   : "aes-kdf");
+    SCOPED_TRACE(KdfName(kdf));
 
     std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, kdf, false);
-    std::string dst_path =
-        GetTmpPath(kdf == Database::Kdf::kArgon2d   ? "kdbx4-wrongpw-argon2d.kdbx"
-                   : kdf == Database::Kdf::kArgon2id ? "kdbx4-wrongpw-argon2id.kdbx"
-                                                     : "kdbx4-wrongpw-aeskdf.kdbx");
+    std::string dst_path = GetTmpPath(std::string("kdbx4-wrongpw-") + KdfName(kdf) + ".kdbx");
 
     KdbxFile exporter;
     exporter.set_write_kdbx4(true);
@@ -846,7 +854,8 @@ TEST(Kdbx4Test, RoundtripSamples) {
     // Even though the pre-derived key skips the KDF, the KDF parameters must
     // round-trip unchanged; a mismatch would indicate an export bug.
     if (kdf == Database::Kdf::kAes) {
-      EXPECT_EQ(reimported->transform_seed(), db.transform_seed());
+      EXPECT_TRUE(std::equal(reimported->transform_seed().begin(),
+                             reimported->transform_seed().end(), db.transform_seed().begin()));
       EXPECT_EQ(reimported->transform_rounds(), db.transform_rounds());
     } else {
       EXPECT_EQ(reimported->argon2_salt(), db.argon2_salt());
@@ -1152,8 +1161,12 @@ TEST(Kdbx4Test, Kdbx41MetaAndTreeFeatures) {
   EXPECT_EQ(reimported->meta()->deleted_objects()[0].uuid(), deleted_uuid);
   EXPECT_EQ(reimported->meta()->deleted_objects()[0].deletion_time(), 1700000700);
 
-  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group(), icon_uuid);
-  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group(), deleted_uuid);
+  EXPECT_TRUE(reimported->root()->Entries().front()->previous_parent_group().has_value());
+  EXPECT_EQ(reimported->root()->Entries().front()->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(icon_uuid)));
+  EXPECT_TRUE(reimported->root()->Groups().front()->previous_parent_group().has_value());
+  EXPECT_EQ(reimported->root()->Groups().front()->previous_parent_group(),
+            (std::optional<std::array<uint8_t, 16>>(deleted_uuid)));
 
   std::remove(dst_path.c_str());
 }

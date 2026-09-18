@@ -9,6 +9,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Third-party interoperability for KeePassXC: real KeePassXC test-corpus
+  fixtures are imported in the new `libkeepass.compat` test binary
+  (`test/compat.cc`, fixtures under `test/data/compat/`) covering KDBX 4.0
+  (ChaCha20 + Argon2d + gzip), KDBX 3.1 protected strings and the recycle-bin
+  group layout. The verification matrix and the Strongbox analysis (16-byte
+  Argon2 salts, Argon2 `K`/`A` parameters, keyfile variants) are documented in
+  `docs/interop.md` together with the import tolerance policy.
+- The `kpx --audit` command reports weak and reused passwords. It prints text
+  by default and supports `-f json`/`-f csv`, a `--group` subtree scope and a
+  `--with-passwords` flag to include the literal password in the JSON reuse
+  section and the text output. Findings cover empty passwords, passwords below
+  the 12-character minimum, a single character class (digits- or letters-only),
+  passwords based on the title or username and entries of a common-passwords
+  list; reuse groups every occurrence of a password used by several entries.
+- Dedicated `test/key.cc` (transformed-key short circuit, keyfile parsing
+  errors, uppercase hex keyfiles, Argon2 error paths) and `test/random.cc`
+  (random-obfuscator stream processing) raise the line coverage of `key.cc`
+  and `random.cc` from 76%/72% to 82%/95%.
+
+### Fixed
+
+- The recycle-bin metadata now points to the group that actually holds the
+  recycled entries. Because `Meta` (parsed before the group tree) could
+  resolve `RecycleBinUUID`/`EntryTemplatesGroup` to a placeholder instance,
+  `ParseGroup` previously inserted a *separate* group into the UUID pool
+  (`std::map::insert` keeps the existing entry), so `Metadata::recycle_bin()`
+  returned an empty group while the tree group carried the entries.
+  `ParseGroup` now reuses a pooled placeholder when the UUID was already
+  resolved.
+
+### Changed
+
+- **Breaking:** the language standard baseline is now C++17 (previously the
+  library still declared C++11 as its minimum while CI and the documentation
+  already built with C++17). The CMake targets enforce this via
+  `target_compile_features(... cxx_std_17)`, and the Conan recipes
+  (`conanfile.py`, ConanCenter recipe) check the minimum standard in
+  `validate()`.
+- **Breaking:** `Icon::last_modification_time` and
+  `Metadata::Field::last_modification_time` now return
+  `std::optional<std::time_t>` instead of `std::time_t`; absent
+  `<LastModificationTime>` elements map to `std::nullopt` instead of 0, and
+  `set_last_modification_time(std::nullopt)` unsets the value.
+- **Breaking:** `Entry::previous_parent_group` and
+  `Group::previous_parent_group` now return
+  `std::optional<std::array<uint8_t, 16>>` instead of an all-zero array; use
+  `has_value()` to test for presence.
+- The `base64_decode` helpers now take `std::string_view`, avoiding temporary
+  `std::string` allocations when decoding pugixml node text and attribute
+  values; `KdbxXml::ParseDateTime` no longer copies its input.
+- **Breaking:** the database seeds are no longer kept on unprotected heap
+  memory. `Database::master_seed` and `Database::argon2_salt` now return
+  `const SecureBytes&`, and `Database::transform_seed` returns
+  `const SecureBuffer<32>&`; all three are erased when the database is
+  destroyed or the seed is replaced. `Key::Transform`
+  (`const SecureBuffer<32>&`) and `Key::TransformArgon2`
+  (`const SecureBytes&`) accept the secure containers directly, and
+  `SecureBytes` (a new wiped, best-effort locked dynamic byte buffer) is
+  exposed for callers that need to hold seed material.
+  A new `SecureBuffer` constructor accepts a
+  `std::array<uint8_t, N>` for callers converting existing header data.
+
+### Infrastructure
+
+- ConanCenter recipe raised to the CCI-v2 conventions (`test_package` instead
+  of `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
+  SPDX license `GPL-3.0-only`); `conan create` verified locally for both static
+  and shared variants
+
+### Docs
+
+- `docs/kdbx-parsing.md` folded into the modular architecture (`KdbxHeader`,
+  `KdbxKdf`, `KdbxXml` instead of the monolithic `KdbxFile`)
+
+## [0.3.0] - 2026-09-13
+
+### Added
+
 - Unified `KeePass` API (`libkeepass/keepass.hh`) for opening and saving
   databases: auto-detects the input format (KDB, KDBX3, KDBX4), selects the
   output format from the file extension, the database KDF/cipher or an explicit
@@ -173,7 +251,8 @@ First public release with semantic versioning.
 - Unit and integration tests covering KDB/KDBX roundtrips and key derivation
 - GitHub Pages deployment of the generated API documentation
 
-[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dkruempe/libkeepass/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dkruempe/libkeepass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.1
 [0.2.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.2.0
 [0.1.0]: https://github.com/dkruempe/libkeepass/releases/tag/v0.1.0

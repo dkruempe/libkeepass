@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <new>
 #include <ostream>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -85,6 +86,70 @@ bool ByteEqual(const char* a, std::size_t a_size, const char* b, std::size_t b_s
 }
 
 } // namespace
+
+SecureBytes::SecureBytes(const uint8_t* data, std::size_t size) { Assign(data, size); }
+
+SecureBytes::SecureBytes(const std::vector<uint8_t>& data) { Assign(data.data(), data.size()); }
+
+SecureBytes::~SecureBytes() { Clear(); }
+
+SecureBytes::SecureBytes(SecureBytes&& other) noexcept {
+  data_ = other.data_;
+  size_ = other.size_;
+  other.data_ = nullptr;
+  other.size_ = 0;
+}
+
+SecureBytes& SecureBytes::operator=(SecureBytes&& other) noexcept {
+  if (this != &other) {
+    Clear();
+    data_ = other.data_;
+    size_ = other.size_;
+    other.data_ = nullptr;
+    other.size_ = 0;
+  }
+  return *this;
+}
+
+SecureBytes& SecureBytes::operator=(const std::vector<uint8_t>& data) {
+  Assign(data.data(), data.size());
+  return *this;
+}
+
+void SecureBytes::Assign(const uint8_t* data, std::size_t size) {
+  uint8_t* new_data = static_cast<uint8_t*>(secure_alloc(size == 0 ? 1 : size));
+  if (new_data == nullptr)
+    throw std::bad_alloc();
+  if (size > 0)
+    std::memcpy(new_data, data, size);
+
+  Clear();
+  data_ = new_data;
+  size_ = size;
+}
+
+void SecureBytes::Assign(const std::vector<uint8_t>& data) { Assign(data.data(), data.size()); }
+
+void SecureBytes::Clear() noexcept {
+  if (data_ != nullptr) {
+    secure_free(data_, size_);
+    data_ = nullptr;
+    size_ = 0;
+  }
+}
+
+SecureBytes SecureBytes::Clone() const {
+  SecureBytes copy;
+  if (size_ > 0)
+    copy.Assign(data_, size_);
+  return copy;
+}
+
+bool SecureBytes::operator==(const SecureBytes& other) const {
+  if (size_ != other.size_)
+    return false;
+  return size_ == 0 || std::memcmp(data_, other.data_, size_) == 0;
+}
 
 secure_string::secure_string() { Allocate("", 0); }
 

@@ -4,11 +4,20 @@ Thanks for considering contributing to libkeepass! This document describes how t
 
 ## Getting Started
 
-The project is a C++ library (C++11 target, built with C++17 in CI) using [CMake](https://cmake.org/) and [Conan](https://conan.io/) for dependency management. The public API lives in `src/include/libkeepass/`.
+The project is a C++17 library using [CMake](https://cmake.org/) and [Conan](https://conan.io/) for dependency management. The public API lives in `src/include/libkeepass/`.
+
+### Language Standard
+
+The project requires **C++17** as its minimum and officially supported language
+standard. Dropping the earlier C++11 baseline (which had been used only as a
+declared minimum while CI and the documentation already built with C++17) makes
+`std::optional`, `std::string_view`, structured bindings and `if constexpr`
+available throughout the public API and the parser. The CMake targets enforce
+this via `target_compile_features(... cxx_std_17)`.
 
 ### Prerequisites
 
-- A C++11 compatible compiler (GCC 10+, Clang 12+, MSVC 19.20+)
+- A C++17 compatible compiler (GCC 10+, Clang 12+, MSVC 19.20+)
 - CMake >= 3.16
 - Conan 2 (`pip install "conan>=2"`)
 

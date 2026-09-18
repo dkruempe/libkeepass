@@ -34,7 +34,7 @@ endif()
 
 foreach (fuzz_target fuzz_kdbx fuzz_kdb)
     add_executable(${fuzz_target} ${fuzz_target}.cc)
-    target_compile_features(${fuzz_target} PRIVATE cxx_std_11)
+    target_compile_features(${fuzz_target} PRIVATE cxx_std_17)
     if (SANITIZER_FLAGS)
         # The fuzzer runs the library under AddressSanitizer/UBSanitizer, so
         # the runtime must be linked in as well (compile-only flags are not

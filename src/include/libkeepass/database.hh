@@ -72,15 +72,15 @@ private:
   std::shared_ptr<Group> root_;
   Cipher cipher_ = Cipher::kAes;
   Kdf kdf_ = Kdf::kAes;
-  std::vector<uint8_t> master_seed_;
+  SecureBytes master_seed_;
   std::array<uint8_t, 16> init_vector_ = {{0}};
-  std::array<uint8_t, 32> transform_seed_{{0}};
+  SecureBuffer<32> transform_seed_;
   SecureBuffer<32> inner_random_stream_key_;
   uint64_t transform_rounds_ = 8192;
   uint64_t argon2_memory_ = 0;
   uint32_t argon2_parallelism_ = 0;
   uint32_t argon2_version_ = 0;
-  std::vector<uint8_t> argon2_salt_;
+  SecureBytes argon2_salt_;
   uint64_t argon2_iterations_ = 0;
   bool compress_ = false;
   std::shared_ptr<Metadata> meta_;
@@ -112,16 +112,20 @@ public:
   }
 
   /// Returns the master seed.
-  const std::vector<uint8_t>& master_seed() const { return master_seed_; }
+  const SecureBytes& master_seed() const { return master_seed_; }
 
   /// Sets the master seed from a fixed 16-byte array.
   void set_master_seed(const std::array<uint8_t, 16>& master_seed) {
-    master_seed_.resize(16);
-    std::copy(master_seed.begin(), master_seed.end(), master_seed_.begin());
+    master_seed_.Assign(master_seed.data(), master_seed.size());
   }
 
   /// Sets the master seed from an arbitrary byte vector.
-  void set_master_seed(const std::vector<uint8_t>& master_seed) { master_seed_ = master_seed; }
+  void set_master_seed(const std::vector<uint8_t>& master_seed) {
+    master_seed_.Assign(master_seed);
+  }
+
+  /// Sets the master seed from a secure byte buffer.
+  void set_master_seed(SecureBytes master_seed) { master_seed_ = std::move(master_seed); }
 
   /// Returns the initialization vector.
   const std::array<uint8_t, 16>& init_vector() const { return init_vector_; }
@@ -130,11 +134,18 @@ public:
   void set_init_vector(const std::array<uint8_t, 16>& init_vector) { init_vector_ = init_vector; }
 
   /// Returns the transform seed used for key derivation.
-  const std::array<uint8_t, 32>& transform_seed() const { return transform_seed_; }
+  const SecureBuffer<32>& transform_seed() const { return transform_seed_; }
 
   /// Sets the transform seed, invalidating any cached transformed key.
   void set_transform_seed(const std::array<uint8_t, 32>& transform_seed) {
-    transform_seed_ = transform_seed;
+    std::memcpy(transform_seed_.data(), transform_seed.data(), transform_seed.size());
+    clear_transformed_key();
+  }
+
+  /// Sets the transform seed from a secure buffer, invalidating the cached
+  /// transformed key.
+  void set_transform_seed(const SecureBuffer<32>& transform_seed) {
+    transform_seed_ = transform_seed.Clone();
     clear_transformed_key();
   }
 
@@ -196,11 +207,18 @@ public:
   }
 
   /// Returns the Argon2 salt.
-  const std::vector<uint8_t>& argon2_salt() const { return argon2_salt_; }
+  const SecureBytes& argon2_salt() const { return argon2_salt_; }
 
   /// Sets the Argon2 salt, invalidating the cached key.
   void set_argon2_salt(const std::vector<uint8_t>& salt) {
-    argon2_salt_ = salt;
+    argon2_salt_.Assign(salt);
+    clear_transformed_key();
+  }
+
+  /// Sets the Argon2 salt from a secure byte buffer, invalidating the cached
+  /// key.
+  void set_argon2_salt(SecureBytes salt) {
+    argon2_salt_ = std::move(salt);
     clear_transformed_key();
   }
 

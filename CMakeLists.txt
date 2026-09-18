@@ -44,7 +44,7 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-        "C++11 library for importing and exporting KeePass password databases")
+        "C++17 library for importing and exporting KeePass password databases")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/dkruempe/libkeepass")
 set(CPACK_PACKAGE_LICENSE "GPL-3.0")
 set(CPACK_PACKAGE_MAINTAINERS "Dominik Kruempelmann")

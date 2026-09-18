@@ -30,6 +30,7 @@
 #include <cstring>
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 #include "libkeepass/export.hh"
 
@@ -79,6 +80,9 @@ template <std::size_t N> class SecureBuffer {
 public:
   /// Default-constructs a zero-filled buffer.
   SecureBuffer() = default;
+
+  /// Constructs a buffer by copying the given fixed-size byte array.
+  SecureBuffer(const std::array<uint8_t, N>& other) { std::memcpy(data_.data(), other.data(), N); }
 
   /// Zeroizes the stored bytes.
   ~SecureBuffer() { secure_zero(data_.data(), data_.size()); }
@@ -146,6 +150,102 @@ private:
   void Wipe() noexcept { secure_zero(data_.data(), data_.size()); }
 
   std::array<uint8_t, N> data_ = {{0}};
+};
+
+/**
+ * @brief Dynamic byte buffer that is zeroized in best-effort locked memory.
+ *
+ * SecureBytes stores an arbitrary number of seed or key-material bytes in a
+ * separately allocated, zeroized (and best-effort locked, see secure_alloc())
+ * heap buffer. The content is erased when the buffer is destroyed, moved-from,
+ * assigned over or cleared. SecureBytes is move-only; use Clone() to create an
+ * explicit deep copy.
+ */
+class LIBKEEPASS_API SecureBytes {
+public:
+  /// Default-constructs an empty buffer.
+  SecureBytes() = default;
+
+  /// Constructs a buffer by copying the given bytes.
+  /**
+   * @param data Pointer to the source bytes (ignored if size is zero).
+   * @param size Number of bytes to copy.
+   */
+  SecureBytes(const uint8_t* data, std::size_t size);
+
+  /// Constructs a buffer by copying the given byte vector.
+  explicit SecureBytes(const std::vector<uint8_t>& data);
+
+  /// Zeroizes and releases the stored bytes.
+  ~SecureBytes();
+
+  /// No implicit copies of key material.
+  SecureBytes(const SecureBytes&) = delete;
+
+  /// No implicit copies of key material.
+  SecureBytes& operator=(const SecureBytes&) = delete;
+
+  /// Move-constructs by transferring the bytes and wiping the source.
+  SecureBytes(SecureBytes&& other) noexcept;
+
+  /// Move-assigns by transferring the bytes and wiping the previous and the
+  /// source content.
+  SecureBytes& operator=(SecureBytes&& other) noexcept;
+
+  /// Replaces the content with a copy of the given byte vector.
+  SecureBytes& operator=(const std::vector<uint8_t>& data);
+
+  /// Returns a pointer to the raw bytes.
+  uint8_t* data() noexcept { return data_; }
+
+  /// Returns a const pointer to the raw bytes.
+  const uint8_t* data() const noexcept { return data_; }
+
+  /// Returns the size of the buffer in bytes.
+  std::size_t size() const noexcept { return size_; }
+
+  /// Returns whether the buffer is empty.
+  bool empty() const noexcept { return size_ == 0; }
+
+  /// Returns an iterator to the first byte.
+  uint8_t* begin() noexcept { return data_; }
+
+  /// Returns an iterator past the last byte.
+  uint8_t* end() noexcept { return data_ + size_; }
+
+  /// Returns a const iterator to the first byte.
+  const uint8_t* begin() const noexcept { return data_; }
+
+  /// Returns a const iterator past the last byte.
+  const uint8_t* end() const noexcept { return data_ + size_; }
+
+  /// Returns the byte at the given index.
+  uint8_t& operator[](std::size_t index) noexcept { return data_[index]; }
+
+  /// Returns the byte at the given index.
+  const uint8_t& operator[](std::size_t index) const noexcept { return data_[index]; }
+
+  /// Replaces the content with a copy of the given bytes.
+  void Assign(const uint8_t* data, std::size_t size);
+
+  /// Replaces the content with a copy of the given byte vector.
+  void Assign(const std::vector<uint8_t>& data);
+
+  /// Erases and releases the stored bytes.
+  void Clear() noexcept;
+
+  /// Returns an explicit deep copy of the buffer.
+  SecureBytes Clone() const;
+
+  /// Returns whether two buffers hold the same bytes.
+  bool operator==(const SecureBytes& other) const;
+
+  /// Returns whether two buffers hold different bytes.
+  bool operator!=(const SecureBytes& other) const { return !(*this == other); }
+
+private:
+  uint8_t* data_ = nullptr;
+  std::size_t size_ = 0;
 };
 
 /**

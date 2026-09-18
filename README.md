@@ -5,10 +5,10 @@
 [![CodeQL](https://github.com/dkruempe/libkeepass/actions/workflows/codeql.yml/badge.svg)](https://github.com/dkruempe/libkeepass/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/gh/dkruempe/libkeepass/graph/badge.svg)](https://codecov.io/gh/dkruempe/libkeepass)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![C++ Standard](https://img.shields.io/badge/C%2B%2B-11-blue.svg)](https://isocpp.org/)
+[![C++ Standard](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/)
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
 
-C++11 library for importing and exporting [KeePass](http://keepass.info) password databases.
+C++17 library for importing and exporting [KeePass](http://keepass.info) password databases.
 
 This project is a fork of [libkeepass](https://github.com/nickvdyck/libkeepass) by Christian Kindahl.
 
@@ -27,7 +27,7 @@ The API documentation is available at [https://dkruempe.github.io/libkeepass/](h
 
 ## Prerequisites
 
-- C++11 compatible compiler (GCC 10+, Clang 12+, MSVC 19.20+)
+- C++17 compatible compiler (GCC 10+, Clang 12+, MSVC 19.20+)
 - CMake >= 3.16
 - [Conan](https://conan.io/) package manager
 
@@ -197,6 +197,11 @@ kpx -p password rm --title "Obsolete" database.kdbx
 
 # Export to a new KeePass file (.kdb / .kdbx)
 kpx -p password -e output.kdbx database.kdb
+
+# Audit the password quality and reuse of all entries (or of one subtree)
+kpx -p password --audit database.kdbx
+kpx -p password --audit --group Internet database.kdbx
+kpx -p password --audit -f json --with-passwords database.kdbx
 
 # Passwords can also come from an environment variable or an interactive prompt
 KEEPASS_PASSWORD=secret kpx database.kdbx

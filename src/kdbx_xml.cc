@@ -23,6 +23,7 @@
 #include <cassert>
 #include <ctime>
 #include <sstream>
+#include <string_view>
 #ifdef DEBUG
 #include <iostream>
 #endif
@@ -165,7 +166,7 @@ int64_t KdbxXml::NeverSeconds() {
 }
 
 std::time_t KdbxXml::ParseDateTime(const char* text) const {
-  std::string str(text);
+  std::string_view str(text);
 
   // Check for the special KeePass 1x "never" timestamp.
   if (str == "2999-12-28T22:59:59Z")
@@ -330,8 +331,9 @@ std::shared_ptr<Metadata> KdbxXml::ParseMeta(const pugi::xml_node& meta_node,
 
       std::shared_ptr<Icon> icon = std::make_shared<Icon>(uuid, data);
       icon->set_name(icon_node.child_value("Name"));
-      icon->set_last_modification_time(
-          ParseDateTime(icon_node.child_value("LastModificationTime")));
+      if (icon_node.child("LastModificationTime"))
+        icon->set_last_modification_time(
+            ParseDateTime(icon_node.child_value("LastModificationTime")));
       meta->AddIcon(icon);
 
       icon_pool_.insert(std::make_pair(icon_node.child_value("UUID"), icon));
@@ -393,8 +395,9 @@ std::shared_ptr<Metadata> KdbxXml::ParseMeta(const pugi::xml_node& meta_node,
       }
 
       Metadata::Field field(key, value);
-      field.set_last_modification_time(
-          ParseDateTime(item_node.child_value("LastModificationTime")));
+      if (item_node.child("LastModificationTime"))
+        field.set_last_modification_time(
+            ParseDateTime(item_node.child_value("LastModificationTime")));
       meta->AddField(field);
     }
   }
@@ -495,10 +498,12 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     if (kdbx41_) {
       if (!icon->name().empty())
         icon_node.append_child("Name").text().set(icon->name().c_str());
-      if (icon->last_modification_time() != 0)
+      const auto& mod_time = icon->last_modification_time();
+      if (mod_time.has_value()) {
         icon_node.append_child("LastModificationTime")
             .text()
-            .set(WriteDateTime(icon->last_modification_time()).c_str());
+            .set(WriteDateTime(mod_time.value()).c_str());
+      }
     }
   }
 
@@ -556,10 +561,12 @@ void KdbxXml::WriteMeta(pugi::xml_node& meta_node, RandomObfuscator& obfuscator,
     item_node.append_child("Key").text().set(field.key().c_str());
     item_node.append_child("Value").text().set(field.value().c_str());
 
-    if (kdbx41_ && field.last_modification_time() != 0)
+    const auto& mod_time = field.last_modification_time();
+    if (kdbx41_ && mod_time.has_value()) {
       item_node.append_child("LastModificationTime")
           .text()
-          .set(WriteDateTime(field.last_modification_time()).c_str());
+          .set(WriteDateTime(mod_time.value()).c_str());
+    }
   }
 }
 
@@ -721,12 +728,12 @@ void KdbxXml::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscato
   if (!entry->quality_check())
     entry_node.append_child("QualityCheck").text().set(false);
   entry_node.append_child("Tags").text().set(TagsToXml(entry->tags()).c_str());
-  if (kdbx41_ && !IsZeroUuid(entry->previous_parent_group()))
+  const auto& previous_parent_group = entry->previous_parent_group();
+  if (kdbx41_ && previous_parent_group.has_value() && !IsZeroUuid(previous_parent_group.value())) {
     entry_node.append_child("PreviousParentGroup")
         .text()
-        .set(base64_encode(entry->previous_parent_group().begin(),
-                           entry->previous_parent_group().end())
-                 .c_str());
+        .set(base64_encode(previous_parent_group->begin(), previous_parent_group->end()).c_str());
+  }
 
   if (auto icon = entry->custom_icon().lock()) {
     entry_node.append_child("CustomIconUUID")
@@ -825,8 +832,18 @@ void KdbxXml::WriteEntry(pugi::xml_node& entry_node, RandomObfuscator& obfuscato
 
 std::shared_ptr<Group> KdbxXml::ParseGroup(const pugi::xml_node& group_node,
                                            RandomObfuscator& obfuscator) {
-  std::shared_ptr<Group> group = std::make_shared<Group>();
-  group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
+  // Metadata-referenced groups (RecycleBinUUID, EntryTemplatesGroup) may have
+  // been created as placeholders by GetGroup before the tree is parsed. Reuse
+  // that instance so the metadata link stays valid; otherwise the parsed tree
+  // group would differ from the group the metadata points to.
+  std::shared_ptr<Group> group;
+  auto pool_it = group_pool_.find(group_node.child_value("UUID"));
+  if (pool_it == group_pool_.end()) {
+    group = std::make_shared<Group>();
+    group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
+  } else {
+    group = pool_it->second;
+  }
 
   std::array<uint8_t, 16> uuid = {0};
   base64_decode<bounds_checked_iterator<std::array<uint8_t, 16>>, unsigned char>(
@@ -900,12 +917,12 @@ void KdbxXml::WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscato
       base64_encode(group->uuid().begin(), group->uuid().end()).c_str());
   group_node.append_child("Name").text().set(group->name().c_str());
   group_node.append_child("Notes").text().set(group->notes().c_str());
-  if (kdbx41_ && !IsZeroUuid(group->previous_parent_group()))
+  const auto& previous_parent_group = group->previous_parent_group();
+  if (kdbx41_ && previous_parent_group.has_value() && !IsZeroUuid(previous_parent_group.value())) {
     group_node.append_child("PreviousParentGroup")
         .text()
-        .set(base64_encode(group->previous_parent_group().begin(),
-                           group->previous_parent_group().end())
-                 .c_str());
+        .set(base64_encode(previous_parent_group->begin(), previous_parent_group->end()).c_str());
+  }
   if (!group->tags().empty())
     group_node.append_child("Tags").text().set(TagsToXml(group->tags()).c_str());
   group_node.append_child("IconID").text().set(group->icon());

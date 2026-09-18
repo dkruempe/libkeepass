@@ -40,7 +40,7 @@ if (LIBKEEPASS_HAS_AES_NI)
     set_source_files_properties(aes_ni.cc PROPERTIES
             COMPILE_FLAGS "-maes")
 endif()
-target_compile_features(libkeepass PUBLIC cxx_std_11)
+target_compile_features(libkeepass PUBLIC cxx_std_17)
 target_include_directories(libkeepass
         SYSTEM PUBLIC
         "$<BUILD_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/include>"

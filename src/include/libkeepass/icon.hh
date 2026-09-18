@@ -22,6 +22,7 @@
 #pragma once
 #include <array>
 #include <ctime>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,7 @@ private:
   std::array<uint8_t, 16> uuid_;
   std::vector<uint8_t> data_;
   std::string name_;
-  std::time_t last_modification_time_ = 0;
+  std::optional<std::time_t> last_modification_time_;
 
 public:
   /// Creates an icon with the given UUID and raw data.
@@ -60,11 +61,16 @@ public:
   /// Sets the icon name (KDBX 4.1).
   void set_name(const std::string& name) { name_ = name; }
 
-  /// Returns the icon last modification time (KDBX 4.1); 0 if unset.
-  std::time_t last_modification_time() const { return last_modification_time_; }
+  /// Returns the icon last modification time (KDBX 4.1); empty if unset.
+  const std::optional<std::time_t>& last_modification_time() const {
+    return last_modification_time_;
+  }
 
-  /// Sets the icon last modification time (KDBX 4.1); 0 to unset.
-  void set_last_modification_time(std::time_t time) { last_modification_time_ = time; }
+  /// Sets the icon last modification time (KDBX 4.1); pass @c std::nullopt to
+  /// unset.
+  void set_last_modification_time(std::optional<std::time_t> time) {
+    last_modification_time_ = time;
+  }
 
   /// Equality comparison (based on data).
   bool operator==(const Icon& other) const {
