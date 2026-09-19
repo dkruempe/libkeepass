@@ -214,7 +214,8 @@ std::string HexString(const std::string& str) {
 
 std::string HexBytes(const std::vector<uint8_t>& vec) { return Hex(vec.data(), vec.size()); }
 
-// Length-prefixed framing: tag=<len>:<raw>;
+// Length-prefixed framing: each field is rendered as tag, equals sign, decimal
+// length, colon, raw value, semicolon.
 void Frame(std::string& out, const std::string& tag, const std::string& value) {
   out += tag;
   out += '=';
@@ -236,11 +237,7 @@ void FrameBool(std::string& out, const std::string& tag, bool value) {
   Frame(out, tag, value ? "1" : "0");
 }
 
-std::string Str(const std::string& value) { return value; }
-
 std::string Str(const protect<secure_string>& value) { return value.value().str(); }
-
-std::string StrVal(const std::string& value) { return value; }
 
 // ---------------------------------------------------------------------------
 // Database generation.

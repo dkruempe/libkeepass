@@ -391,6 +391,9 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
       reuse[password].emplace_back(i);
   }
 
+  // Classify every row and append a reuse finding when two or more entries
+  // share the password. Consecutive rows with the same password are coalesced
+  // into a single AuditReuse group for the summary output.
   std::vector<AuditReuse> reused;
   int with_issues = 0;
   for (AuditEntry& row : rows) {
@@ -416,6 +419,8 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
     return 1;
   std::ostream& out = OutputStream(opt, file);
 
+  // Emit the report in the requested format. JSON and CSV stream every affected
+  // entry and the reused-password groups; the text fallback prints a summary.
   if (opt.format == "json") {
     out << "{\"audited\":" << rows.size() << ",\"issues\":[";
     bool first = true;
