@@ -29,8 +29,8 @@
 
 #include "libkeepass/base64.hh"
 #include "libkeepass/exception.hh"
-#include "libkeepass/iterator.hh"
 #include "libkeepass/group.hh"
+#include "libkeepass/iterator.hh"
 #include "libkeepass/metadata.hh"
 
 namespace keepass {

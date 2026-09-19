@@ -68,8 +68,7 @@ protect<secure_string> KdbxXml::ParseProtectedString(const pugi::xml_node& node,
       }
     }
 
-    if (ExceedsTextSize(val_node.text().as_string(),
-                        resource_limits_.max_string_field_bytes))
+    if (ExceedsTextSize(val_node.text().as_string(), resource_limits_.max_string_field_bytes))
       throw FormatError("String field exceeds the configured size limit.");
 
     return {secure_string(val_node.text().as_string()),

@@ -80,9 +80,7 @@ public:
   bool kdbx41() const { return kdbx41_; }
 
   /// Sets the resource budgets enforced while parsing the XML body.
-  void set_resource_limits(const detail::ResourceLimits& limits) {
-    resource_limits_ = limits;
-  }
+  void set_resource_limits(const detail::ResourceLimits& limits) { resource_limits_ = limits; }
 
   /// The resource budgets currently enforced while parsing.
   const detail::ResourceLimits& resource_limits() const { return resource_limits_; }
@@ -190,8 +188,7 @@ private:
    * @param depth Current group nesting depth (the root group has depth 0).
    * @return Pointer to group object.
    */
-  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node,
-                                    RandomObfuscator& obfuscator,
+  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node, RandomObfuscator& obfuscator,
                                     uint32_t depth = 0);
 
   /// Writes a group to an XML node.

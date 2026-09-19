@@ -406,7 +406,8 @@ TEST_F(KpxTest, ToCsvDirect) {
   const std::string expected_passwords =
       "Group,Title,Username,Password,Url,Notes\n"
       "root,RootEntry,rootuser,toppass,https://root.example,\n"
-      "root/Internet,\"mail, \"\"quoted\"\"\",alice,s3cret,https://example.com,\"important, note\"\n";
+      "root/Internet,\"mail, \"\"quoted\"\"\",alice,s3cret,https://example.com,\"important, "
+      "note\"\n";
   EXPECT_EQ(expected_passwords, db->ToCsv(keepass::CsvFormat::kCsvWithPasswords));
 }
 

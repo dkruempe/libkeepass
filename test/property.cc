@@ -77,13 +77,12 @@ using Uuid = std::array<uint8_t, 16>;
 // ---------------------------------------------------------------------------
 
 class Rng {
- public:
+public:
   explicit Rng(uint32_t seed) : rng_(seed) {}
 
   uint8_t NextByte() { return static_cast<uint8_t>(rng_() & 0xff); }
 
-  template <size_t N>
-  std::array<uint8_t, N> Bytes() {
+  template <size_t N> std::array<uint8_t, N> Bytes() {
     std::array<uint8_t, N> out{};
     for (auto& byte : out)
       byte = NextByte();
@@ -135,7 +134,7 @@ class Rng {
   // Deterministic positive timestamp (UTC, strongly within KDB time range).
   std::time_t Time() { return kTimeBase + Pick(static_cast<uint32_t>(86400ull * 365 * 5)); }
 
- private:
+private:
   std::mt19937 rng_;
   static constexpr std::time_t kTimeBase = 1600000000;
 };
@@ -174,20 +173,20 @@ constexpr Caps kKdbxCaps = {true, true, true, true, false, true, true, true, tru
 constexpr Caps kKdbCaps = {false, false, false, false, true, false, false, false, true};
 
 const LegParams kLegs[] = {
-    {"kdbx4-aes-aes-gzip", KeePass::Format::kKdbx4, Database::Cipher::kAes,
-     Database::Kdf::kAes, true, kKdbxCaps},
+    {"kdbx4-aes-aes-gzip", KeePass::Format::kKdbx4, Database::Cipher::kAes, Database::Kdf::kAes,
+     true, kKdbxCaps},
     {"kdbx4-chacha-aes-plain", KeePass::Format::kKdbx4, Database::Cipher::kChaCha20,
      Database::Kdf::kAes, false, kKdbxCaps},
     {"kdbx4-twofish-aes-gzip", KeePass::Format::kKdbx4, Database::Cipher::kTwofish,
      Database::Kdf::kAes, true, kKdbxCaps},
     {"kdbx4-aes-argon2-plain", KeePass::Format::kKdbx4, Database::Cipher::kAes,
      Database::Kdf::kArgon2id, false, kKdbxCaps},
-    {"kdbx3-aes-aes-gzip", KeePass::Format::kKdbx3, Database::Cipher::kAes,
-     Database::Kdf::kAes, true, kKdbx3Caps},
-    {"kdbx3-aes-aes-plain", KeePass::Format::kKdbx3, Database::Cipher::kAes,
-     Database::Kdf::kAes, false, kKdbx3Caps},
-    {"kdb-aes-aes-plain", KeePass::Format::kKdb, Database::Cipher::kAes,
-     Database::Kdf::kAes, false, kKdbCaps},
+    {"kdbx3-aes-aes-gzip", KeePass::Format::kKdbx3, Database::Cipher::kAes, Database::Kdf::kAes,
+     true, kKdbx3Caps},
+    {"kdbx3-aes-aes-plain", KeePass::Format::kKdbx3, Database::Cipher::kAes, Database::Kdf::kAes,
+     false, kKdbx3Caps},
+    {"kdb-aes-aes-plain", KeePass::Format::kKdb, Database::Cipher::kAes, Database::Kdf::kAes, false,
+     kKdbCaps},
 };
 
 // ---------------------------------------------------------------------------
@@ -205,8 +204,7 @@ std::string Hex(const uint8_t* data, size_t n) {
   return out;
 }
 
-template <size_t N>
-std::string Hex(const std::array<uint8_t, N>& data) {
+template <size_t N> std::string Hex(const std::array<uint8_t, N>& data) {
   return Hex(data.data(), N);
 }
 
@@ -257,8 +255,7 @@ bool IsStandardKey(const std::string& key) {
 
 // Sets the five timestamps shared by groups and entries. All times are set
 // explicitly so that the round-trip comparison never relies on defaults.
-template <typename T>
-void SetCommonTimes(const std::shared_ptr<T>& object, Rng& rng) {
+template <typename T> void SetCommonTimes(const std::shared_ptr<T>& object, Rng& rng) {
   object->set_creation_time(rng.Time());
   object->set_modification_time(rng.Time());
   object->set_access_time(rng.Time());
@@ -652,8 +649,8 @@ TEST(PropertyRoundTrip, AllLegs) {
 
       if (leg.format == KeePass::Format::kKdb) {
         // KDB is file based; it cannot be written to/read from a stream.
-        const std::string path = std::string(PROJECT_ROOT_PATH) + "/tmp/property-kdb-" +
-                                 std::to_string(seed) + ".kdb";
+        const std::string path =
+            std::string(PROJECT_ROOT_PATH) + "/tmp/property-kdb-" + std::to_string(seed) + ".kdb";
         KeePass writer(kPassphrase);
         writer.SetFormat(leg.format);
         writer.Save(path, *db);

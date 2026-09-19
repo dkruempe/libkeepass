@@ -330,13 +330,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   std::ostream hmac_stream(&hmac_streambuf);
 
   const auto write_payload = [&](std::ostream& inner_target) {
-    conserve<uint8_t>(inner_target,
-                      static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamId));
+    conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamId));
     conserve<uint32_t>(inner_target, 4);
     conserve<uint32_t>(inner_target, 3); // ChaCha20
 
-    conserve<uint8_t>(inner_target,
-                      static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamKey));
+    conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamKey));
     conserve<uint32_t>(inner_target, 32);
     conserve<std::array<uint8_t, 32>>(inner_target, inner_random_stream_key);
 
@@ -357,12 +355,11 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
       // Build the payload copy incrementally so that every copy that exists is
       // reachable for wiping later on.
       std::string bin_data;
-      std::copy(std::istreambuf_iterator<char>(bin_stream),
-                std::istreambuf_iterator<char>(), std::back_inserter(bin_data));
+      std::copy(std::istreambuf_iterator<char>(bin_stream), std::istreambuf_iterator<char>(),
+                std::back_inserter(bin_data));
       conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kBinaries));
       conserve<uint32_t>(inner_target, static_cast<uint32_t>(bin_data.size()));
-      std::copy(bin_data.begin(), bin_data.end(),
-                std::ostreambuf_iterator<char>(inner_target));
+      std::copy(bin_data.begin(), bin_data.end(), std::ostreambuf_iterator<char>(inner_target));
 
       // Attachment data is sensitive; wipe the transient copies.
       WipeBuffer(&bin_data);
