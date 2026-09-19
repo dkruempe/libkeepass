@@ -80,6 +80,9 @@ public:
 
   /// Opens a KeePass database from a stream with format auto-detection.
   /**
+   * Seekable streams are read directly (only the 8-byte format signature is
+   * inspected up front); non-seekable streams are buffered in memory.
+   *
    * @param src The input stream containing the database.
    * @return A unique pointer to the imported Database object.
    */
@@ -105,13 +108,42 @@ public:
    */
   void Save(std::ostream& dst, const Database& db);
 
+  /// Saves a database to a stream using a new key.
+  /**
+   * The key is used only for this save and \ref key_ is restored afterwards.
+   * The output format is taken from \ref SetFormat if set, otherwise a KDBX
+   * format is chosen based on the database KDF and cipher. KDB cannot be
+   * selected for stream output because there is no file extension.
+   *
+   * @param dst The output stream.
+   * @param db The database to save.
+   * @param key The key to encrypt the database with.
+   */
+  void Save(std::ostream& dst, const Database& db, const Key& key);
+
   /// Saves a database to a file using a new key.
   /**
+   * The output format is taken from \ref SetFormat if set, otherwise a KDBX
+   * format is chosen based on the database KDF and cipher. KDB cannot be
+   * selected for stream output because there is no file extension.
+   *
    * @param path Path to the output file.
    * @param db The database to save.
    * @param new_key The key to encrypt the database with.
    */
   void SaveAs(const std::string& path, const Database& db, const Key& new_key);
+
+  /// Saves a database to a stream using a new key.
+  /**
+   * The output format is taken from \ref SetFormat if set, otherwise a KDBX
+   * format is chosen based on the database KDF and cipher. KDB cannot be
+   * selected for stream output because there is no file extension.
+   *
+   * @param dst The output stream.
+   * @param db The database to save.
+   * @param new_key The key to encrypt the database with.
+   */
+  void SaveAs(std::ostream& dst, const Database& db, const Key& new_key);
 
   /// Saves a database to a file using a new password and optional key file.
   /**
@@ -121,6 +153,20 @@ public:
    * @param keyfile Path to a key file, or an empty string for none.
    */
   void SaveAs(const std::string& path, const Database& db, const std::string& password,
+              const std::string& keyfile = "");
+
+  /// Saves a database to a stream using a new password and optional key file.
+  /**
+   * The output format is taken from \ref SetFormat if set, otherwise a KDBX
+   * format is chosen based on the database KDF and cipher. KDB cannot be
+   * selected for stream output because there is no file extension.
+   *
+   * @param dst The output stream.
+   * @param db The database to save.
+   * @param password The new database password.
+   * @param keyfile Path to a key file, or an empty string for none.
+   */
+  void SaveAs(std::ostream& dst, const Database& db, const std::string& password,
               const std::string& keyfile = "");
 
   /// Selects the output format.
@@ -143,6 +189,7 @@ public:
                                           Database::Kdf kdf = Database::Kdf::kArgon2id);
 
 private:
+  std::unique_ptr<Database> Import(std::istream& src, Format format);
   void Save(std::ostream& dst, const Database& db, Format format);
   Format ResolveOutputFormat(const std::string& path, const Database& db) const;
 

@@ -30,6 +30,7 @@
 #include <string>
 
 #include "database.hh"
+#include "libkeepass/detail/limits.hh"
 #include "libkeepass/export.hh"
 #include "libkeepass/kdbx_xml.hh"
 #include "security.hh"
@@ -119,6 +120,9 @@ public:
 
   /** Forces the exporter to produce a KDBX 4 format database. */
   void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }
+
+  /** Sets the resource budgets enforced while importing and parsing. */
+  void set_resource_limits(const detail::ResourceLimits& limits);
 };
 
 } // namespace keepass

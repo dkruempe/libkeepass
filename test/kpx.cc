@@ -394,6 +394,54 @@ TEST_F(KpxTest, CsvOutput) {
                             "\"important, note\""));
 }
 
+TEST_F(KpxTest, ToCsvDirect) {
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+
+  const std::string expected_plain =
+      "Group,Title,Username,Password,Url,Notes\n"
+      "root,RootEntry,rootuser,,https://root.example,\n"
+      "root/Internet,\"mail, \"\"quoted\"\"\",alice,,https://example.com,\"important, note\"\n";
+  EXPECT_EQ(expected_plain, db->ToCsv());
+
+  const std::string expected_passwords =
+      "Group,Title,Username,Password,Url,Notes\n"
+      "root,RootEntry,rootuser,toppass,https://root.example,\n"
+      "root/Internet,\"mail, \"\"quoted\"\"\",alice,s3cret,https://example.com,\"important, note\"\n";
+  EXPECT_EQ(expected_passwords, db->ToCsv(keepass::CsvFormat::kCsvWithPasswords));
+}
+
+TEST_F(KpxTest, ToCsvEmptyDatabase) {
+  keepass::Database db;
+  EXPECT_EQ("Group,Title,Username,Password,Url,Notes\n", db.ToCsv());
+  EXPECT_EQ("Group,Title,Username,Password,Url,Notes\n",
+            db.ToCsv(keepass::CsvFormat::kCsvWithPasswords));
+}
+
+TEST_F(KpxTest, ToCsvSkipsMetaEntries) {
+  auto db = std::make_unique<keepass::Database>();
+  auto root = std::make_shared<keepass::Group>();
+  root->set_name("root");
+
+  auto normal = std::make_shared<keepass::Entry>();
+  normal->set_title(protect<secure_string>("Normal", false));
+  root->AddEntry(normal);
+
+  auto meta = std::make_shared<keepass::Entry>();
+  meta->set_title(protect<secure_string>("Meta-Info", false));
+  meta->set_url(protect<secure_string>("$", false));
+  meta->set_username(protect<secure_string>("SYSTEM", false));
+  meta->set_notes(protect<secure_string>("bin-stream payload", false));
+  auto attachment = std::make_shared<keepass::Entry::Attachment>();
+  attachment->set_name("bin-stream");
+  attachment->set_binary(std::make_shared<keepass::Binary>(
+      protect<secure_string>(keepass::secure_string("payload"), false)));
+  meta->AddAttachment(attachment);
+  root->AddEntry(meta);
+
+  db->set_root(root);
+  EXPECT_EQ("Group,Title,Username,Password,Url,Notes\nroot,Normal,,,,\n", db->ToCsv());
+}
+
 TEST_F(KpxTest, JsonOutput) {
   CliResult result = RunCli({"-p", "password", "-f", "json", Kdbx()});
   EXPECT_EQ(0, result.code);

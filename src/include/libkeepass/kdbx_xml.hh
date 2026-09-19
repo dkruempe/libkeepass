@@ -32,6 +32,7 @@
 #include <unordered_map>
 
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/limits.hh"
 #include "libkeepass/export.hh"
 #include "libkeepass/secure.hh"
 
@@ -78,6 +79,14 @@ public:
   void set_kdbx41(bool kdbx41) { kdbx41_ = kdbx41; }
   bool kdbx41() const { return kdbx41_; }
 
+  /// Sets the resource budgets enforced while parsing the XML body.
+  void set_resource_limits(const detail::ResourceLimits& limits) {
+    resource_limits_ = limits;
+  }
+
+  /// The resource budgets currently enforced while parsing.
+  const detail::ResourceLimits& resource_limits() const { return resource_limits_; }
+
   /// Resets all internal pools and state for a new import/export operation.
   void Reset();
 
@@ -117,6 +126,17 @@ private:
   GroupPool group_pool_;
   std::array<uint8_t, 32> header_hash_ = {{0}};
 
+  detail::ResourceLimits resource_limits_ = {};
+
+  /// Number of groups parsed so far (budgeted by resource_limits_).
+  uint64_t groups_seen_ = 0;
+
+  /// Number of entries parsed so far, including history entries.
+  uint64_t entries_seen_ = 0;
+
+  /// Number of entry history items parsed so far.
+  uint64_t history_items_seen_ = 0;
+
   bool kdbx4_ = false;
   bool kdbx41_ = false;
 
@@ -133,8 +153,8 @@ private:
   static int64_t NeverSeconds();
 
   /// Parses a protected string value from an XML node.
-  static protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                                     RandomObfuscator& obfuscator);
+  protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
+                                              RandomObfuscator& obfuscator);
 
   /// Writes a protected string value to an XML node.
   static void WriteProtectedString(pugi::xml_node& node, const protect<secure_string>& str,
@@ -164,7 +184,15 @@ private:
                   const std::shared_ptr<Entry>& entry);
 
   /// Parses a group from the XML tree.
-  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node, RandomObfuscator& obfuscator);
+  /**
+   * @param group_node Group XML node.
+   * @param obfuscator Random stream obfuscator.
+   * @param depth Current group nesting depth (the root group has depth 0).
+   * @return Pointer to group object.
+   */
+  std::shared_ptr<Group> ParseGroup(const pugi::xml_node& group_node,
+                                    RandomObfuscator& obfuscator,
+                                    uint32_t depth = 0);
 
   /// Writes a group to an XML node.
   void WriteGroup(pugi::xml_node& group_node, RandomObfuscator& obfuscator,

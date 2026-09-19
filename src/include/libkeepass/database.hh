@@ -38,6 +38,9 @@ namespace keepass {
 class Metadata;
 class Visitor;
 
+/// Formats for Database::ToCsv().
+enum class CsvFormat { kCsv, kCsvWithPasswords };
+
 /**
  * @brief Represents a KeePass (KDB/KDBX) database.
  *
@@ -337,6 +340,20 @@ public:
 
   /// Serializes the whole database to a JSON string.
   std::string ToJson() const;
+
+  /// Serializes the database to CSV, one line per entry.
+  /**
+   * The output starts with the header line "Group,Title,Username,Password,Url,Notes".
+   * The group column holds the '/'-joined path of the group an entry lives in
+   * (relative to and including the root group). Fields containing a comma,
+   * a double quote or a newline are quoted per RFC 4180 (embedded quotes are
+   * doubled). Meta entries are skipped. Passwords are only included when
+   * @p format is CsvFormat::kCsvWithPasswords.
+   *
+   * @param format Whether passwords are included in the output.
+   * @return The CSV data including the header line.
+   */
+  std::string ToCsv(CsvFormat format = CsvFormat::kCsv) const;
 
   /// Returns the total number of entries in the database.
   size_t EntryCount() const;

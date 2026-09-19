@@ -355,7 +355,8 @@ libkeepass/
 │   ├── include/libkeepass/ # Public headers
 │   ├── keepass.cc          # Unified KeePass API
 │   ├── kdb.cc              # KDB format implementation
-│   ├── kdbx.cc             # KDBX format implementation
+│   ├── kdbx_import.cc      # KDBX format implementation
+│   ├── kdbx_export.cc      # KDBX format implementation
 │   ├── database.cc         # Database convenience API
 │   ├── entry.cc            # Entry convenience API
 │   ├── group.cc            # Group convenience API

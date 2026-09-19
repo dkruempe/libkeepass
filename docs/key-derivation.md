@@ -38,7 +38,7 @@ Anything else raises `FormatError: Unknown key file format`.
     sub keys are combined with `SHA-256` only when the key is truly composite.
 
 Import uses `kHashSubKeys` for both KDBX 3 and KDBX 4
-(`src/kdbx.cc:1131`, `:1328`).
+(`src/kdbx_import.cc:115`, `:222`).
 
 ## Key derivation functions
 
@@ -133,8 +133,8 @@ Starting from `transformed_key`, two keys are computed:
 final_key = SHA-256(master_seed || transformed_key)
 ```
 
-Used to instantiate the payload cipher (`src/kdbx.cc:1133` for KDBX 3,
-`:1373` for KDBX 4).
+Used to instantiate the payload cipher (`src/kdbx_import.cc:130` for KDBX 3,
+`:278` for KDBX 4).
 
 ### HMAC key (KDBX 4 only)
 
@@ -143,18 +143,18 @@ hmac_key          = SHA-512(master_seed || transformed_key || 0x01)
 header_hmac_key   = SHA-512(0xFF x 8        || hmac_key)
 ```
 
-*   `hmac_key` authenticates the HMAC blocks of the payload (`src/kdbx.cc:1342`).
+*   `hmac_key` authenticates the HMAC blocks of the payload (`src/kdbx_import.cc:292`).
 *   `header_hmac_key` authenticates the header itself; the stored 32-byte header
-    HMAC is `HMAC-SHA256(header_hmac_key, header_bytes)` (`src/kdbx.cc:1352`).
+    HMAC is `HMAC-SHA256(header_hmac_key, header_bytes)` (`src/kdbx_import.cc:249`).
 *   Per-block HMAC sub keys are derived lazily in `src/stream.cc` as
     `SHA-512(block_index || hmac_key)`.
 
 ## Transformed key caching
 
 `Database::transformed_key()` / `has_transformed_key()` cache the derived key
-(`src/kdbx.cc:1132`, `:1338`). `Export3` / `Export4` reuse the cached value
+(`src/kdbx_import.cc:116`, `:223`). `Export3` / `Export4` reuse the cached value
 when present, so re-exporting an imported database does not rerun an
-expensive KDF unless the KDF parameters changed (`src/kdbx.cc:1542`, `:1663`).
+expensive KDF unless the KDF parameters changed (`src/kdbx_export.cc:127`, `:211`).
 
 ## Example: full KDBX 4 password-only flow
 

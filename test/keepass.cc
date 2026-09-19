@@ -322,6 +322,95 @@ TEST_F(KeePassTest, SaveAsChangesKey) {
   ExpectSameDatabase(*db, *reopened);
 }
 
+TEST_F(KeePassTest, SaveAsToStreamChangesKey) {
+  std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
+
+  std::ostringstream dst;
+  KeePass kp("old_password");
+  kp.SaveAs(dst, *db, Key("new_password"));
+
+  {
+    KeePass old("old_password");
+    std::istringstream src(dst.str());
+    EXPECT_THROW(old.Open(src), PasswordError);
+  }
+
+  KeePass fresh("new_password");
+  std::istringstream src(dst.str());
+  std::unique_ptr<Database> reopened = fresh.Open(src);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
+TEST_F(KeePassTest, SaveToStreamWithKey) {
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2id, true);
+
+  std::ostringstream dst;
+  KeePass kp("unused");
+  kp.Save(dst, *db, Key("savekey"));
+
+  // The key used for the save is temporary; the instance key is restored.
+  std::istringstream wrong_src(dst.str());
+  EXPECT_THROW(kp.Open(wrong_src), PasswordError);
+
+  KeePass fresh("savekey");
+  std::istringstream src(dst.str());
+  std::unique_ptr<Database> reopened = fresh.Open(src);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
+TEST_F(KeePassTest, OpenStreamAutodetectsAllFormats) {
+  {
+    const std::string data = ReadFile(GetKdbDataPath("groups-2-random_entry-4-pw-aes.kdb"));
+    std::istringstream src(data);
+    KeePass kp("password");
+    std::unique_ptr<Database> db = kp.Open(src);
+    ASSERT_TRUE(db);
+    EXPECT_EQ(db->root()->ToJson(), GetKdbTestJson("groups-2-random_entry-4-pw-aes.json"));
+  }
+
+  {
+    const std::string data = ReadFile(GetDataPath("groups-2-random_entry-4-pw-aes.kdbx"));
+    std::istringstream src(data);
+    KeePass kp("password");
+    std::unique_ptr<Database> db = kp.Open(src);
+    ASSERT_TRUE(db);
+    EXPECT_EQ(db->root()->ToJson(), GetTestJson("groups-2-random_entry-4-pw-aes.json"));
+  }
+
+  {
+    std::unique_ptr<Database> db =
+        MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2id, true);
+    std::ostringstream dst;
+    KeePass kp("password");
+    kp.Save(dst, *db);
+
+    std::istringstream src(dst.str());
+    std::unique_ptr<Database> reopened = kp.Open(src);
+    ASSERT_TRUE(reopened);
+    EXPECT_EQ(reopened->ToJson(), db->ToJson());
+  }
+}
+
+TEST_F(KeePassTest, OpenStreamWithTrailingData) {
+  std::unique_ptr<Database> db =
+      MakeDatabase(Database::Cipher::kAes, Database::Kdf::kArgon2id, true);
+  std::ostringstream dst;
+  KeePass saver("password");
+  saver.Save(dst, *db);
+
+  // The KDBX 4 body is delimited by its outer-header size, so trailing bytes
+  // past the last HMAC block are ignored.
+  std::istringstream src(dst.str() + "trailing-garbage-past-the-database");
+
+  KeePass kp("password");
+  std::unique_ptr<Database> reopened = kp.Open(src);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
 TEST_F(KeePassTest, CreateDefaults) {
   std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdbx4,
                                                  Database::Cipher::kAes, Database::Kdf::kArgon2id);

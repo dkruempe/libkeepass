@@ -7,6 +7,9 @@ if (NOT LIBKEEPASS_CONAN_CREATE)
     list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
 endif()
 project(libkeepass VERSION 0.3.0)
+# Propagate the project version to the CLI (and anything else that needs it)
+# as a compile-time definition, so it cannot drift from the library version.
+add_compile_definitions(KPX_VERSION="${PROJECT_VERSION}")
 set(CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

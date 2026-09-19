@@ -1,0 +1,68 @@
+name: Sanitizers
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  asan-ubsan:
+    runs-on: ubuntu-latest
+
+    env:
+      CONAN_VERSION: "2.31.2"
+      # Pinned to clang: `conan profile detect` reads CC/CXX first, so the
+      # generated Conan toolchain builds the project and its dependencies with
+      # the same compiler that receives the -fsanitize flags below.
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Conan
+        run: |
+          pip install "conan==${{ env.CONAN_VERSION }}"
+          conan profile detect --force
+
+      - name: Cache Conan packages (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-asan-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-asan-conan-${{ env.CONAN_VERSION }}-
+            conan-${{ runner.os }}-
+
+      - name: Configure CMake (ASan + UBSan)
+        run: |
+          cmake -B build-asan \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      # Save the cache immediately after dependency provisioning but before
+      # building the project, so that a later build failure does not lose the
+      # fetched/built dependencies. The next run can then restore them.
+      - name: Cache Conan packages (save before build)
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-asan-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+
+      - name: Build
+        run: cmake --build build-asan -j $(nproc)
+
+      # Full suite (17 tests); ASan includes LSan on Linux. halt_on_error turns
+      # any finding into a non-zero exit so the CI run fails loudly.
+      - name: Test (ASan + UBSan + LSan)
+        working-directory: build-asan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: ctest --output-on-failure

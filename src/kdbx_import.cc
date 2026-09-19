@@ -17,24 +17,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/libkeepass/kdbx.hh"
+#include "libkeepass/kdbx.hh"
 
 #include <algorithm>
 #include <cassert>
 #include <fstream>
+#include <memory>
 #include <sstream>
-#include <unordered_set>
+#include <vector>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-// OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
-#ifdef _MSC_VER
-#define KEEPASS_HMAC_DATA_LEN(x) static_cast<int>(x)
-#else
-#define KEEPASS_HMAC_DATA_LEN(x) (x)
-#endif
-
+#include "kdbx_internal.hh"
 #include "libkeepass/cipher.hh"
 #include "libkeepass/detail/constant_time.hh"
 #include "libkeepass/detail/secure_io.hh"
@@ -43,12 +38,10 @@
 #include "libkeepass/io.hh"
 #include "libkeepass/kdbx_header.hh"
 #include "libkeepass/kdbx_kdf.hh"
-#include "libkeepass/kdbx_xml.hh"
 #include "libkeepass/key.hh"
 #include "libkeepass/metadata.hh"
 #include "libkeepass/random.hh"
 #include "libkeepass/secure.hh"
-#include "libkeepass/security.hh"
 #include "libkeepass/stream.hh"
 
 namespace keepass {
@@ -62,60 +55,11 @@ using keepass::detail::WipeStream;
 
 } // namespace
 
-constexpr std::array<uint8_t, 8> kKdbxInnerRandomStreamInitVec = {0xe8, 0x30, 0x09, 0x4b,
-                                                                  0x97, 0x20, 0x5d, 0x2a};
-
-// Returns whether the group subtree contains KDBX 4.1-only features. Mirrors
-// KeePass' KdbxFile.GetMinKdbxVersion.
-bool GroupRequiresKdbx41(const std::shared_ptr<Group>& group) {
-  if (!group->tags().empty())
-    return true;
-
-  for (const auto& entry : group->Entries()) {
-    if (!entry->quality_check())
-      return true;
-
-    for (const auto& history : entry->history()) {
-      if (!history->quality_check())
-        return true;
-    }
-  }
-
-  return std::any_of(group->Groups().begin(), group->Groups().end(), GroupRequiresKdbx41);
-}
-
-// Returns whether the database uses any KDBX 4.1-only features. Mirrors
-// KeePass' KdbxFile.GetMinKdbxVersion (verified against KeePass 2.57):
-// - previous-parent-group references do NOT enforce KDBX 4.1 and the element
-//   is dropped from 4.0 output (KeePass' migration rule, KDBX 4.1 spec);
-// - entry tags do NOT enforce KDBX 4.1 (they exist in the 4.0 XML schema);
-// - any custom data item enforces KDBX 4.1, because every item carries a
-//   LastModificationTime (a 4.1-only element).
-bool RequiresKdbx41(const Database& db) {
-  if (db.root() && GroupRequiresKdbx41(db.root()))
-    return true;
-
-  if (db.meta()) {
-    for (const auto& icon : db.meta()->icons()) {
-      if (!icon->name().empty() || icon->last_modification_time().has_value())
-        return true;
-    }
-
-    if (!db.meta()->fields().empty())
-      return true;
-  }
-
-  return false;
-}
-
-enum class kKdbxInnerHeader : uint8_t {
-  kEnd = 0,
-  kInnerRandomStreamId = 1,
-  kInnerRandomStreamKey = 2,
-  kBinaries = 3
-};
-
 void KdbxFile::Reset() { xml_.Reset(); }
+
+void KdbxFile::set_resource_limits(const detail::ResourceLimits& limits) {
+  xml_.set_resource_limits(limits);
+}
 
 std::unique_ptr<Database> KdbxFile::Import(const std::string& path, const Key& key) {
   std::ifstream src(path, std::ios::binary);
@@ -222,11 +166,11 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   secure_zero(final_inner_random_stream_key.data(), final_inner_random_stream_key.size());
 
   // Parse XML content.
-  hashed_istreambuf hashed_streambuf(content);
+  hashed_istreambuf hashed_streambuf(content, xml_.resource_limits());
   std::istream hashed_stream(&hashed_streambuf);
 
   if (db->compress()) {
-    gzip_istreambuf gzip_streambuf(hashed_stream);
+    gzip_istreambuf gzip_streambuf(hashed_stream, xml_.resource_limits());
     std::istream gzip_stream(&gzip_streambuf);
 
     xml_.Parse(gzip_stream, obfuscator, *db);
@@ -345,7 +289,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   // wrapped in HMAC protected blocks. Read the HMAC blocks from the file and
   // decrypt the payload inside them, block by block, so that a large database
   // never requires the whole ciphertext to be materialized in memory at once.
-  hmac_istreambuf hmac_streambuf(src, hmac_key.data());
+  hmac_istreambuf hmac_streambuf(src, hmac_key.data(), xml_.resource_limits());
   std::istream hmac_stream(&hmac_streambuf);
 
   secure_zero(hmac_key.data(), hmac_key.size());
@@ -416,7 +360,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   // (compressed) payload, so decompress the entire decrypted content first.
   std::stringstream plain;
   if (db->compress()) {
-    gzip_istreambuf gzip_streambuf(content);
+    gzip_istreambuf gzip_streambuf(content, xml_.resource_limits());
     std::istream gzip_stream(&gzip_streambuf);
     std::copy(std::istreambuf_iterator<char>(gzip_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain));
@@ -444,6 +388,11 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     if (static_cast<uint64_t>(inner_size) >
         static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(xml_source))))
       throw FormatError("Corrupt inner header field size in KDBX 4 database.");
+
+    // A single attachment is budgeted like the XML binaries and custom icons.
+    if (inner_id == kKdbxInnerHeader::kBinaries &&
+        static_cast<uint64_t>(inner_size) > xml_.resource_limits().max_binary_bytes)
+      throw FormatError("Inner header binary exceeds the configured size limit.");
 
     switch (inner_id) {
     case kKdbxInnerHeader::kEnd:
@@ -525,339 +474,6 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   WipeStream(content);
 
   return db;
-}
-
-void KdbxFile::Export(const std::string& path, const Database& db, const Key& key) {
-  std::ofstream dst(path, std::ios::out | std::ios::binary);
-  if (!dst.is_open())
-    throw IoError("Unable to open database for writing.");
-
-  Export(dst, db, key);
-}
-
-void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
-  Reset();
-
-  if (write_kdbx4_ || db.kdf() != Database::Kdf::kAes) {
-    xml_.set_kdbx4(true);
-    xml_.set_kdbx41(RequiresKdbx41(db));
-    Export4(dst, db, key);
-    return;
-  }
-
-  xml_.set_kdbx4(false);
-  xml_.set_kdbx41(false);
-  Export3(dst, db, key);
-}
-
-void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
-  // Produce the final key used for encrypting the contents.
-  SecureBuffer<32> transformed_key =
-      db.has_transformed_key() ? db.transformed_key().Clone()
-                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
-  std::array<uint8_t, 32> final_key{};
-
-  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx, db.master_seed().data(), db.master_seed().size());
-  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
-  unsigned int out_len = 0;
-  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
-  EVP_MD_CTX_free(mdctx);
-  secure_zero(transformed_key.data(), transformed_key.size());
-
-  assert(db.cipher() == Database::Cipher::kAes);
-  std::unique_ptr<Cipher<16>> cipher(new AesCipher(final_key.data(), db.init_vector()));
-  secure_zero(final_key.data(), final_key.size());
-
-  // Write header to a temporary buffer so that we can compute the hash of it.
-  std::array<uint8_t, 32> content_start_bytes = random_array<32>();
-  std::string header_data = KdbxHeader::Write3(db, content_start_bytes);
-
-  // Compute the header hash.
-  EVP_MD_CTX* mdctx2 = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx2, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx2, header_data.c_str(), header_data.size());
-  unsigned int out_len2 = 0;
-  EVP_DigestFinal_ex(mdctx2, xml_.header_hash().data(), &out_len2);
-  EVP_MD_CTX_free(mdctx2);
-
-  // Write header to file.
-  dst.write(header_data.data(), static_cast<std::streamsize>(header_data.size()));
-
-  // The header buffer transiently holds key material (master seed, transform
-  // seed, inner random stream key).
-  WipeBuffer(&header_data);
-
-  // Prepare deobfuscation stream.
-  std::array<uint8_t, 32> final_inner_random_stream_key{};
-  EVP_MD_CTX* mdctx3 = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx3, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx3, db.inner_random_stream_key().data(),
-                   db.inner_random_stream_key().size());
-  unsigned int out_len3 = 0;
-  EVP_DigestFinal_ex(mdctx3, final_inner_random_stream_key.data(), &out_len3);
-  EVP_MD_CTX_free(mdctx3);
-  RandomObfuscator obfuscator(final_inner_random_stream_key, kKdbxInnerRandomStreamInitVec);
-  secure_zero(final_inner_random_stream_key.data(), final_inner_random_stream_key.size());
-
-  // Write content to content stream.
-  std::stringstream content_stream;
-  conserve<std::array<uint8_t, 32>>(content_stream, content_start_bytes);
-
-  hashed_ostreambuf hashed_streambuf(content_stream);
-  std::ostream hashed_stream(&hashed_streambuf);
-
-  if (db.compress()) {
-    gzip_ostreambuf gzip_streambuf(hashed_stream);
-    std::ostream gzip_stream(&gzip_streambuf);
-
-    xml_.Write(gzip_stream, obfuscator, db);
-    gzip_stream.flush();
-  } else {
-    xml_.Write(hashed_stream, obfuscator, db);
-  }
-
-  hashed_stream.flush();
-
-  // Encrypt content.
-  encrypt_cbc(content_stream, dst, *cipher);
-
-  // The content stream still holds the plaintext payload.
-  WipeStream(content_stream);
-}
-
-void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
-  assert(db.cipher() == Database::Cipher::kAes || db.cipher() == Database::Cipher::kTwofish ||
-         db.cipher() == Database::Cipher::kChaCha20);
-
-  // Derive the transformed key used for the final encryption key and the HMAC
-  // key. If the database was imported and the KDF parameters were not modified,
-  // the cached key can be reused; otherwise recompute it.
-  SecureBuffer<32> transformed_key =
-      db.has_transformed_key() ? db.transformed_key().Clone()
-                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
-
-  std::array<uint8_t, 32> final_key{};
-  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx, db.master_seed().data(), db.master_seed().size());
-  EVP_DigestUpdate(mdctx, transformed_key.data(), transformed_key.size());
-  unsigned int out_len = 0;
-  EVP_DigestFinal_ex(mdctx, final_key.data(), &out_len);
-  EVP_MD_CTX_free(mdctx);
-
-  std::unique_ptr<Cipher<16>> cipher;
-  std::unique_ptr<ChaCha20Cipher> chacha_cipher;
-  if (db.cipher() == Database::Cipher::kAes) {
-    cipher = std::make_unique<AesCipher>(final_key.data(), db.init_vector());
-  } else if (db.cipher() == Database::Cipher::kTwofish) {
-    cipher = std::make_unique<TwofishCipher>(final_key.data(), db.init_vector());
-  } else if (db.cipher() == Database::Cipher::kChaCha20) {
-    std::array<uint8_t, 12> iv{};
-    std::copy(db.init_vector().begin(), db.init_vector().begin() + 12, iv.begin());
-    chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key.data(), iv);
-  }
-  secure_zero(final_key.data(), final_key.size());
-
-  // Write header to a temporary buffer so that we can compute the hash and
-  // HMAC of it.
-  std::string header_data = KdbxHeader::Write4(db, xml_.kdbx41());
-
-  // Compute the header hash and HMAC.
-  EVP_MD_CTX* mdctx_h = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx_h, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx_h, header_data.c_str(), header_data.size());
-  unsigned int out_len_h = 0;
-  EVP_DigestFinal_ex(mdctx_h, xml_.header_hash().data(), &out_len_h);
-  EVP_MD_CTX_free(mdctx_h);
-
-  SecureBuffer<64> hmac_key;
-  EVP_MD_CTX* mdctx512 = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx512, EVP_sha512(), nullptr);
-  EVP_DigestUpdate(mdctx512, db.master_seed().data(), db.master_seed().size());
-  EVP_DigestUpdate(mdctx512, transformed_key.data(), transformed_key.size());
-  static constexpr uint8_t kKdbxHmacKeyIndex1 = 0x01;
-  EVP_DigestUpdate(mdctx512, &kKdbxHmacKeyIndex1, 1);
-  EVP_DigestFinal_ex(mdctx512, hmac_key.data(), &out_len_h);
-  EVP_MD_CTX_free(mdctx512);
-
-  secure_zero(transformed_key.data(), transformed_key.size());
-
-  SecureBuffer<64> header_hmac_key;
-  const std::array<uint8_t, 8> kKdbxHeaderHmacIndex = {0xff, 0xff, 0xff, 0xff,
-                                                       0xff, 0xff, 0xff, 0xff};
-  EVP_MD_CTX* mdctx512b = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx512b, EVP_sha512(), nullptr);
-  EVP_DigestUpdate(mdctx512b, kKdbxHeaderHmacIndex.data(), kKdbxHeaderHmacIndex.size());
-  EVP_DigestUpdate(mdctx512b, hmac_key.data(), hmac_key.size());
-  EVP_DigestFinal_ex(mdctx512b, header_hmac_key.data(), &out_len_h);
-  EVP_MD_CTX_free(mdctx512b);
-
-  std::array<uint8_t, 32> header_hmac{};
-  unsigned int header_hmac_len = 0;
-  HMAC(EVP_sha256(), header_hmac_key.data(), static_cast<int>(header_hmac_key.size()),
-       reinterpret_cast<const unsigned char*>(header_data.c_str()),
-       KEEPASS_HMAC_DATA_LEN(header_data.size()), header_hmac.data(), &header_hmac_len);
-  assert(header_hmac_len == header_hmac.size());
-
-  secure_zero(header_hmac_key.data(), header_hmac_key.size());
-
-  // Write header, stored hash and stored HMAC to the file.
-  dst.write(header_data.data(), static_cast<std::streamsize>(header_data.size()));
-  conserve<std::array<uint8_t, 32>>(dst, xml_.header_hash());
-  conserve<std::array<uint8_t, 32>>(dst, header_hmac);
-
-  // The header buffer transiently holds key material (master seed, KDF salt).
-  WipeBuffer(&header_data);
-  secure_zero(header_hmac.data(), header_hmac.size());
-
-  // Prepare deobfuscation stream using a freshly generated inner random
-  // stream key. KDBX 4 uses ChaCha20 for the inner random stream.
-  std::array<uint8_t, 32> inner_random_stream_key = random_array<32>();
-  RandomObfuscator obfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
-
-  // Collect all binaries used by entries into the inner header pool. A set of
-  // seen binaries (shared_ptr hashing compares the pointee address) makes the
-  // deduplication O(n); the vector preserves the first-occurrence order so the
-  // pool references stay stable.
-  xml_.binary_pool().clear();
-  std::vector<std::shared_ptr<Binary>> ordered_binaries;
-  std::unordered_set<std::shared_ptr<Binary>> seen_binaries;
-  const auto collect = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
-    for (const auto& entry : group->Entries()) {
-      const auto collect_entry = [&](const std::shared_ptr<Entry>& e) -> void {
-        for (const auto& att : e->attachments()) {
-          if (auto binary = att->binary()) {
-            if (seen_binaries.insert(binary).second)
-              ordered_binaries.push_back(binary);
-          }
-        }
-      };
-      collect_entry(entry);
-      for (const auto& history_entry : entry->history())
-        collect_entry(history_entry);
-    }
-    for (const auto& subgroup : group->Groups())
-      self(self, subgroup);
-  };
-  collect(collect, db.root());
-
-  for (std::size_t i = 0; i < ordered_binaries.size(); ++i) {
-    xml_.binary_pool().insert(std::make_pair(std::to_string(i), ordered_binaries[i]));
-  }
-
-  // Write content stream: inner header followed by the (optionally gzip
-  // compressed) XML document.
-  std::stringstream inner_header_stream;
-
-  conserve<uint8_t>(inner_header_stream,
-                    static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamId));
-  conserve<uint32_t>(inner_header_stream, 4);
-  conserve<uint32_t>(inner_header_stream, 3); // ChaCha20
-
-  conserve<uint8_t>(inner_header_stream,
-                    static_cast<uint8_t>(kKdbxInnerHeader::kInnerRandomStreamKey));
-  conserve<uint32_t>(inner_header_stream, 32);
-  conserve<std::array<uint8_t, 32>>(inner_header_stream, inner_random_stream_key);
-
-  // The inner random stream key protects every protected field in the XML;
-  // it must not linger in memory after the header has been serialized. The
-  // obfuscator keeps its own derived copy, which is wiped on destruction.
-  secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
-
-  for (const auto& binary : ordered_binaries) {
-    std::stringstream bin_stream;
-    uint8_t flags = binary->data().is_protected() ? 0x01 : 0x00;
-    conserve<uint8_t>(bin_stream, flags);
-    const secure_string& raw = binary->data().value();
-    if (!raw.empty()) {
-      bin_stream.write(raw.data(), static_cast<std::streamsize>(raw.size()));
-    }
-
-    // Build the payload copy incrementally so that every copy that exists is
-    // reachable for wiping later on.
-    std::string bin_data;
-    std::copy(std::istreambuf_iterator<char>(bin_stream), std::istreambuf_iterator<char>(),
-              std::back_inserter(bin_data));
-    conserve<uint8_t>(inner_header_stream, static_cast<uint8_t>(kKdbxInnerHeader::kBinaries));
-    conserve<uint32_t>(inner_header_stream, static_cast<uint32_t>(bin_data.size()));
-    std::copy(bin_data.begin(), bin_data.end(),
-              std::ostreambuf_iterator<char>(inner_header_stream));
-
-    // Attachment data is sensitive; wipe the transient copies.
-    WipeBuffer(&bin_data);
-    WipeStream(bin_stream);
-  }
-
-  conserve<uint8_t>(inner_header_stream, static_cast<uint8_t>(kKdbxInnerHeader::kEnd));
-  conserve<uint32_t>(inner_header_stream, 0);
-
-  // Build the plaintext payload. In KDBX 4 the inner header and the XML
-  // document are both part of the same compressed payload.
-  std::stringstream plain_stream;
-
-  if (db.compress()) {
-    gzip_ostreambuf gzip_streambuf(plain_stream);
-    std::ostream gzip_stream(&gzip_streambuf);
-
-    std::copy(std::istreambuf_iterator<char>(inner_header_stream), std::istreambuf_iterator<char>(),
-              std::ostreambuf_iterator<char>(gzip_stream));
-    xml_.Write(gzip_stream, obfuscator, db);
-    gzip_stream.flush();
-  } else {
-    std::copy(std::istreambuf_iterator<char>(inner_header_stream), std::istreambuf_iterator<char>(),
-              std::ostreambuf_iterator<char>(plain_stream));
-    xml_.Write(plain_stream, obfuscator, db);
-  }
-
-  // Encrypt the plaintext payload first ...
-  std::stringstream cipher_input;
-  std::stringstream hmac_input;
-  if (db.cipher() == Database::Cipher::kAes || db.cipher() == Database::Cipher::kTwofish) {
-    // Copy the plaintext into the input stream incrementally so that the copy
-    // lives in a stream buffer that can be wiped afterwards.
-    std::copy(std::istreambuf_iterator<char>(plain_stream), std::istreambuf_iterator<char>(),
-              std::ostreambuf_iterator<char>(cipher_input));
-    encrypt_cbc(cipher_input, hmac_input, *cipher);
-  } else {
-    std::string plain;
-    std::copy(std::istreambuf_iterator<char>(plain_stream), std::istreambuf_iterator<char>(),
-              std::back_inserter(plain));
-    std::array<uint8_t, 64> keystream{}, data{};
-    size_t offset = 0;
-    while (offset < plain.size()) {
-      std::array<uint8_t, 64> zero{};
-      chacha_cipher->Process(zero, keystream);
-      size_t n = std::min<size_t>(64, plain.size() - offset);
-      for (size_t i = 0; i < n; ++i)
-        data[i] = static_cast<uint8_t>(plain[offset + i]) ^ keystream[i];
-      hmac_input.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(n));
-      offset += n;
-    }
-    WipeBuffer(&plain);
-    // The block buffers transiently hold the plaintext payload.
-    secure_zero(data.data(), data.size());
-    secure_zero(keystream.data(), keystream.size());
-  }
-
-  // ... and then wrap the ciphertext in HMAC protected blocks. In KDBX 4 the
-  // HMAC is computed over the encrypted content, so the HMAC framing is the
-  // outermost layer below the stored header.
-  hmac_ostreambuf hmac_streambuf(dst, hmac_key.data());
-  std::ostream hmac_stream(&hmac_streambuf);
-
-  std::copy(std::istreambuf_iterator<char>(hmac_input), std::istreambuf_iterator<char>(),
-            std::ostreambuf_iterator<char>(hmac_stream));
-  hmac_stream.flush();
-
-  // The streams still hold the plaintext payload (and copies of it).
-  WipeStream(plain_stream);
-  WipeStream(inner_header_stream);
-  WipeStream(cipher_input);
-  WipeStream(hmac_input);
-
-  secure_zero(hmac_key.data(), hmac_key.size());
 }
 
 } // namespace keepass

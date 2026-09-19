@@ -35,7 +35,7 @@ few hot spots dominate memory and time.
   the in-memory fallback only for genuinely non-seekable streams.
 
 ### P1 - Single-pass, memory-bounded export
-- `KdbxFile::Export3`/`Export4` (`src/kdbx.cc:575`, `src/kdbx.cc:652`) chain
+- `KdbxFile::Export3`/`Export4` (`src/kdbx_export.cc:124`, `src/kdbx_export.cc:203`) chain
   several `std::stringstream`s (`inner_header_stream`, `plain_stream`,
   `cipher_input`, `hmac_input`) so the plaintext *and* a ciphertext copy are
   resident at the same time (~4× payload peak).
@@ -79,9 +79,10 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 - [x] All secret and integrity-critical comparisons now go through
   `keepass::detail::constant_time_eq`
   (`src/include/libkeepass/detail/constant_time.hh`), backed by
-  `CRYPTO_memcmp`: the KDBX4 stored-header HMAC (`src/kdbx.cc`), the KDBX3/4
-  header-hash, content-start-byte and per-block verification (`src/kdbx.cc`,
-  `src/stream.cc`), the KDB content-hash/password check (`src/kdb.cc`),
+  `CRYPTO_memcmp`: the KDBX4 stored-header HMAC (`src/kdbx_import.cc`), the
+  KDBX3/4 header-hash, content-start-byte and per-block verification
+  (`src/kdbx_import.cc`, `src/stream.cc`), the KDB content-hash/password check
+  (`src/kdb.cc`),
   `secure_string` equality (`src/secure.cc`) and the derived-key zero check
   (`src/key.cc`).
 - Unit tests in `test/constant_time.cc`.
@@ -128,7 +129,9 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 - [x] `WipeStream`/`WipeBuffer` were duplicated verbatim in `src/kdbx.cc`,
   `src/kdbx_header.cc`, `src/kdb.cc` and `src/kdbx_xml.cc`. They now live in
   the shared internal header `src/include/libkeepass/detail/secure_io.hh`
-  (`keepass::detail`) and are used by the KDB, KDBX and KDBX XML/header codecs.
+  (`keepass::detail`) and are used by the KDB, KDBX and KDBX XML/header codecs
+  (`src/kdbx_import.cc`, `src/kdbx_export.cc`, `src/kdbx_xml_meta.cc` and
+  `src/kdbx_xml_entry.cc`).
 - Unit tests in `test/secure.cc`.
 
 ### P1 - Split the monoliths
@@ -141,6 +144,17 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 - **Plan:** split by feature (meta/group/entry/binary in the XML layer;
   import/export/header in the format layer; argument parsing/output/edit in
   the CLI) while keeping the public headers stable.
+- [x] `src/cipher.cc` split into `src/cipher_aes.cc`, `src/cipher_chacha20.cc`,
+  `src/cipher_twofish.cc` and `src/cipher_util.cc`.
+- [x] `src/kdb.cc` split into `src/kdb_fields.cc`, `src/kdb_import.cc` and
+  `src/kdb_export.cc` (shared helpers in `src/kdb_internal.hh`).
+- [x] `src/kdbx.cc` split into `src/kdbx_import.cc` and `src/kdbx_export.cc`
+  (shared constants in `src/kdbx_internal.hh`).
+- [x] `src/kdbx_xml.cc` split into `src/kdbx_xml_util.cc`, `src/kdbx_xml_meta.cc`,
+  `src/kdbx_xml_group.cc`, `src/kdbx_xml_entry.cc` and the trimmed
+  top-level `src/kdbx_xml.cc` (shared helpers in `src/kdbx_xml_internal.hh`).
+- [x] `cli/kpx.cc` split into `cli/kpx.cc` (command dispatch),
+  `cli/kpx_export.cc`, `cli/kpx_import.cc` and `cli/kpx_edit.cc`.
 
 ### P2 - Introduce `keepass::detail` and lean public headers
 - Move implementation details out of the public headers (`cipher.hh` is ~362

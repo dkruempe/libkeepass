@@ -56,18 +56,17 @@ std::unique_ptr<Database> KeePass::Open(const std::string& path) {
 }
 
 std::unique_ptr<Database> KeePass::Open(std::istream& src) {
-  // Buffer the input so that the format signature can be inspected even if the
-  // stream is not seekable.
-  std::string data((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
-  std::istringstream stream(data);
-
   Format format = format_;
+
   if (format == Format::kAuto) {
+    // Sniff only the 8-byte format signature; seekable streams are then
+    // rewound and handed directly to the format importer without buffering
+    // the whole input.
     uint32_t sig0 = 0;
     uint32_t sig1 = 0;
-    stream.read(reinterpret_cast<char*>(&sig0), sizeof(sig0));
-    stream.read(reinterpret_cast<char*>(&sig1), sizeof(sig1));
-    if (!stream.good())
+    src.read(reinterpret_cast<char*>(&sig0), sizeof(sig0));
+    src.read(reinterpret_cast<char*>(&sig1), sizeof(sig1));
+    if (!src.good())
       throw FormatError("Not a KeePass database.");
 
     if ((sig0 != kKdbSignature0 && sig0 != kKdbxSignature0) ||
@@ -79,16 +78,41 @@ std::unique_ptr<Database> KeePass::Open(std::istream& src) {
     // lowest byte of signature 1 (0x65 vs 0x67).
     format = sig1 == kKdbSignature1 ? Format::kKdb : Format::kKdbx4;
 
-    stream.clear();
-    stream.seekg(0, std::ios::beg);
+    src.clear();
+    src.seekg(0, std::ios::beg);
+    if (!src.fail())
+      return Import(src, format);
+
+    // Non-seekable stream: reconstruct the input in memory, prepending the
+    // signature bytes that have already been consumed.
+    src.clear();
+    std::string data(reinterpret_cast<char*>(&sig0), sizeof(sig0));
+    data.append(reinterpret_cast<char*>(&sig1), sizeof(sig1));
+    data.append(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>());
+    std::istringstream stream(data);
+    return Import(stream, format);
   }
 
+  // An explicitly selected format needs no signature sniffing; rewind
+  // seekable streams and fall back to buffering the whole input otherwise.
+  src.clear();
+  src.seekg(0, std::ios::beg);
+  if (!src.fail())
+    return Import(src, format);
+
+  src.clear();
+  std::string data((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+  std::istringstream stream(data);
+  return Import(stream, format);
+}
+
+std::unique_ptr<Database> KeePass::Import(std::istream& src, Format format) {
   switch (format) {
   case Format::kKdb:
-    return KdbFile::Import(stream, key_);
+    return KdbFile::Import(src, key_);
   case Format::kKdbx3:
   case Format::kKdbx4:
-    return kdbx_file_.Import(stream, key_);
+    return kdbx_file_.Import(src, key_);
   default:
     throw FormatError("Unknown KeePass database format.");
   }
@@ -113,6 +137,18 @@ void KeePass::Save(std::ostream& dst, const Database& db) {
   } else {
     Save(dst, db, Format::kKdbx3);
   }
+}
+
+void KeePass::Save(std::ostream& dst, const Database& db, const Key& key) {
+  Key old_key = key_;
+  key_ = key;
+  try {
+    Save(dst, db);
+  } catch (...) {
+    key_ = old_key;
+    throw;
+  }
+  key_ = old_key;
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db, Format format) {
@@ -155,20 +191,25 @@ KeePass::Format KeePass::ResolveOutputFormat(const std::string& path, const Data
 }
 
 void KeePass::SaveAs(const std::string& path, const Database& db, const Key& new_key) {
-  Key old_key = key_;
-  key_ = new_key;
-  try {
-    Save(path, db);
-  } catch (...) {
-    key_ = old_key;
-    throw;
-  }
-  key_ = old_key;
+  std::ofstream dst(path, std::ios::out | std::ios::binary);
+  if (!dst.is_open())
+    throw IoError("Unable to open database for writing.");
+
+  SaveAs(dst, db, new_key);
+}
+
+void KeePass::SaveAs(std::ostream& dst, const Database& db, const Key& new_key) {
+  Save(dst, db, new_key);
 }
 
 void KeePass::SaveAs(const std::string& path, const Database& db, const std::string& password,
                      const std::string& keyfile) {
   SaveAs(path, db, Key(password, keyfile));
+}
+
+void KeePass::SaveAs(std::ostream& dst, const Database& db, const std::string& password,
+                     const std::string& keyfile) {
+  Save(dst, db, Key(password, keyfile));
 }
 
 std::unique_ptr<Database> KeePass::Create(const std::string& password, Format format,
