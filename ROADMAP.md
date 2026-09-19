@@ -27,21 +27,18 @@ few hot spots dominate memory and time.
 
 ### P1 - Remove the whole-file buffer in `KeePass::Open(std::istream&)`
 > ⚡
-- `src/keepass.cc:61` reads the *entire* input into a `std::string` just to
-  sniff the 8-byte format signature. For large databases this negates the
-  streaming work done for decryption and doubles peak memory.
-- **Plan:** peek the signature from the stream (buffer only the first 12
-  bytes) and pass a seekable/streaming facade to the format importers; keep
-  the in-memory fallback only for genuinely non-seekable streams.
+- [x] `src/keepass.cc` now sniffs only the 8-byte format signature and, for
+  seekable streams, rewinds and hands the stream directly to the format
+  importer — no whole-input buffering. The in-memory fallback remains only
+  for genuinely non-seekable streams.
 
 ### P1 - Single-pass, memory-bounded export
-- `KdbxFile::Export3`/`Export4` (`src/kdbx_export.cc:124`, `src/kdbx_export.cc:203`) chain
-  several `std::stringstream`s (`inner_header_stream`, `plain_stream`,
-  `cipher_input`, `hmac_input`) so the plaintext *and* a ciphertext copy are
-  resident at the same time (~4× payload peak).
-- **Plan:** build the payload through a streambuf pipeline (gzip → encrypt →
-  HMAC framing) that consumes the XML output incrementally, mirroring the
-  streaming import path. Attachments must still be zeroized after use.
+- [x] `KdbxFile::Export3`/`Export4` (`src/kdbx_export.cc:124`, `src/kdbx_export.cc:203`) now build
+  the payload through a streambuf pipeline (gzip → encrypt → HMAC framing)
+  that consumes the XML output incrementally, mirroring the streaming import
+  path, so plaintext and ciphertext are never both fully resident.
+- Attachments still stream through `std::stringstream` in the KDBX4 inner
+  header (see §1 P2 "Lazy binary loading").
 
 ### P2 - Bound the XML DOM and binary memory further
 - The pugixml DOM (a deliberate decision, see `docs/streaming.md`) plus the
@@ -88,17 +85,21 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 - Unit tests in `test/constant_time.cc`.
 
 ### P1 - Bound decompressed payload size (zip-bomb protection)
-- gzip/hashed-block streams can expand a small database into a huge XML DOM.
-- **Plan:** enforce a configurable cap on total decompressed bytes and on the
-  number of hashed/HMAC blocks, and reject databases whose declared sizes
-  exceed the budget *before* parsing (add e2e robustness tests).
+- [x] gzip/hashed/HMAC block streams enforce configurable caps on total
+  decompressed bytes (`max_total_bytes`) and on the number of blocks
+  (`max_block_count`) and per-block size admitted before any allocation or
+  MAC verification; violations surface as `FormatError`. Hostile fixtures in
+  `test/robustness.cc` (gzip bomb, HMAC block size/count, hashed framing)
+  cover the e2e behavior with default limits passing and tight limits
+  rejected.
 
 ### P1 - Parser/XML resource budgets
-- Add explicit limits during XML parsing: maximum nesting depth, maximum
-  number of groups/entries/history items, maximum single string field size and
-  maximum binary size (in addition to the existing header-field caps in
-  `src/kdbx_header.cc:83`). Verified with hostile fixtures in
-  `test/robustness.cc`.
+- [x] XML parsing enforces budgets for nesting depth (`max_xml_depth`), the
+  number of groups/entries/history items, single string-field size
+  (`max_string_field_bytes`) and binary size (`max_binary_bytes`, also for
+  KDBX3 meta binaries, KDBX4 inner-header binaries and custom icons), on top
+  of the existing header-field caps in `src/kdbx_header.cc:83`. Verified with
+  hostile fixtures in `test/robustness.cc`.
 
 ### P2 - Enforce that protected content stays in secure containers
 - Audit all `RandomObfuscator::Process` call sites so protected values never
@@ -188,15 +189,13 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 ## 4. Modularity
 
 ### P1 - Split the `kpx` CLI into reusable components
-- Extract argument parsing, the remaining output formatters (CSV) and the
-  edit commands (`add`/`update`/`rm`) so the CLI becomes a thin driver.
-- **Status:** `ToJson()` is already public on `Database`/`Group`
-  (`src/include/libkeepass/database.hh:321`,
-  `src/include/libkeepass/group.hh:264`), but CSV output is still implemented
-  inside the CLI (`cli/kpx.cc:523`).
-- **Plan:** promote CSV serialization into the library as first-class
-  `Database::ToCsv(Format)` (format-tunable) so consumers do not need the CLI
-  binary.
+- [x] CSV serialization was promoted into the library as
+  `Database::ToCsv(CsvFormat)` (`src/include/libkeepass/database.hh:356`, the
+  CLI now consumes it from `cli/output.cc`), and argument parsing and the
+  output/edit commands moved to `cli/kpx_export.cc`, `cli/kpx_import.cc` and
+  `cli/kpx_edit.cc`, leaving `cli/kpx.cc` a thin driver.
+- Remaining (P2): CSV formats beyond the two configured via `CsvFormat` and
+  any further output formatters.
 
 ### P2 - Pluggable cipher/KDF registry
 - Model ciphers and KDFs behind factory interfaces so external consumers can
@@ -229,14 +228,13 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 
 ### P1 - Synchronize the `kpx` version
 > ⚡
-- `cli/kpx.cc:45` hard-codes `0.2.0` while the library is at `0.3.0`. Derive
-  the CLI version from `PROJECT_VERSION` at build time.
+- [x] `cli/kpx.cc` no longer hard-codes a version; `KPX_VERSION` is derived
+  from `PROJECT_VERSION` at build time (`CMakeLists.txt:12`).
 
 ### P1 - Complete Open/Save API parity
-- `KeePass::Open` supports paths and streams, but `SaveAs` only supports
-  paths (`src/keepass.cc:157`). Add stream overloads for `SaveAs` and a
-  consistent `KeePass::Save(dst, db, key)` so re-encrypting to a stream is
-  possible.
+- [x] `KeePass::Save` has stream overloads (`src/include/libkeepass/keepass.hh:109`,
+  with key at :122 and format at :193) and `SaveAs` accepts streams as well as
+  paths (:146, :169), so re-encrypting to a stream is possible.
 
 ### P2 - Clarify `KeePass::Create` semantics
 - `KeePass::Create` takes a `password` argument that is ignored
@@ -286,15 +284,14 @@ Most-wanted commands that users of a KeePass tool expect:
 ## 6. Testing & Quality
 
 ### P1 - Cross-format round-trip property tests
-- For every feature × format (KDB, KDBX3, KDBX4, and up-conversions), build a
-  randomized database through the public API, export it, re-import it, and
-  compare a canonical JSON/`ToJson()` snapshot. This is the highest-value gap
-  in the current suite.
+- [x] `test/property.cc` builds randomized databases through the public API
+  across features × formats (KDB, KDBX3, KDBX4 and up-conversions), exports,
+  re-imports and compares canonical `ToJson()` snapshots.
 
 ### P1 - Sanitizer CI job
-- New CI matrix entry running all tests under ASan+UBSan (and LSan where
-  supported) on Linux; consider MSan once the toolchain for dependencies is
-  available.
+- [x] `.github/workflows/sanitizers.yml` runs the full test suite under
+  ASan+UBSan (and LSan where supported) on Linux. MSan remains a future
+  option once the toolchain for dependencies is available.
 
 ### P2 - Broaden fuzzing
 - Current targets cover KDB and KDBX **import** only. Add:
@@ -334,9 +331,10 @@ Most-wanted commands that users of a KeePass tool expect:
   SBOM with each release and sign the artifacts where feasible.
 
 ### P1 - Release automation
-- Tag-driven workflow that builds packages on all OSes, creates the GitHub
-  Release, and verifies the Conan recipe with `conan create` and the
-  `test_package` consumer before publishing.
+- [x] `.github/workflows/release.yml` is a tag-driven workflow (on `v*`) that
+  builds packages on all OSes, creates the GitHub Release and verifies the
+  Conan recipe with `conan create` and the `test_package` consumer before
+  publishing.
 
 ### P2 - CI hygiene
 - Reduce matrix duplication across `cmake.yml`/`fuzz.yml` (shared composite

@@ -174,9 +174,14 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
     std::istream gzip_stream(&gzip_streambuf);
 
     xml_.Parse(gzip_stream, obfuscator, *db);
+    if (gzip_streambuf.BudgetExceeded())
+      throw FormatError("Decompressed payload exceeds the configured size limit.");
   } else {
     xml_.Parse(hashed_stream, obfuscator, *db);
   }
+
+  if (hashed_streambuf.BudgetExceeded())
+    throw FormatError("Hashed block framing exceeds the configured resource budget.");
 
   // The content stream still holds the decrypted payload.
   WipeStream(content);
@@ -351,10 +356,15 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   } catch (const IoError&) {
     // A failed HMAC verification or a truncated block signals corruption (not
     // a wrong password), so it must not be masked as a password error.
+    if (hmac_streambuf.BudgetExceeded())
+      throw FormatError("HMAC block framing exceeds the configured resource budget.");
     throw;
   } catch (std::exception&) {
     throw PasswordError();
   }
+
+  if (hmac_streambuf.BudgetExceeded())
+    throw FormatError("HMAC block framing exceeds the configured resource budget.");
 
   // In KDBX 4 the inner header and the XML document are both part of the same
   // (compressed) payload, so decompress the entire decrypted content first.
@@ -364,6 +374,8 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     std::istream gzip_stream(&gzip_streambuf);
     std::copy(std::istreambuf_iterator<char>(gzip_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain));
+    if (gzip_streambuf.BudgetExceeded())
+      throw FormatError("Decompressed payload exceeds the configured size limit.");
   } else {
     // Move the data instead of copying through str(), which would leave an
     // un-wipeable temporary copy of the decrypted payload behind.

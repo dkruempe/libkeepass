@@ -159,6 +159,11 @@ private:
   /// Cumulative payload bytes decoded so far.
   uint64_t decoded_bytes_ = 0;
 
+  /// Set when a resource budget is exceeded and the stream is cut short.
+  /// The flag is queried by the importer so the violation surfaces as a
+  /// FormatError instead of being swallowed by the iostream layer.
+  bool budget_exceeded_ = false;
+
 public:
   /**
    * @brief Constructs an input streambuf that reads from the given stream.
@@ -166,6 +171,9 @@ public:
    * @param src The input stream to read hashed blocks from.
    */
   explicit hashed_istreambuf(std::istream& src) : src_(src) {}
+
+  /// Returns true if a resource budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
 
   /**
    * @brief Constructs an input streambuf with explicit resource limits.
@@ -242,6 +250,9 @@ private:
   /// Cumulative payload bytes decoded so far.
   uint64_t decoded_bytes_ = 0;
 
+  /// Set when a resource budget is exceeded and the stream is cut short.
+  bool budget_exceeded_ = false;
+
   /// Derives the per-block HMAC key by hashing the block index with the master key.
   std::array<uint8_t, 64> GetCurrentHmacKey() const;
 
@@ -257,6 +268,9 @@ public:
       std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
   }
 
+  /// Returns true if a resource budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
+
   /**
    * @brief Constructs an HMAC-verifying input streambuf with resource limits.
    *
@@ -264,8 +278,7 @@ public:
    * @param hmac_key The 512-bit master HMAC key.
    * @param limits The resource budgets enforced while reading.
    */
-  hmac_istreambuf(std::istream& src, const uint8_t* hmac_key,
-                  const detail::ResourceLimits& limits)
+  hmac_istreambuf(std::istream& src, const uint8_t* hmac_key, const detail::ResourceLimits& limits)
       : src_(src), limits_(limits) {
     if (hmac_key != nullptr)
       std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
@@ -362,6 +375,9 @@ private:
   /** Cumulative decompressed bytes produced so far. */
   uint64_t decoded_bytes_ = 0;
 
+  /// Set when the decompressed size budget is exceeded and the stream is cut short.
+  bool budget_exceeded_ = false;
+
   /// Initializes the zlib inflate context (shared by all constructors).
   void Init();
 
@@ -388,6 +404,9 @@ public:
 
   /// Destroys the streambuf and releases the zlib inflate context.
   ~gzip_istreambuf() override;
+
+  /// Returns true if the decompressed size budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
 
   /// Inflates compressed data into the output buffer when the get area is exhausted.
   int underflow() override;

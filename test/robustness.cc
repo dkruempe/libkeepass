@@ -17,6 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -29,11 +30,19 @@
 #include <gtest/gtest.h>
 
 #include "config.hh"
+#include "libkeepass/binary.hh"
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/limits.hh"
+#include "libkeepass/entry.hh"
 #include "libkeepass/exception.hh"
+#include "libkeepass/group.hh"
+#include "libkeepass/icon.hh"
 #include "libkeepass/kdb.hh"
 #include "libkeepass/kdbx.hh"
+#include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/metadata.hh"
+#include "libkeepass/secure.hh"
 
 using namespace keepass;
 
@@ -85,6 +94,60 @@ std::unique_ptr<Database> ImportBytes(Importer& importer, const std::vector<uint
   stream.write(reinterpret_cast<const char*>(data.data()),
                static_cast<std::streamsize>(data.size()));
   return importer.Import(stream, args...);
+}
+
+constexpr const char* kLimitPassword = "robustness-limit-pw";
+
+std::vector<uint8_t> ToBytes(const std::string& payload) {
+  return std::vector<uint8_t>(payload.begin(), payload.end());
+}
+
+// A fresh AES-KDF database (cheap transform rounds keep the round trips fast).
+std::shared_ptr<Database> MakeLimitDb(bool compress) {
+  auto db = std::make_shared<Database>();
+  db->set_cipher(Database::Cipher::kAes);
+  db->set_kdf(Database::Kdf::kAes);
+  db->set_compress(compress);
+  db->set_transform_rounds(8192);
+  db->set_root(Database::NewGroup("root"));
+  return db;
+}
+
+std::array<uint8_t, 16> UuidSeed(uint8_t byte) {
+  std::array<uint8_t, 16> out{};
+  out.fill(byte);
+  return out;
+}
+
+std::shared_ptr<Entry> MakeEntry(const std::string& title = "") {
+  auto entry = std::make_shared<Entry>();
+  entry->set_uuid(UuidSeed(0x42));
+  if (!title.empty())
+    entry->set_title(protect<secure_string>(secure_string(title), false));
+  return entry;
+}
+
+std::string SaveToBuffer(const std::shared_ptr<Database>& db, KeePass::Format format) {
+  std::stringstream buffer;
+  KeePass writer(kLimitPassword);
+  writer.SetFormat(format);
+  writer.Save(buffer, *db);
+  return buffer.str();
+}
+
+// With the default budgets a generated hostile database is still valid: only
+// the tight limits below must reject it.
+void ExpectImportsOk(const std::string& payload) {
+  KdbxFile file;
+  Key key(kLimitPassword);
+  EXPECT_NE(ImportBytes(file, ToBytes(payload), key), nullptr);
+}
+
+void ExpectImportThrows(const std::string& payload, const detail::ResourceLimits& limits) {
+  KdbxFile file;
+  file.set_resource_limits(limits);
+  Key key(kLimitPassword);
+  EXPECT_THROW(ImportBytes(file, ToBytes(payload), key), FormatError);
 }
 
 } // namespace
@@ -172,4 +235,173 @@ TEST(RobustnessTest, KdbTransformRoundsTooLarge) {
   // Transform rounds live at byte 120 of the 124-byte header.
   const std::vector<uint8_t> bad = Patch(good, 120, ToBytesLE<uint32_t>(0x80000000));
   EXPECT_THROW(ImportBytes(file, bad, key), FormatError);
+}
+
+// ---------------------------------------------------------------------------
+// XML parser resource budgets (src/kdbx_xml_*.cc, detail::ResourceLimits).
+//
+// Each generated database is first imported with the default budgets (must be
+// accepted) and then again with a single budget tightened (must be rejected
+// with FormatError).
+// ---------------------------------------------------------------------------
+
+TEST(RobustnessTest, KdbxXmlDepthLimit) {
+  auto db = MakeLimitDb(false);
+  auto parent = db->root();
+  for (int i = 0; i < 4; ++i) {
+    auto child = Database::NewGroup("g" + std::to_string(i));
+    parent->AddGroup(child);
+    parent = child;
+  }
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_xml_depth = 2;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlGroupCountLimit) {
+  auto db = MakeLimitDb(false);
+  for (int i = 0; i < 4; ++i)
+    db->root()->AddGroup(Database::NewGroup("g" + std::to_string(i)));
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_groups = 3;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlEntryCountLimit) {
+  auto db = MakeLimitDb(false);
+  for (int i = 0; i < 3; ++i)
+    db->root()->AddEntry(MakeEntry());
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_entries = 2;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlHistoryItemLimit) {
+  auto db = MakeLimitDb(false);
+  auto entry = MakeEntry();
+  entry->AddHistoryEntry(MakeEntry());
+  entry->AddHistoryEntry(MakeEntry());
+  db->root()->AddEntry(entry);
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_history_items = 1;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlStringFieldLimit) {
+  const std::string big(4096, 'A');
+
+  // Plain (unprotected) value: rejected via the raw size check.
+  auto db = MakeLimitDb(false);
+  db->root()->AddEntry(MakeEntry(big));
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_string_field_bytes = 1024;
+  ExpectImportThrows(payload, limits);
+
+  // Protected value: rejected via the base64-decoded size estimate before the
+  // obfuscator even runs.
+  auto db_prot = MakeLimitDb(false);
+  auto entry = std::make_shared<Entry>();
+  entry->set_uuid(UuidSeed(0x43));
+  entry->set_title(protect<secure_string>(secure_string(big), true));
+  db_prot->root()->AddEntry(entry);
+  const std::string payload_prot = SaveToBuffer(db_prot, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload_prot);
+  ExpectImportThrows(payload_prot, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlCustomIconBytesLimit) {
+  auto db = MakeLimitDb(false);
+  auto meta = std::make_shared<Metadata>();
+  meta->AddIcon(std::make_shared<Icon>(UuidSeed(0x11), std::vector<uint8_t>(4096, 0xee)));
+  db->set_meta(meta);
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_binary_bytes = 1024;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, Kdbx3BinaryPoolBytesLimit) {
+  // KDBX 3 stores attachments in the XML Binaries element; the oversized
+  // payload must be rejected while parsing <Meta>.
+  auto db = MakeLimitDb(false);
+  auto meta = std::make_shared<Metadata>();
+  auto binary = std::make_shared<Binary>(
+      protect<secure_string>(secure_string(std::string(4096, '\x39')), true));
+  meta->AddBinary(binary);
+  db->set_meta(meta);
+
+  auto entry = MakeEntry();
+  auto attachment = std::make_shared<Entry::Attachment>();
+  attachment->set_name("data");
+  attachment->set_binary(binary);
+  entry->AddAttachment(attachment);
+  db->root()->AddEntry(entry);
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx3);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_binary_bytes = 1024;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxGzipBombTotalBytesLimit) {
+  // A small compressed member inflates beyond the budget: the gzip stream must
+  // stop the XML parse instead of allocating the whole document.
+  auto db = MakeLimitDb(true); // compress the content stream
+  db->root()->AddEntry(MakeEntry(std::string(65536, 'A')));
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_total_bytes = 4096;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, Kdbx4HmacBlockSizeLimit) {
+  auto db = MakeLimitDb(false);
+  db->root()->AddEntry(MakeEntry(std::string(4096, 'A')));
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_block_size = 512;
+  ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, Kdbx4HmacBlockCountLimit) {
+  // A payload larger than one 1 MiB block must trip the block-count budget.
+  auto db = MakeLimitDb(false);
+  db->root()->AddEntry(MakeEntry(std::string(1200000, 'A')));
+
+  const std::string payload = SaveToBuffer(db, KeePass::Format::kKdbx4);
+  ExpectImportsOk(payload);
+
+  detail::ResourceLimits limits;
+  limits.max_block_count = 1;
+  ExpectImportThrows(payload, limits);
 }
