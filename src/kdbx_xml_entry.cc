@@ -46,7 +46,7 @@ using keepass::detail::WipeBuffer;
 using keepass::detail::WipeStream;
 
 protect<secure_string> KdbxXml::ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                                     RandomObfuscator& obfuscator) {
+                                                     RandomObfuscator& obfuscator) const {
   pugi::xml_node val_node = node.child(name);
   if (val_node) {
     bool prot = val_node.attribute("Protected").as_bool();

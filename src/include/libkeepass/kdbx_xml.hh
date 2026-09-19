@@ -152,7 +152,7 @@ private:
 
   /// Parses a protected string value from an XML node.
   protect<secure_string> ParseProtectedString(const pugi::xml_node& node, const char* name,
-                                              RandomObfuscator& obfuscator);
+                                              RandomObfuscator& obfuscator) const;
 
   /// Writes a protected string value to an XML node.
   static void WriteProtectedString(pugi::xml_node& node, const protect<secure_string>& str,

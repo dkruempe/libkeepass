@@ -99,7 +99,10 @@ std::unique_ptr<Database> ImportBytes(Importer& importer, const std::vector<uint
 constexpr const char* kLimitPassword = "robustness-limit-pw";
 
 std::vector<uint8_t> ToBytes(const std::string& payload) {
-  return std::vector<uint8_t>(payload.begin(), payload.end());
+  std::vector<uint8_t> bytes;
+  bytes.reserve(payload.size());
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+  return bytes;
 }
 
 // A fresh AES-KDF database (cheap transform rounds keep the round trips fast).

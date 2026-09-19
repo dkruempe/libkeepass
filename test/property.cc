@@ -101,7 +101,7 @@ public:
 
   uint32_t Pick(uint32_t bound) { return rng_() % bound; }
 
-  bool Chance() { return (rng_() & 1u) != 0; }
+  bool Chance() { return (rng_() & 1U) != 0; }
 
   uint32_t U32(uint32_t lo, uint32_t hi) { return lo + rng_() % (hi - lo + 1); }
 
@@ -132,7 +132,7 @@ public:
   }
 
   // Deterministic positive timestamp (UTC, strongly within KDB time range).
-  std::time_t Time() { return kTimeBase + Pick(static_cast<uint32_t>(86400ull * 365 * 5)); }
+  std::time_t Time() { return kTimeBase + Pick(static_cast<uint32_t>(86400ULL * 365 * 5)); }
 
 private:
   std::mt19937 rng_;
@@ -240,7 +240,7 @@ std::string Str(const std::string& value) { return value; }
 
 std::string Str(const protect<secure_string>& value) { return value.value().str(); }
 
-const std::string& StrVal(const std::string& value) { return value; }
+std::string StrVal(const std::string& value) { return value; }
 
 // ---------------------------------------------------------------------------
 // Database generation.
@@ -328,7 +328,7 @@ std::shared_ptr<Entry> GenerateEntry(Rng& rng, const Caps& caps,
     for (size_t i = 0; i < custom_field_count; ++i) {
       std::string key = "F." + rng.Word(2, 6);
       if (IsStandardKey(key))
-        key = "F.x" + key;
+        key.insert(0, "F.x");
       const std::string value = rng.Chance() ? rng.Word(1, 10) : "";
       const bool value_prot = rng.Chance() && !value.empty();
       entry->AddCustomField(key, protect<secure_string>(secure_string(value), value_prot));
@@ -386,7 +386,7 @@ std::shared_ptr<Database> GenerateDatabase(uint32_t seed, const LegParams& leg) 
   // Same seed yields the same database regardless of the leg; leg-specific
   // sections (icons, recycle bin, metadata) simply get skipped when the leg
   // cannot represent them.
-  Rng rng(0x9e3779b9u ^ (seed * 2654435761u));
+  Rng rng(0x9e3779b9U ^ (seed * 2654435761U));
 
   std::shared_ptr<Database> db = std::make_shared<Database>();
   db->set_cipher(leg.cipher);
@@ -401,7 +401,7 @@ std::shared_ptr<Database> GenerateDatabase(uint32_t seed, const LegParams& leg) 
     const std::array<uint8_t, 16> argon2_salt = rng.Bytes<16>();
     db->set_argon2_salt(std::vector<uint8_t>(argon2_salt.begin(), argon2_salt.end()));
     db->set_argon2_iterations(2);
-    db->set_argon2_memory(64 * 1024);
+    db->set_argon2_memory(static_cast<uint64_t>(64) * 1024);
     db->set_argon2_parallelism(1);
     db->set_argon2_version(0x13);
   }
