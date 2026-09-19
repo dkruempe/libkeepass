@@ -56,7 +56,8 @@ src/
 ├── group.cc              Group tree and ToJson() serialization
 ├── io.cc                 endian-aware read/write helpers (consume/conserve)
 ├── kdb.cc                legacy KDB 1.x importer/exporter
-├── kdbx.cc               KDBX 2.x importer/exporter (import/export pipeline)
+├── kdbx_import.cc        KDBX 2.x importer (import pipeline)
+├── kdbx_export.cc        KDBX 2.x exporter (export pipeline)
 ├── key.cc                user key handling and key derivation (AES-KDF, Argon2)
 ├── metadata.cc           Metadata (database meta, binaries, icons, custom data)
 ├── random.cc             inner random stream obfuscator (Salsa20 / ChaCha20)
@@ -84,10 +85,11 @@ starting point for examples.
                       |  / Entry / Meta  |   public object model
                       +------------------+
                               |
-                +-------------+-------------+
-                |       kdbx.cc / kdb.cc    |   format import/export
-                +-------------+-------------+
-                              |
+                +---------------------------------+
+                | kdbx_import.cc / kdbx_export.cc |
+                | kdb.cc                          |   format import/export
+                +---------------------------------+
+                                 |
           +-------------------+-------------------+
           | cipher.cc | stream.cc | key.cc /        |
           |           | gzip      | random.cc       |   crypto & I/O

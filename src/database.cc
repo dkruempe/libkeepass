@@ -254,6 +254,62 @@ void Database::EnableRecycleBin(bool enable) {
 
 std::string Database::ToJson() const { return root_ ? root_->ToJson() : "{}"; }
 
+namespace {
+
+// Escapes a string for inclusion as a single CSV field following RFC 4180.
+std::string CsvField(const std::string& value) {
+  if (value.find(',') == std::string::npos && value.find('"') == std::string::npos &&
+      value.find('\n') == std::string::npos)
+    return value;
+
+  std::string escaped;
+  escaped.reserve(value.size() + 2);
+  escaped.push_back('"');
+  for (const char c : value) {
+    if (c == '"')
+      escaped.push_back('"');
+    escaped.push_back(c);
+  }
+  escaped.push_back('"');
+  return escaped;
+}
+
+// Writes the CSV rows of the subtree rooted at group, where @p path is the
+// '/'-joined group path above the current group (the root's name is appended
+// here, so entries directly in the root group appear under its name).
+void ToCsvGroup(std::ostringstream& os, const std::shared_ptr<Group>& group,
+                const std::string& path, bool with_passwords) {
+  std::string group_path = path;
+  if (!group->name().empty()) {
+    if (!group_path.empty())
+      group_path += "/";
+    group_path += group->name();
+  }
+
+  for (const auto& entry : group->Entries()) {
+    if (entry->IsMetaEntry())
+      continue;
+
+    os << CsvField(group_path) << "," << CsvField(entry->title().value().str()) << ","
+       << CsvField(entry->username().value().str()) << ","
+       << (with_passwords ? CsvField(entry->password().value().str()) : std::string()) << ","
+       << CsvField(entry->url().value().str()) << "," << CsvField(entry->notes().value().str())
+       << "\n";
+  }
+  for (const auto& child : group->Groups())
+    ToCsvGroup(os, child, group_path, with_passwords);
+}
+
+} // namespace
+
+std::string Database::ToCsv(CsvFormat format) const {
+  std::ostringstream os;
+  os << "Group,Title,Username,Password,Url,Notes\n";
+  if (root_)
+    ToCsvGroup(os, root_, std::string(), format == CsvFormat::kCsvWithPasswords);
+  return os.str();
+}
+
 size_t Database::EntryCount() const {
   if (!root_)
     return 0;

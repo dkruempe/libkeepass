@@ -33,6 +33,7 @@
 #define KEEPASS_HMAC_DATA_LEN(x) (x)
 #endif
 
+#include "libkeepass/cipher.hh"
 #include "libkeepass/detail/constant_time.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
@@ -68,6 +69,20 @@ int hashed_istreambuf::underflow() {
 
     if (header.block_index != block_index_)
       throw IoError("Block index mismatch.");
+
+    // Resource budgets: the block size is attacker-controlled, so cap the
+    // allocation and the number of blocks before reading any block data.
+    // A violation is recorded on the streambuf and turned into a FormatError
+    // by the importer; throwing here would be swallowed by the iostream layer.
+    if (header.block_size > limits_.max_block_size) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
+    if (header.block_size != 0 && block_index_ >= limits_.max_block_count) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
+
     block_index_++;
 
     const std::streamsize remaining = RemainingBytes(src_);
@@ -79,6 +94,12 @@ int hashed_istreambuf::underflow() {
     src_.read(block_.data(), static_cast<std::streamsize>(header.block_size));
     if (src_.gcount() != static_cast<std::streamsize>(header.block_size))
       throw IoError("Block read error.");
+
+    decoded_bytes_ += header.block_size;
+    if (decoded_bytes_ > limits_.max_total_bytes) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
 
     if (header.block_size == 0) {
       if (header.block_hash != kEmptyHash)
@@ -183,6 +204,27 @@ int hmac_istreambuf::underflow() {
     src_.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
     if (src_.gcount() != static_cast<std::streamsize>(sizeof(block_size)))
       throw IoError("Block read error.");
+
+    // Resource budgets are enforced before any block payload is allocated and
+    // before the MAC is verified, so a stream that is out of budget is
+    // rejected as a format error even when the block is not authentic. The
+    // violation is recorded rather than thrown here because the iostream
+    // layer swallows exceptions raised from underflow and turns them into
+    // short reads on the wrapped std::istream.
+    if (block_size > limits_.max_block_size) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
+    if (block_size != 0 && block_index_ >= limits_.max_block_count) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
+
+    decoded_bytes_ += block_size;
+    if (decoded_bytes_ > limits_.max_total_bytes) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
 
     // The HMAC is computed over index ‖ block size ‖ block data.
     std::array<uint8_t, 64> key_64 = GetCurrentHmacKey();
@@ -338,7 +380,7 @@ int hmac_ostreambuf::sync() {
   return FlushBlock() ? 0 : -1;
 }
 
-gzip_istreambuf::gzip_istreambuf(std::istream& src) : src_(src) {
+void gzip_istreambuf::Init() {
   z_stream_.zalloc = Z_NULL;
   z_stream_.zfree = Z_NULL;
   z_stream_.opaque = Z_NULL;
@@ -386,6 +428,17 @@ int gzip_istreambuf::underflow() {
     }
 
     std::size_t output_bytes = output_.size() - z_stream_.avail_out;
+
+    // Enforce the budget on the cumulative decompressed output so that a small
+    // gzip member cannot expand into an unbounded amount of plaintext. Like
+    // the hashed/HMAC budgets this is recorded on the streambuf and surfaced
+    // as a FormatError by the importer.
+    decoded_bytes_ += output_bytes;
+    if (decoded_bytes_ > limits_.max_total_bytes) {
+      budget_exceeded_ = true;
+      return std::char_traits<char>::eof();
+    }
+
     setg(output_.data(), output_.data(), output_.data() + output_bytes);
   }
 
@@ -462,5 +515,121 @@ int gzip_ostreambuf::overflow(int c) {
 }
 
 int gzip_ostreambuf::sync() { return WriteOutput(true) ? 0 : -1; }
+
+bool encrypt_ostreambuf::FlushPending() {
+  if (block_cipher_ != nullptr) {
+    std::array<uint8_t, 16> input{}, block_out{};
+    for (std::size_t i = 0; i < input.size(); ++i)
+      input[i] = static_cast<uint8_t>(pending_[i] ^ prev_block_[i]);
+    block_cipher_->Encrypt(input, block_out);
+    prev_block_ = block_out;
+    dst_.write(reinterpret_cast<const char*>(block_out.data()),
+               static_cast<std::streamsize>(block_out.size()));
+    keepass::secure_zero(input.data(), input.size());
+    keepass::secure_zero(block_out.data(), block_out.size());
+    pending_n_ = 0;
+    return dst_.good();
+  }
+
+  std::array<uint8_t, 64> zero{}, keystream{}, data{};
+  chacha_cipher_->Process(zero, keystream);
+  for (std::size_t i = 0; i < kChaChaBlockSize; ++i)
+    data[i] = static_cast<uint8_t>(pending_[i] ^ keystream[i]);
+  dst_.write(reinterpret_cast<const char*>(data.data()),
+             static_cast<std::streamsize>(kChaChaBlockSize));
+  keepass::secure_zero(zero.data(), zero.size());
+  keepass::secure_zero(keystream.data(), keystream.size());
+  keepass::secure_zero(data.data(), data.size());
+  pending_n_ = 0;
+  return dst_.good();
+}
+
+encrypt_ostreambuf::encrypt_ostreambuf(std::ostream& dst, Cipher<16>& cipher)
+    : dst_(dst), block_cipher_(&cipher), chacha_cipher_(nullptr),
+      prev_block_(cipher.InitializationVector()) {}
+
+encrypt_ostreambuf::encrypt_ostreambuf(std::ostream& dst, ChaCha20Cipher& cipher)
+    : dst_(dst), block_cipher_(nullptr), chacha_cipher_(&cipher) {}
+
+encrypt_ostreambuf::~encrypt_ostreambuf() {
+  keepass::secure_zero(pending_.data(), pending_.size());
+  keepass::secure_zero(prev_block_.data(), prev_block_.size());
+}
+
+int encrypt_ostreambuf::overflow(int c) {
+  if (c == std::char_traits<char>::eof())
+    return c;
+
+  if (finalized_) {
+    assert(false);
+    return std::char_traits<char>::eof();
+  }
+
+  if (c > 0xff) {
+    assert(false);
+    throw InternalError("Trying to write multiple bytes to stream.");
+  }
+
+  const char byte = static_cast<char>(c);
+  return xsputn(&byte, 1) == 1 ? c : std::char_traits<char>::eof();
+}
+
+std::streamsize encrypt_ostreambuf::xsputn(const char* s, std::streamsize count) {
+  if (count <= 0 || finalized_)
+    return 0;
+
+  const std::size_t block_size = block_cipher_ != nullptr ? 16 : kChaChaBlockSize;
+
+  std::streamsize consumed = 0;
+  while (consumed < count) {
+    const std::size_t fill =
+        std::min<std::size_t>(block_size - pending_n_, static_cast<std::size_t>(count - consumed));
+    std::memcpy(pending_.data() + pending_n_, s + consumed, fill);
+    pending_n_ += fill;
+    consumed += static_cast<std::streamsize>(fill);
+
+    if (pending_n_ == block_size) {
+      if (!FlushPending())
+        break;
+    }
+  }
+
+  return consumed;
+}
+
+int encrypt_ostreambuf::sync() {
+  if (finalized_)
+    return 0;
+
+  if (block_cipher_ != nullptr) {
+    // CBC mode uses PKCS #7 padding: a byte-aligned plaintext still receives
+    // a full padding block, matching the blocking encrypt_cbc path.
+    const uint32_t pad_len = static_cast<uint32_t>(16 - pending_n_);
+    assert(pad_len >= 1 && pad_len <= 16);
+    for (std::size_t i = 16 - pad_len; i < 16; ++i)
+      pending_[i] = static_cast<uint8_t>(pad_len);
+    pending_n_ = 16;
+
+    if (!FlushPending())
+      return -1;
+  } else if (pending_n_ > 0) {
+    // ChaCha20 is unpadded, but a trailing partial block still consumes one
+    // keystream block for the bytes actually present.
+    std::array<uint8_t, 64> zero{}, keystream{}, data{};
+    chacha_cipher_->Process(zero, keystream);
+    for (std::size_t i = 0; i < pending_n_; ++i)
+      data[i] = static_cast<uint8_t>(pending_[i] ^ keystream[i]);
+    dst_.write(reinterpret_cast<const char*>(data.data()),
+               static_cast<std::streamsize>(pending_n_));
+    keepass::secure_zero(zero.data(), zero.size());
+    keepass::secure_zero(keystream.data(), keystream.size());
+    keepass::secure_zero(data.data(), data.size());
+    if (!dst_.good())
+      return -1;
+  }
+
+  finalized_ = true;
+  return 0;
+}
 
 } // namespace keepass

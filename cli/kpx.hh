@@ -19,63 +19,19 @@
 
 #pragma once
 
-#include <iosfwd>
 #include <string>
 
 #include "libkeepass/database.hh"
 #include "libkeepass/key.hh"
 #include "libkeepass/secure.hh"
 
+#include "args.hh"
+#include "edit.hh"
+#include "output.hh"
+
 namespace kpx {
 
 extern const char* const kVersion;
-
-// Default and maximum length for --generate.
-constexpr int kDefaultGenerateLength = 16;
-constexpr int kMaxGenerateLength = 256;
-
-// Ambiguity-free character set used by --generate.
-extern const char* const kGenerateCharset;
-
-/// Command-line options as parsed by kpx::ParseArgs.
-struct Options {
-  std::string input;
-  keepass::secure_string password;
-  std::string keyfile;
-  std::string format = "text";
-  std::string output;
-  std::string export_path;
-  std::string command; // "" | "add" | "update" | "rm"
-  std::string search;  // --search query
-  bool regex = false;  // --regex
-  std::string group;   // --group name
-  int generate = 0;    // --generate[=n]; 0 = disabled, -1 = invalid
-  bool audit = false;  // --audit
-  std::string title;   // entry field
-  std::string user;
-  std::string entry_password;
-  std::string url;
-  std::string notes;
-  bool has_title = false;
-  bool has_user = false;
-  bool has_pass = false;
-  bool has_url = false;
-  bool has_notes = false;
-  bool with_passwords = false;
-  bool verbose = false;
-  bool help = false;
-  bool show_version = false;
-};
-
-/// Parses the command-line arguments into opt. Supports long options
-/// (--password, --keyfile, --format, --output, --export, --with-passwords,
-/// --search, --regex, --group, --generate, --audit, --title, --user, --pass,
-/// --url, --notes, --verbose, --help, --version, both with '=' and as separate
-/// value arguments), combined short options (-p, -k) and the "--" separator.
-/// The first positional argument may be the "add", "update" or "rm" command;
-/// the following positional argument is the database path. Returns false and
-/// prints an error if an argument is unknown or malformed.
-bool ParseArgs(int argc, const char* argv[], Options& opt);
 
 /// Resolves the master password: the -p value, the KEEPASS_PASSWORD
 /// environment variable or, on a terminal, an interactive prompt.
@@ -83,9 +39,6 @@ keepass::secure_string ResolvePassword(const Options& opt);
 
 /// Returns true if the path names a KDB (legacy) key database.
 bool IsKdbPath(const std::string& path);
-
-/// Prints the command-line usage text to os.
-void PrintUsage(const char* prog, std::ostream& os);
 
 /// Exports db to path, dispatching on .kdb versus .kdbx format.
 void ExportDatabase(const std::string& path, const keepass::Database& db, const keepass::Key& key);

@@ -31,10 +31,14 @@
 
 #include <zlib.h>
 
+#include "libkeepass/detail/limits.hh"
 #include "libkeepass/export.hh"
 #include "util.hh"
 
 namespace keepass {
+
+template <std::size_t N> class Cipher;
+class ChaCha20Cipher;
 
 /**
  * @brief A std::streambuf backed by a fixed-size std::array.
@@ -150,6 +154,15 @@ class LIBKEEPASS_API hashed_istreambuf final
       public std::basic_streambuf<char, std::char_traits<char>> {
 private:
   std::istream& src_;
+  detail::ResourceLimits limits_;
+
+  /// Cumulative payload bytes decoded so far.
+  uint64_t decoded_bytes_ = 0;
+
+  /// Set when a resource budget is exceeded and the stream is cut short.
+  /// The flag is queried by the importer so the violation surfaces as a
+  /// FormatError instead of being swallowed by the iostream layer.
+  bool budget_exceeded_ = false;
 
 public:
   /**
@@ -158,6 +171,18 @@ public:
    * @param src The input stream to read hashed blocks from.
    */
   explicit hashed_istreambuf(std::istream& src) : src_(src) {}
+
+  /// Returns true if a resource budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
+
+  /**
+   * @brief Constructs an input streambuf with explicit resource limits.
+   *
+   * @param src The input stream to read hashed blocks from.
+   * @param limits The resource budgets enforced while reading.
+   */
+  hashed_istreambuf(std::istream& src, const detail::ResourceLimits& limits)
+      : src_(src), limits_(limits) {}
 
   /// Reads and verifies the next block when the get area is exhausted.
   int underflow() override;
@@ -217,9 +242,16 @@ class LIBKEEPASS_API hmac_istreambuf final
 private:
   std::istream& src_;
   std::array<uint8_t, 64> hmac_key_ = {{0}};
+  detail::ResourceLimits limits_;
 
   uint64_t block_index_ = 0;
   std::vector<char> block_;
+
+  /// Cumulative payload bytes decoded so far.
+  uint64_t decoded_bytes_ = 0;
+
+  /// Set when a resource budget is exceeded and the stream is cut short.
+  bool budget_exceeded_ = false;
 
   /// Derives the per-block HMAC key by hashing the block index with the master key.
   std::array<uint8_t, 64> GetCurrentHmacKey() const;
@@ -232,6 +264,22 @@ public:
    * @param hmac_key The 512-bit master HMAC key.
    */
   hmac_istreambuf(std::istream& src, const uint8_t* hmac_key) : src_(src) {
+    if (hmac_key != nullptr)
+      std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
+  }
+
+  /// Returns true if a resource budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
+
+  /**
+   * @brief Constructs an HMAC-verifying input streambuf with resource limits.
+   *
+   * @param src The input stream to read HMAC-protected blocks from.
+   * @param hmac_key The 512-bit master HMAC key.
+   * @param limits The resource budgets enforced while reading.
+   */
+  hmac_istreambuf(std::istream& src, const uint8_t* hmac_key, const detail::ResourceLimits& limits)
+      : src_(src), limits_(limits) {
     if (hmac_key != nullptr)
       std::memcpy(hmac_key_.data(), hmac_key, hmac_key_.size());
   }
@@ -316,12 +364,22 @@ private:
   static const std::size_t kBufferSize = 16384;
 
   std::istream& src_;
+  detail::ResourceLimits limits_;
   z_stream z_stream_{};
 
   /** Input buffer for feeding the decompressor. */
   std::array<char, kBufferSize> input_ = {{0}};
   /** Output buffer for the decompressor to write to. */
   std::array<char, kBufferSize> output_ = {{0}};
+
+  /** Cumulative decompressed bytes produced so far. */
+  uint64_t decoded_bytes_ = 0;
+
+  /// Set when the decompressed size budget is exceeded and the stream is cut short.
+  bool budget_exceeded_ = false;
+
+  /// Initializes the zlib inflate context (shared by all constructors).
+  void Init();
 
 public:
   /**
@@ -330,10 +388,25 @@ public:
    * @param src The input stream containing gzip-compressed data.
    * @throws InternalError If the zlib inflate context cannot be initialized.
    */
-  explicit gzip_istreambuf(std::istream& src);
+  explicit gzip_istreambuf(std::istream& src) : src_(src) { Init(); }
+
+  /**
+   * @brief Constructs a gzip-decompressing streambuf with resource limits.
+   *
+   * @param src The input stream containing gzip-compressed data.
+   * @param limits The resource budgets enforced while inflating.
+   * @throws InternalError If the zlib inflate context cannot be initialized.
+   */
+  gzip_istreambuf(std::istream& src, const detail::ResourceLimits& limits)
+      : src_(src), limits_(limits) {
+    Init();
+  }
 
   /// Destroys the streambuf and releases the zlib inflate context.
   ~gzip_istreambuf() override;
+
+  /// Returns true if the decompressed size budget was exceeded while reading.
+  bool BudgetExceeded() const { return budget_exceeded_; }
 
   /// Inflates compressed data into the output buffer when the get area is exhausted.
   int underflow() override;
@@ -379,6 +452,63 @@ public:
   int overflow(int c) override;
 
   /// Flushes any buffered data and finalizes the gzip stream.
+  int sync() override;
+};
+
+/**
+ * @brief Input streambuf that encrypts on the fly (streaming counterpart of
+ *        the whole-buffer @c encrypt_cbc / ChaCha20 path).
+ *
+ * Wraps the plaintext in the same ciphertext produced by the existing
+ * blocking code: CBC mode with PKCS #7 padding for block ciphers and pure XOR
+ * with a 64-byte keystream for ChaCha20. This lets the exporters pipe the XML
+ * (and KDBX 4 inner header) directly into the cipher without ever
+ * materializing the plaintext or ciphertext in memory.
+ */
+class LIBKEEPASS_API encrypt_ostreambuf final
+    : public std::basic_streambuf<char, std::char_traits<char>> {
+private:
+  static constexpr std::size_t kChaChaBlockSize = 64;
+
+  std::ostream& dst_;
+  Cipher<16>* const block_cipher_;
+  ChaCha20Cipher* const chacha_cipher_;
+
+  std::array<uint8_t, 64> pending_{};
+  std::size_t pending_n_ = 0;
+  std::array<uint8_t, 16> prev_block_{};
+  bool finalized_ = false;
+
+  /// Encrypts one complete internal block (16 or 64 bytes) to the output.
+  bool FlushPending();
+
+public:
+  /**
+   * @brief Constructs a CBC-mode encrypting streambuf.
+   *
+   * @param dst The output stream receiving the ciphertext.
+   * @param cipher The 16-byte block cipher used for CBC encryption.
+   */
+  encrypt_ostreambuf(std::ostream& dst, Cipher<16>& cipher);
+
+  /**
+   * @brief Constructs a ChaCha20 encrypting streambuf.
+   *
+   * @param dst The output stream receiving the ciphertext.
+   * @param cipher The ChaCha20 cipher used for keystream generation.
+   */
+  encrypt_ostreambuf(std::ostream& dst, ChaCha20Cipher& cipher);
+
+  /// Zeroizes the transient plaintext and chaining state.
+  ~encrypt_ostreambuf() override;
+
+  /// Buffers a character, encrypting one block when it reaches capacity.
+  int overflow(int c) override;
+
+  /// Writes several characters, applying cipher respectively.
+  std::streamsize xsputn(const char* s, std::streamsize count) override;
+
+  /// Finalizes the stream (PKCS #7 padding for CBC, partial block for ChaCha20).
   int sync() override;
 };
 

@@ -33,7 +33,7 @@ work in P2, the KDBX 4 importer copied the *entire ciphertext* into a
     non-seekable `hmac_istreambuf` in 64-byte chunks, decrypts each complete
     16-byte CBC block as it arrives and hands it to the output stream. Only
     the *final* block is withheld until EOF so that its PKCS #7 padding can be
-    validated and stripped. ChaCha20 decryption (`kdbx.cc`, `Import4`) is
+    validated and stripped. ChaCha20 decryption (`kdbx_import.cc`, `Import4`) is
     chunked the same way: 64 bytes at a time, one keystream block per chunk.
 *   **Bounded buffers**: the only ciphertext held at any time is a 64-byte read
     chunk plus a sub-block remainder; the only plaintext is one pending block
