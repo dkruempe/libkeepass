@@ -23,6 +23,7 @@
 #include <cstring>
 #include <vector>
 
+#include "libkeepass/detail/constants.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/variantdictionary.hh"
 
@@ -30,18 +31,10 @@ namespace keepass {
 
 namespace {
 
-constexpr std::array<uint8_t, 16> kKdbxKdfAesKdbx4 = {{0x7c, 0x02, 0xbb, 0x82, 0x79, 0xa7, 0x4a,
-                                                       0xc0, 0x92, 0x7d, 0x11, 0x4a, 0x00, 0x64,
-                                                       0x82, 0x38}};
-constexpr std::array<uint8_t, 16> kKdbxKdfAesKdbx3 = {{0xc9, 0xd9, 0xf3, 0x9a, 0x62, 0x8a, 0x44,
-                                                       0x60, 0xbf, 0x74, 0x0d, 0x08, 0xc1, 0x8a,
-                                                       0x4f, 0xea}};
-constexpr std::array<uint8_t, 16> kKdbxKdfArgon2d = {{0xef, 0x63, 0x6d, 0xdf, 0x8c, 0x29, 0x44,
-                                                      0x4b, 0x91, 0xf7, 0xa9, 0xa4, 0x03, 0xe3,
-                                                      0x0a, 0x0c}};
-constexpr std::array<uint8_t, 16> kKdbxKdfArgon2id = {{0x9e, 0x29, 0x8b, 0x19, 0x56, 0xdb, 0x47,
-                                                       0x73, 0xb2, 0x3d, 0xfc, 0x3e, 0xc6, 0xf0,
-                                                       0xa1, 0xe6}};
+using detail::kKdbxKdfAesKdbx3;
+using detail::kKdbxKdfAesKdbx4;
+using detail::kKdbxKdfArgon2d;
+using detail::kKdbxKdfArgon2id;
 
 } // namespace
 

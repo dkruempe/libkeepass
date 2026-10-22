@@ -87,6 +87,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Format signatures, KDBX version constants, cipher/KDF UUIDs and the
+  outer-header field cap are centralized in
+  `libkeepass/detail/constants.hh`; the codecs and the public `KdbxHeader`
+  constants alias them instead of carrying duplicate magic values.
 - **Breaking:** the language standard baseline is now C++17 (previously the
   library still declared C++11 as its minimum while CI and the documentation
   already built with C++17). The CMake targets enforce this via

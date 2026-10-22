@@ -227,9 +227,10 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   `Kdb` can evolve and be tested independently.
 
 ### P2 - Centralize format constants
-- Signatures, cipher/KDF UUIDs, version constants and size limits are
-  scattered across `kdbx_header.cc`, `kdbx_kdf.cc`, `kdb.cc` and `keepass.cc`.
-  Move them into a single `detail/constants.hh`.
+- [x] `libkeepass/detail/constants.hh` now owns the KDB/KDBX signatures,
+  KDBX version constants, cipher UUIDs, KDF UUIDs, the inner-random-stream IV
+  and the outer-header field cap. The codecs and `KdbxHeader`'s public
+  constants alias these definitions instead of duplicating the magic values.
 
 ### P3 - Independent CMake components
 - If consumer demand grows, expose `libkeepass` as optional components

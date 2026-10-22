@@ -36,6 +36,7 @@
 #include <string>
 
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/constants.hh"
 #include "libkeepass/export.hh"
 
 namespace keepass {
@@ -54,16 +55,16 @@ namespace keepass {
 class LIBKEEPASS_API KdbxHeader final {
 public:
   /// First magic value identifying a KDBX database.
-  static constexpr uint32_t kSignature0 = 0x9aa2d903;
+  static constexpr uint32_t kSignature0 = detail::kKdbxSignature0;
   /// Second magic value identifying a KDBX database.
-  static constexpr uint32_t kSignature1 = 0xb54bfb67;
+  static constexpr uint32_t kSignature1 = detail::kKdbxSignature1;
 
   /// Mask selecting the critical (major) part of the version field.
-  static constexpr uint32_t kVersionCriticalMask = 0xffff0000;
+  static constexpr uint32_t kVersionCriticalMask = detail::kKdbxVersionCriticalMask;
   /// KDBX 3 critical version.
-  static constexpr uint32_t kVersion3 = 0x00030000;
+  static constexpr uint32_t kVersion3 = detail::kKdbxVersion3;
   /// KDBX 4 critical version.
-  static constexpr uint32_t kVersion4 = 0x00040000;
+  static constexpr uint32_t kVersion4 = detail::kKdbxVersion4;
 
   /// Reads the file signatures and version prefix of a KDBX database.
   /**

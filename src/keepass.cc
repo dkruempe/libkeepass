@@ -24,6 +24,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "libkeepass/detail/constants.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/kdb.hh"
 #include "libkeepass/kdbx_kdf.hh"
@@ -34,10 +35,10 @@ namespace keepass {
 
 namespace {
 
-constexpr uint32_t kKdbSignature0 = 0x9aa2d903;
-constexpr uint32_t kKdbSignature1 = 0xb54bfb65;
-constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
-constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
+using detail::kKdbSignature0;
+using detail::kKdbSignature1;
+using detail::kKdbxSignature0;
+using detail::kKdbxSignature1;
 
 } // namespace
 

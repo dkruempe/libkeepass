@@ -27,6 +27,8 @@
 #include <array>
 #include <cstdint>
 
+#include "libkeepass/detail/constants.hh"
+
 /// OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
 #ifdef _MSC_VER
 #define KEEPASS_HMAC_DATA_LEN(x) static_cast<int>(x)
@@ -36,8 +38,7 @@
 
 namespace keepass {
 
-constexpr std::array<uint8_t, 8> kKdbxInnerRandomStreamInitVec = {0xe8, 0x30, 0x09, 0x4b,
-                                                                  0x97, 0x20, 0x5d, 0x2a};
+using detail::kKdbxInnerRandomStreamInitVec;
 
 enum class kKdbxInnerHeader : uint8_t {
   kEnd = 0,
