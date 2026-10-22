@@ -57,6 +57,7 @@ TEST(ConcurrencyTest, ConcurrentOpenOfSameFile) {
 
   std::atomic<int> failures{0};
   std::vector<std::thread> workers;
+  workers.reserve(8);
   for (int t = 0; t < 8; ++t) {
     workers.emplace_back([&]() {
       for (int i = 0; i < 10; ++i) {

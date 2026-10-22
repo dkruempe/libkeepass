@@ -241,13 +241,13 @@ int main(int argc, char** argv) {
   const std::size_t peak_rss = PeakRssKiB();
 
   if (json) {
-    std::printf("{\"entries\":%zu,\"peak_rss_kib\":%zu,\"scenarios\":{", entry_count, peak_rss);
+    std::printf(R"({"entries":%zu,"peak_rss_kib":%zu,"scenarios":{)", entry_count, peak_rss);
     for (std::size_t i = 0; i < measurements.size(); ++i) {
       const Measurement& m = measurements[i];
       if (i != 0)
         std::printf(",");
-      std::printf("\"%s\":{\"bytes\":%zu,\"export_ms\":%.3f,\"import_ms\":%.3f}", m.name,
-                  m.result.bytes, m.result.export_ms, m.result.import_ms);
+      std::printf(R"("%s":{"bytes":%zu,"export_ms":%.3f,"import_ms":%.3f})", m.name, m.result.bytes,
+                  m.result.export_ms, m.result.import_ms);
     }
     std::printf("}}\n");
     return 0;

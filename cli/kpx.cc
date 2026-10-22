@@ -56,7 +56,7 @@ namespace {
 
 // Largest password file accepted. Password files are expected to contain a
 // single line; the cap keeps a hostile path from exhausting memory.
-constexpr std::size_t kMaxPasswordFileBytes = 1024 * 1024;
+constexpr std::size_t kMaxPasswordFileBytes = 1024ULL * 1024ULL;
 
 keepass::secure_string ReadPassword(std::istream& src, const char* what) {
   std::string data((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
@@ -152,8 +152,8 @@ bool WantsJsonErrors(int argc, const char* argv[]) {
 
 int ReportError(bool json, const char* category, const std::string& message, ExitCode code) {
   if (json)
-    std::cerr << "{\"error\":{\"category\":\"" << category << "\",\"message\":\""
-              << JsonEscape(message) << "\"}}\n";
+    std::cerr << R"({"error":{"category":")" << category << R"(","message":")"
+              << JsonEscape(message) << R"("}})" << '\n';
   else
     std::cerr << "error: " << message << "\n";
   return static_cast<int>(code);

@@ -34,18 +34,16 @@ extern const char* const kGenerateCharset;
 
 /// Command-line options as parsed by kpx::ParseArgs.
 struct Options {
-  std::string input;
   keepass::secure_string password;
-  std::string password_file;
-  bool password_stdin = false;
   keepass::secure_string new_password;
+
+  std::string input;
+  std::string password_file;
   std::string new_password_file;
-  bool new_password_stdin = false;
   std::string keyfile;
   std::string kdf;
   std::string to;
   std::string from; // --from (merge/import source database)
-  bool force = false;
   std::string format = "text";
   std::string output;
   std::string export_path;
@@ -53,15 +51,20 @@ struct Options {
   // "history" | "purge" | "otp" | "merge" | "import"
   std::string command;
   std::string search; // --search query
-  bool regex = false; // --regex
   std::string group;  // --group name
-  int generate = 0;   // --generate[=n]; 0 = disabled, -1 = invalid
-  bool audit = false; // --audit
   std::string title;  // entry field
   std::string user;
   std::string entry_password;
   std::string url;
   std::string notes;
+
+  int generate = 0; // --generate[=n]; 0 = disabled, -1 = invalid
+
+  bool password_stdin = false;
+  bool new_password_stdin = false;
+  bool force = false;
+  bool regex = false; // --regex
+  bool audit = false; // --audit
   bool has_title = false;
   bool has_user = false;
   bool has_pass = false;

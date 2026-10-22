@@ -173,11 +173,8 @@ std::vector<std::string> Entry::attachment_names() const {
 }
 
 bool Entry::HasAttachment(const std::string& name) const {
-  for (const auto& attachment : attachments_) {
-    if (attachment->name() == name)
-      return true;
-  }
-  return false;
+  return std::any_of(attachments_.begin(), attachments_.end(),
+                     [&name](const auto& attachment) { return attachment->name() == name; });
 }
 
 void Entry::delete_binary_property(const std::string& name) {
