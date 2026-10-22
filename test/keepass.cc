@@ -322,6 +322,27 @@ TEST_F(KeePassTest, SaveAsChangesKey) {
   ExpectSameDatabase(*db, *reopened);
 }
 
+TEST_F(KeePassTest, SaveAsOverridesImportedTransformedKey) {
+  const std::string source = GetDataPath("groups-2-random_entry-4-pw-aes.kdbx");
+  const std::string out = GetTmpPath("saveas-imported.kdbx");
+
+  KeePass importer("password");
+  std::unique_ptr<Database> db = importer.Open(source);
+  ASSERT_TRUE(db);
+  ASSERT_TRUE(db->has_transformed_key());
+
+  KeePass rekey("unused");
+  rekey.SaveAs(out, *db, "new_password");
+
+  KeePass old("password");
+  EXPECT_THROW(old.Open(out), PasswordError);
+
+  KeePass fresh("new_password");
+  std::unique_ptr<Database> reopened = fresh.Open(out);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
 TEST_F(KeePassTest, SaveAsToStreamChangesKey) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
 
@@ -431,6 +452,32 @@ TEST_F(KeePassTest, CreateDefaults) {
                               [](uint8_t b) { return b != 0; }));
   EXPECT_EQ(0U, db->EntryCount());
   EXPECT_EQ(1U, db->GroupCount());
+}
+
+TEST_F(KeePassTest, CreateCachesTransformedKeyForSaving) {
+  std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdbx4,
+                                                 Database::Cipher::kAes, Database::Kdf::kArgon2id);
+  ASSERT_TRUE(db);
+  EXPECT_TRUE(db->has_transformed_key());
+
+  Database::AddEntry(db->root(), Database::NewEntry("Created"));
+  std::ostringstream out;
+  KeePass keyless; // No password: the cached transformed key must be used.
+  keyless.SetFormat(KeePass::Format::kKdbx4);
+  keyless.Save(out, *db);
+
+  std::istringstream in(out.str());
+  KeePass reader("password");
+  std::unique_ptr<Database> reopened = reader.Open(in);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
+TEST_F(KeePassTest, CreateKdbDoesNotCacheTransformedKey) {
+  std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdb,
+                                                 Database::Cipher::kAes, Database::Kdf::kAes);
+  ASSERT_TRUE(db);
+  EXPECT_FALSE(db->has_transformed_key());
 }
 
 TEST_F(KeePassTest, CreateAesUsesTransformRounds) {

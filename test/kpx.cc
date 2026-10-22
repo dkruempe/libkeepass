@@ -1106,6 +1106,122 @@ TEST_F(KpxTest, AuditGroupScope) {
   EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
 }
 
+TEST_F(KpxTest, GroupsListsGroupPaths) {
+  CliResult result = RunCli({"-p", "password", "groups", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("/root/Internet\n")) << result.out;
+  EXPECT_NE(std::string::npos, result.out.find("/root/Empty\n")) << result.out;
+  EXPECT_EQ(std::string::npos, result.out.find("mail"));
+}
+
+TEST_F(KpxTest, GroupsJsonAndCsv) {
+  CliResult json = RunCli({"-p", "password", "-f", "json", "groups", Kdbx()});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"path\":\"/root/Internet\""));
+
+  CliResult csv = RunCli({"-p", "password", "-f", "csv", "groups", Kdbx()});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_EQ("Path,Entries,Groups\n", csv.out.substr(0, 20));
+  EXPECT_NE(std::string::npos, csv.out.find("/root/Internet,1,0"));
+}
+
+TEST_F(KpxTest, CreateDatabase) {
+  const std::string path = GetTmpPath("cli-created.kdbx");
+  std::remove(path.c_str());
+
+  CliResult create = RunCli({"-p", "password", "create", path});
+  EXPECT_EQ(0, create.code);
+  EXPECT_NE(std::string::npos, create.out.find("created"));
+
+  CliResult read = RunCli({"-p", "password", "groups", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("/\n"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, CreateRefusesToOverwriteWithoutForce) {
+  const std::string path = CreateEditFixture("cli-created-existing.kdbx");
+  CliResult create = RunCli({"-p", "password", "create", path});
+  EXPECT_EQ(1, create.code);
+  EXPECT_NE(std::string::npos, create.err.find("already exists"));
+
+  CliResult forced = RunCli({"-p", "password", "--force", "create", path});
+  EXPECT_EQ(0, forced.code);
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdChangesPassword) {
+  const std::string path = CreateEditFixture("cli-passwd.kdbx");
+
+  CliResult change = RunCli({"-p", "password", "--new-password", "new-secret", "passwd", path});
+  EXPECT_EQ(0, change.code);
+
+  CliResult old_password = RunCli({"-p", "password", path});
+  EXPECT_EQ(1, old_password.code);
+
+  CliResult new_password = RunCli({"-p", "new-secret", path});
+  EXPECT_EQ(0, new_password.code);
+  EXPECT_NE(std::string::npos, new_password.out.find("RootEntry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdChangesKdf) {
+  const std::string path = CreateEditFixture("cli-passwd-kdf.kdbx");
+  CliResult change = RunCli({"-p", "password", "--kdf", "argon2id", "passwd", path});
+  EXPECT_EQ(0, change.code);
+
+  CliResult read = RunCli({"-p", "password", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("RootEntry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdRequiresChange) {
+  const std::string path = CreateEditFixture("cli-passwd-noop.kdbx");
+  CliResult result = RunCli({"-p", "password", "passwd", path});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --new-password"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveEntryToGroup) {
+  const std::string path = CreateEditFixture("cli-move-entry.kdbx");
+
+  CliResult move = RunCli({"-p", "password", "--search", "alice", "--to", "Empty", "move", path});
+  EXPECT_EQ(0, move.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("mail"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveGroupToGroup) {
+  const std::string path = CreateEditFixture("cli-move-group.kdbx");
+
+  CliResult move = RunCli({"-p", "password", "--group", "Internet", "--to", "Empty", "move", path});
+  EXPECT_EQ(0, move.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("Internet/"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveRejectsInvalidTargets) {
+  const std::string path = CreateEditFixture("cli-move-invalid.kdbx");
+
+  CliResult no_target = RunCli({"-p", "password", "--search", "alice", "move", path});
+  EXPECT_EQ(1, no_target.code);
+  EXPECT_NE(std::string::npos, no_target.err.find("requires --to"));
+
+  CliResult self = RunCli({"-p", "password", "--group", "Empty", "--to", "Empty", "move", path});
+  EXPECT_EQ(1, self.code);
+  EXPECT_NE(std::string::npos, self.err.find("already in"));
+  std::remove(path.c_str());
+}
+
 TEST_F(KpxTest, AuditNoIssues) {
   // A database with a single strong entry must report no issues.
   const std::string dst = GetTmpPath("cli-audit-nofindings.kdbx");

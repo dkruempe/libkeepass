@@ -109,21 +109,27 @@ bool HasTerminalInput() {
 
 } // namespace
 
+keepass::secure_string ReadPasswordFile(const std::string& path) {
+  if (path == "-")
+    return ReadPassword(std::cin, "password from stdin");
+
+  std::ifstream file(path, std::ios::in | std::ios::binary);
+  if (!file.is_open())
+    throw keepass::FileNotFoundError();
+  return ReadPassword(file, "password file");
+}
+
+keepass::secure_string ReadPasswordStdin() { return ReadPassword(std::cin, "password from stdin"); }
+
 keepass::secure_string ResolvePassword(const Options& opt) {
   if (!opt.password.empty())
     return opt.password;
 
-  if (!opt.password_file.empty()) {
-    if (opt.password_file == "-")
-      return ReadPassword(std::cin, "password from stdin");
-    std::ifstream file(opt.password_file, std::ios::in | std::ios::binary);
-    if (!file.is_open())
-      throw keepass::FileNotFoundError();
-    return ReadPassword(file, "password file");
-  }
+  if (!opt.password_file.empty())
+    return ReadPasswordFile(opt.password_file);
 
   if (opt.password_stdin)
-    return ReadPassword(std::cin, "password from stdin");
+    return ReadPasswordStdin();
 
   const char* env = std::getenv("KEEPASS_PASSWORD");
   if (env != nullptr && *env != '\0')
@@ -182,6 +188,9 @@ int Run(const Options& opt, const char* argv0) {
     return 1;
   }
 
+  if (opt.command == "create")
+    return RunCreate(opt);
+
   if (opt.command == "add" && (opt.title.empty() || !opt.has_title)) {
     std::cerr << "error: add requires --title <title>\n";
     return 1;
@@ -214,6 +223,22 @@ int Run(const Options& opt, const char* argv0) {
     return RunUpdate(opt, keeper, db.get());
   if (opt.command == "rm")
     return RunRemove(opt, keeper, db.get());
+  if (opt.command == "passwd")
+    return RunPasswd(opt, password, keeper, db.get());
+  if (opt.command == "move")
+    return RunMove(opt, keeper, db.get());
+
+  if (opt.command == "groups") {
+    std::shared_ptr<keepass::Group> start = db->root();
+    if (!opt.group.empty()) {
+      start = db->FindGroup(opt.group);
+      if (!start) {
+        std::cerr << "error: group '" << opt.group << "' not found\n";
+        return 1;
+      }
+    }
+    return RunGroups(opt, start);
+  }
 
   if (opt.audit) {
     std::shared_ptr<keepass::Group> start = db->root();

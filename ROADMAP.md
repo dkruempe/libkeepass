@@ -244,17 +244,22 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   paths (:146, :169), so re-encrypting to a stream is possible.
 
 ### P2 - Clarify `KeePass::Create` semantics
-- `KeePass::Create` takes a `password` argument that is ignored
-  (`src/keepass.cc:174`). Either drop the parameter or make the returned
-  database carry the key so a subsequent `Save` uses it (keeping the current
-  behavior on the stream-based path).
+- [x] `KeePass::Create` now derives and caches the transformed key for the
+  supplied password (except for KDB output), so a subsequent KDBX `Save` can
+  use the password even when the saving `KeePass` instance has no key. Saving
+  with an explicit key now also overrides an imported/created cached key, so
+  `SaveAs` re-encryption actually changes the password.
 
 ### P2 - Extend the `kpx` command set
 Most-wanted commands that users of a KeePass tool expect:
-- `kpx create <file>` - create a brand-new empty database,
-- `kpx passwd` - change the master password and/or KDF parameters in place,
-- `kpx groups`/`--list-groups` - list groups without entries,
-- `kpx move` - move entries/groups between groups,
+- [x] `kpx create <file>` - create a brand-new empty database (`--force` to
+  overwrite, `--kdf` to choose the KDF),
+- [x] `kpx passwd` - change the master password and/or KDF parameters in place
+  (atomic temp-file replacement; `--new-password*`, `--kdf`),
+- [x] `kpx groups`/`--list-groups` - list groups without entries
+  (text/JSON/CSV, honours `--group`),
+- [x] `kpx move` - move entries (`--title`/`--search`) or groups (`--group`)
+  to `--to <group>`,
 - `kpx merge` / `kpx import` - merge a second database into the current one,
 - `kpx history`/`purge` - manage and clear entry history,
 - `kpx otp` - display/export TOTP seeds stored in custom fields.

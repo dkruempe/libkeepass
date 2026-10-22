@@ -177,7 +177,13 @@ public:
 
   /// Creates a new empty database with generated cryptographic material.
   /**
-   * @param password Password of the new database (not required for creation).
+   * When @p password is non-empty and @p format is not KDB, the transformed
+   * key is derived immediately and cached on the returned Database. A later
+   * KDBX \ref Save then works with an empty KeePass key (or use \ref SaveAs
+   * with a new key to re-encrypt). KDB (1.x) export still requires an explicit
+   * key because the legacy format derives its key with different parameters.
+   *
+   * @param password Password to derive and cache the transformed key for.
    * @param format Preferred output format of the new database.
    * @param cipher Payload cipher to use.
    * @param kdf Key derivation function to use.

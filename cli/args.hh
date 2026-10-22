@@ -38,11 +38,17 @@ struct Options {
   keepass::secure_string password;
   std::string password_file;
   bool password_stdin = false;
+  keepass::secure_string new_password;
+  std::string new_password_file;
+  bool new_password_stdin = false;
   std::string keyfile;
+  std::string kdf;
+  std::string to;
+  bool force = false;
   std::string format = "text";
   std::string output;
   std::string export_path;
-  std::string command; // "" | "add" | "update" | "rm"
+  std::string command; // "" | "add" | "update" | "rm" | "groups" | "create" | "passwd" | "move"
   std::string search;  // --search query
   bool regex = false;  // --regex
   std::string group;   // --group name
@@ -65,13 +71,15 @@ struct Options {
 };
 
 /// Parses the command-line arguments into opt. Supports long options
-/// (--password, --password-file, --password-stdin, --keyfile, --format,
-/// --output, --export, --with-passwords, --search, --regex, --group,
-/// --generate, --audit, --title, --user, --pass, --url, --notes, --verbose,
-/// --help, --version, both with '=' and as separate
+/// (--password, --password-file, --password-stdin, --new-password,
+/// --new-password-file, --new-password-stdin, --keyfile, --format, --output,
+/// --export, --with-passwords, --search, --regex, --group, --to, --kdf,
+/// --force, --generate, --audit, --title, --user, --pass, --url, --notes,
+/// --verbose, --help, --version, both with '=' and as separate
 /// value arguments), combined short options (-p, -k) and the "--" separator.
-/// The first positional argument may be the "add", "update" or "rm" command;
-/// the following positional argument is the database path. Returns false and
+/// The first positional argument may be the "add", "update", "rm", "groups",
+/// "create", "passwd" or "move" command; the following positional argument is
+/// the database path. Returns false and
 /// prints an error if an argument is unknown or malformed.
 bool ParseArgs(int argc, const char* argv[], Options& opt);
 

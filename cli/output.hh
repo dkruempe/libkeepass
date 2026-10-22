@@ -65,4 +65,8 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start);
 /// result or a --group subtree) in the configured format.
 int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root);
 
+/// Lists the groups in the given subtree in the configured format, without
+/// printing any entries.
+int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root);
+
 } // namespace kpx

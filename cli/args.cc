@@ -54,7 +54,10 @@ std::string Lower(const std::string& s) {
 }
 
 // The edit commands are recognized as the first positional argument.
-bool IsCommand(const std::string& arg) { return arg == "add" || arg == "update" || arg == "rm"; }
+bool IsCommand(const std::string& arg) {
+  return arg == "add" || arg == "update" || arg == "rm" || arg == "groups" || arg == "create" ||
+         arg == "passwd" || arg == "move";
+}
 
 // Parses the --generate length, printing an error and returning -1 on invalid
 // input. Lengths are clamped to [1, kMaxGenerateLength].
@@ -143,6 +146,23 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
           return false;
       } else if (name == "password-stdin") {
         opt.password_stdin = true;
+      } else if (name == "new-password") {
+        if (!NextValue(argc, argv, i, "--new-password", has_value, value, opt.new_password))
+          return false;
+      } else if (name == "new-password-file") {
+        if (!NextValue(argc, argv, i, "--new-password-file", has_value, value,
+                       opt.new_password_file))
+          return false;
+      } else if (name == "new-password-stdin") {
+        opt.new_password_stdin = true;
+      } else if (name == "kdf") {
+        if (!NextValue(argc, argv, i, "--kdf", has_value, value, opt.kdf))
+          return false;
+      } else if (name == "to") {
+        if (!NextValue(argc, argv, i, "--to", has_value, value, opt.to))
+          return false;
+      } else if (name == "force") {
+        opt.force = true;
       } else if (name == "keyfile") {
         if (!NextValue(argc, argv, i, "--keyfile", has_value, value, opt.keyfile))
           return false;

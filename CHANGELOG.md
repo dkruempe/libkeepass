@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   read the master password without exposing it in `argv` or the environment;
   conflicting password sources are rejected. The interactive password prompt
   now also works on Windows consoles.
+- New `kpx` commands: `create` (empty database, `--force`, `--kdf`), `groups`
+  (text/JSON/CSV group listing), `passwd` (change the master password and/or
+  KDF in place using an atomic temp-file replacement) and `move` (move entries
+  or groups to `--to <group>`).
+- `KeePass::Create` now derives and caches the transformed key for its
+  password, so the returned database can be saved through a keyless
+  `KeePass` instance. KDB output still needs an explicit key.
 - `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
   key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
   key-file streams directly.
@@ -47,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `SaveAs`/`Save(..., key)` now ignore a transformed key cached on an imported
+  or freshly created `Database`. Previously such a cache silently kept the old
+  password, so changing the master password had no effect.
 - Key-file parsing rejects inputs larger than `Key::kMaxKeyFileBytes` (1 MiB)
   before buffering and wipes all transient file/key buffers on error paths,
   including malformed XML/base64 data that previously leaked an unwiped copy.

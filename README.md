@@ -190,6 +190,14 @@ kpx -p password --group Internet database.kdbx
 kpx --generate
 kpx --generate 32
 
+# Create a database, change its credentials, and inspect its group tree
+kpx -p password create database.kdbx
+kpx -p password --new-password "$NEW_SECRET" passwd database.kdbx
+kpx -p password groups database.kdbx
+
+# Move an entry (or a group with --group) to another group
+kpx -p password --search alice --to Archive move database.kdbx
+
 # Edit the database in place
 kpx -p password add --title "New" --user alice --pass secret --group Internet database.kdbx
 kpx -p password update --search alice --notes "changed" database.kdbx

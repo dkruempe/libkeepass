@@ -124,8 +124,9 @@ void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
 void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   // Produce the final key used for encrypting the contents.
   SecureBuffer<32> transformed_key =
-      db.has_transformed_key() ? db.transformed_key().Clone()
-                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
+      use_cached_key_ && db.has_transformed_key()
+          ? db.transformed_key().Clone()
+          : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
 
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
@@ -208,8 +209,9 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // key. If the database was imported and the KDF parameters were not modified,
   // the cached key can be reused; otherwise recompute it.
   SecureBuffer<32> transformed_key =
-      db.has_transformed_key() ? db.transformed_key().Clone()
-                               : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
+      use_cached_key_ && db.has_transformed_key()
+          ? db.transformed_key().Clone()
+          : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
 
   std::array<uint8_t, 32> final_key{};
   EVP_MD_CTX* mdctx = EVP_MD_CTX_new();

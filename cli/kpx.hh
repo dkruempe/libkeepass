@@ -38,6 +38,13 @@ extern const char* const kVersion;
 /// variable or, on a terminal, an interactive prompt.
 keepass::secure_string ResolvePassword(const Options& opt);
 
+/// Reads a master password from a file ("-" means stdin), stripping one
+/// trailing line ending. Throws FileNotFoundError/IoError on failure.
+keepass::secure_string ReadPasswordFile(const std::string& path);
+
+/// Reads a master password from stdin, stripping one trailing line ending.
+keepass::secure_string ReadPasswordStdin();
+
 /// Returns true if the path names a KDB (legacy) key database.
 bool IsKdbPath(const std::string& path);
 

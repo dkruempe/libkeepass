@@ -46,7 +46,17 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "                        read the master password from <path> (\"-\" for\n"
      << "                        stdin; a trailing line break is stripped)\n"
      << "      --password-stdin  read the master password from stdin\n"
+     << "      --new-password <pw>\n"
+     << "                        new master password for the passwd command\n"
+     << "      --new-password-file <path>\n"
+     << "                        read the new master password from <path> (\"-\"\n"
+     << "                        for stdin)\n"
+     << "      --new-password-stdin\n"
+     << "                        read the new master password from stdin\n"
      << "  -k, --keyfile <path>  keyfile used together with the password\n"
+     << "      --kdf <name>      change the KDF: aes, argon2d or argon2id\n"
+     << "      --to <group>      destination group for the move command\n"
+     << "      --force           overwrite an existing file for the create command\n"
      << "      (fallback: KEEPASS_PASSWORD; interactive prompt when stdin is a\n"
      << "       terminal and no other password source is given)\n"
      << "  -f, --format <fmt>    print format: text (default), json, csv\n"
@@ -74,6 +84,11 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "         of --title, --user, --pass, --url, --notes)\n"
      << "  rm     delete the entry with an exact title (--title), all entries\n"
      << "         matching --search <query>, or a whole group (--group <name>)\n"
+     << "  groups list all groups (or the --group subtree) without entries\n"
+     << "  create create a new empty database at <path> (--force to overwrite)\n"
+     << "  passwd change the master password and/or KDF in place\n"
+     << "         (--new-password*, --kdf)\n"
+     << "  move   move entries (--title/--search) or a group (--group) to --to\n"
      << "\n"
      << "Exit code: 0 on success, 1 on any error.\n";
 }
@@ -518,6 +533,43 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
 
   out << "\nSummary: " << with_issues << " of " << rows.size() << " entries have issues, "
       << reused.size() << " reused password" << (reused.size() == 1 ? "" : "s") << ".\n";
+  return 0;
+}
+
+int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  std::vector<std::shared_ptr<keepass::Group>> groups;
+  std::function<void(const std::shared_ptr<keepass::Group>&)> collect =
+      [&](const std::shared_ptr<keepass::Group>& group) {
+        groups.push_back(group);
+        for (const auto& child : group->Groups())
+          collect(child);
+      };
+  if (root)
+    collect(root);
+
+  if (opt.format == "json") {
+    out << "[";
+    for (std::size_t i = 0; i < groups.size(); ++i) {
+      if (i != 0)
+        out << ",";
+      out << R"({"path":")" << JsonEscape(groups[i]->path()) << R"(","entries":)"
+          << groups[i]->entries_count() << R"(,"groups":)" << groups[i]->groups_count() << "}";
+    }
+    out << "]\n";
+  } else if (opt.format == "csv") {
+    out << "Path,Entries,Groups\n";
+    for (const auto& group : groups)
+      out << CsvField(group->path()) << ',' << group->entries_count() << ','
+          << group->groups_count() << "\n";
+  } else {
+    for (const auto& group : groups)
+      out << group->path() << "\n";
+  }
   return 0;
 }
 
