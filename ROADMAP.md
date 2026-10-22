@@ -48,11 +48,14 @@ few hot spots dominate memory and time.
   inner header at once.
 
 ### P2 - Export benchmark and performance regression tracking
-- `test/benchmark.cc` only measures **import** and nothing asserts
-  performance. Add export timing and peak memory (or approximate resident set
-  via `getrusage`), store baselines in `test/benchmark_baseline.json`, and add
-  a CI step that fails (or files an issue) on a >X% regression vs. the
-  baseline, using a dedicated runner so numbers stay comparable.
+- [x] `test/benchmark.cc` measures export and import time for every
+  format/cipher/compression scenario, reports peak RSS (`getrusage` on POSIX,
+  `GetProcessMemoryInfo` on Windows) and emits machine-readable `--json`
+  output. `test/benchmark_baseline.json` stores the reference run and
+  `tools/benchmark_compare.py` fails on absolute or export/import-ratio
+  regressions; the Ubuntu Release CI job runs the comparison and uploads the
+  result. The absolute threshold is intentionally generous on shared runners,
+  while the ratio check is hardware-independent.
 
 ### P2 - Vectorize hot byte loops
 - [x] `RandomObfuscator::Process` (`src/random.cc`) now consumes the keystream

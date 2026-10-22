@@ -1,0 +1,1 @@
+{"entries":2000,"peak_rss_kib":31908,"scenarios":{"kdbx3-aes-gzip":{"bytes":107434,"export_ms":53.921,"import_ms":97.985},"kdbx4-aes-gzip":{"bytes":107651,"export_ms":51.008,"import_ms":96.679},"kdbx4-aes-plain":{"bytes":2985323,"export_ms":51.889,"import_ms":117.721},"kdbx4-chacha20-gzip":{"bytes":107686,"export_ms":49.125,"import_ms":94.727}}}

@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Performance
 
+- The benchmark now measures export and import round-trips, reports peak RSS
+  and supports `--json`; `tools/benchmark_compare.py` gates the CI Release job
+  against `test/benchmark_baseline.json` (absolute and export/import-ratio
+  thresholds).
 - `RandomObfuscator::Process` XORs the inner random stream word-wise in
   64-byte keystream blocks instead of one byte per iteration. All three
   overloads (byte vector, string and `secure_string`) share the chunked

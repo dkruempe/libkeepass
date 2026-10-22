@@ -36,9 +36,18 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
+
+#ifdef _WIN32
+#include <psapi.h>
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
 
 #include "config.hh"
 #include "libkeepass/database.hh"
@@ -127,21 +136,38 @@ std::size_t FileSize(const std::string& path) {
 
 struct Result {
   std::size_t bytes;
-  double ms;
+  double export_ms;
+  double import_ms;
 };
 
-/// Exports \a db to \a path with the given configured exporter and measures
-/// the full import (parse + decrypt).
-Result MeasureImport(const std::string& path, const Database& db, const Key& key,
-                     KdbxFile& exporter) {
+/// Returns the process peak resident set size in KiB (0 if unavailable).
+std::size_t PeakRssKiB() {
+#ifdef _WIN32
+  PROCESS_MEMORY_COUNTERS info{};
+  if (GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info)))
+    return static_cast<std::size_t>(info.PeakWorkingSetSize / 1024);
+#else
+  struct rusage usage {};
+  if (getrusage(RUSAGE_SELF, &usage) == 0)
+    return static_cast<std::size_t>(usage.ru_maxrss); // Linux reports KiB.
+#endif
+  return 0;
+}
+
+/// Exports \a db to \a path with the given configured exporter, then imports
+/// it again, measuring both directions.
+Result MeasureRoundTrip(const std::string& path, const Database& db, const Key& key,
+                        KdbxFile& exporter) {
+  Clock::time_point start = Clock::now();
   exporter.Export(path, db, key);
+  const double export_ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
 
   const std::size_t bytes = FileSize(path);
 
   KdbxFile importer;
-  const Clock::time_point start = Clock::now();
+  start = Clock::now();
   std::unique_ptr<Database> loaded = importer.Import(path, key);
-  const double ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+  const double import_ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
 
   // Functional check: the round trip must not lose any entries.
   const std::size_t loaded_entries = db.root()->entries_count();
@@ -151,17 +177,22 @@ Result MeasureImport(const std::string& path, const Database& db, const Key& key
   }
 
   std::remove(path.c_str());
-  return {bytes, ms};
+  return {bytes, export_ms, import_ms};
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
   std::size_t entry_count = 2000;
-  if (argc > 1) {
+  bool json = false;
+  for (int i = 1; i < argc; ++i) {
+    if (std::strcmp(argv[i], "--json") == 0) {
+      json = true;
+      continue;
+    }
     char* end = nullptr;
-    const long long value = std::strtoll(argv[1], &end, 10);
-    if (end != argv[1] && *end == '\0' && value > 0)
+    const long long value = std::strtoll(argv[i], &end, 10);
+    if (end != argv[i] && *end == '\0' && value > 0)
       entry_count = static_cast<std::size_t>(value);
   }
 
@@ -182,11 +213,16 @@ int main(int argc, char** argv) {
       {"kdbx4-chacha20-gzip", Database::Cipher::kChaCha20, true, true},
   };
 
-  std::printf("libkeepass load benchmark (%zu entries)\n", entry_count);
-  std::printf("scenario                    bytes      ms   MiB/s\n");
+  struct Measurement {
+    const char* name;
+    Result result;
+  };
+  std::array<Measurement, 4> measurements{};
 
-  double worst = 0.0;
-  for (const Scenario& scenario : scenarios) {
+  double worst_export = 0.0;
+  double worst_import = 0.0;
+  for (std::size_t i = 0; i < std::size(scenarios); ++i) {
+    const Scenario& scenario = scenarios[i];
     // The database is reused for every scenario; per-scenario settings are
     // applied just before export.
     db->set_cipher(scenario.cipher);
@@ -197,14 +233,40 @@ int main(int argc, char** argv) {
     KdbxFile exporter;
     exporter.set_write_kdbx4(scenario.kdbx4);
 
-    Result result = MeasureImport(path, *db, key, exporter);
-
-    const double mib = static_cast<double>(result.bytes) / (1024.0 * 1024.0);
-    const double mib_per_s = mib / (result.ms / 1000.0);
-    std::printf("%-24s %8zu %8.2f %8.2f\n", scenario.name, result.bytes, result.ms, mib_per_s);
-    worst = std::max(worst, result.ms);
+    measurements[i] = {scenario.name, MeasureRoundTrip(path, *db, key, exporter)};
+    worst_export = std::max(worst_export, measurements[i].result.export_ms);
+    worst_import = std::max(worst_import, measurements[i].result.import_ms);
   }
 
-  std::printf("worst-case import: %.2f ms\n", worst);
+  const std::size_t peak_rss = PeakRssKiB();
+
+  if (json) {
+    std::printf("{\"entries\":%zu,\"peak_rss_kib\":%zu,\"scenarios\":{", entry_count, peak_rss);
+    for (std::size_t i = 0; i < measurements.size(); ++i) {
+      const Measurement& m = measurements[i];
+      if (i != 0)
+        std::printf(",");
+      std::printf("\"%s\":{\"bytes\":%zu,\"export_ms\":%.3f,\"import_ms\":%.3f}", m.name,
+                  m.result.bytes, m.result.export_ms, m.result.import_ms);
+    }
+    std::printf("}}\n");
+    return 0;
+  }
+
+  std::printf("libkeepass load/export benchmark (%zu entries)\n", entry_count);
+  std::printf(
+      "scenario                   bytes  export_ms  import_ms  export MiB/s  import MiB/s\n");
+  for (const Measurement& m : measurements) {
+    const double mib = static_cast<double>(m.result.bytes) / (1024.0 * 1024.0);
+    const double export_mibs = mib / (m.result.export_ms / 1000.0);
+    const double import_mibs = mib / (m.result.import_ms / 1000.0);
+    std::printf("%-24s %8zu %10.2f %10.2f %13.2f %13.2f\n", m.name, m.result.bytes,
+                m.result.export_ms, m.result.import_ms, export_mibs, import_mibs);
+  }
+
+  std::printf("worst-case export: %.2f ms\n", worst_export);
+  std::printf("worst-case import: %.2f ms\n", worst_import);
+  if (peak_rss != 0)
+    std::printf("peak RSS: %zu KiB\n", peak_rss);
   return 0;
 }

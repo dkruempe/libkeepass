@@ -56,11 +56,29 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
 
-      # Load benchmark: prints import times for all formats. Results are tracked
-      # but never asserted, so slow machines do not fail the build.
-      - name: Benchmark load times
-        continue-on-error: true
-        run: ./bin/benchmark 1000
+      # Round-trip benchmark: export and import timings plus peak RSS. The
+      # absolute threshold is deliberately generous for shared CI runners
+      # (which are also built with coverage here); the export/import ratio is
+      # hardware-independent and catches directional regressions.
+      - name: Benchmark export and import
+        if: matrix.build-type == 'Release'
+        run: ./bin/benchmark --json > benchmark-current.json
+
+      - name: Compare benchmark against baseline
+        if: matrix.build-type == 'Release'
+        run: |
+          python3 tools/benchmark_compare.py \
+            --baseline test/benchmark_baseline.json \
+            --current benchmark-current.json \
+            --threshold 5.0 \
+            --ratio-threshold 0.5
+
+      - name: Upload benchmark results
+        if: matrix.build-type == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-current.json
 
       - name: Test
         if: matrix.build-type != 'Debug'
