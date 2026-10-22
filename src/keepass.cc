@@ -108,6 +108,15 @@ std::unique_ptr<Database> KeePass::Open(std::istream& src) {
   return Import(stream, format);
 }
 
+std::unique_ptr<Database> KeePass::Open(const uint8_t* data, std::size_t size) {
+  if (data == nullptr && size != 0)
+    throw FormatError("Not a KeePass database.");
+
+  const std::string bytes(reinterpret_cast<const char*>(data), size);
+  std::istringstream src(bytes);
+  return Open(src);
+}
+
 std::unique_ptr<Database> KeePass::Import(std::istream& src, Format format) {
   switch (format) {
   case Format::kKdb:

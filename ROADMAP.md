@@ -282,11 +282,12 @@ Most-wanted commands that users of a KeePass tool expect:
   document a stable exit-code mapping per error category.
 
 ### P2 - API ergonomics
-- Automatic invalidation of the cached transformed key on KDF parameter
-  mutation is already implemented (`src/include/libkeepass/database.hh`).
-  Remaining: `Key::FromStream`/`FromBytes` for in-memory keyfiles, a
-  `KeePass::Open` overload taking a `const uint8_t*`/size pair and typed
-  attachment accessors.
+- [x] KDF parameter mutation invalidates the cached transformed key,
+  `Key::FromStream`/`FromBytes` accept in-memory key files, `KeePass::Open`
+  has `const uint8_t*`/size and `std::vector<uint8_t>` overloads, and
+  `Entry::FindAttachment`/`HasAttachment(name)`/`attachment_names` provide
+  typed attachment access that distinguishes an empty attachment from a
+  missing one.
 
 ### P2 - Documentation and migration guides
 - [x] `docs/support-matrix.md` documents format × cipher/KDF × feature

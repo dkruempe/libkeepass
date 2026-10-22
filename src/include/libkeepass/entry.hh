@@ -429,6 +429,20 @@ public:
   /// Returns the data of the binary property with the given name.
   std::vector<uint8_t> get_binary_property(const std::string& name) const;
 
+  /// Returns the attachment object with the given name, or null if absent.
+  /**
+   * Unlike get_binary_property this exposes the underlying \ref Binary
+   * (including whether its data is empty), avoiding the ambiguity between an
+   * empty attachment and a missing one.
+   */
+  std::shared_ptr<Binary> FindAttachment(const std::string& name) const;
+
+  /// Returns the names of all attachments in attachment order.
+  std::vector<std::string> attachment_names() const;
+
+  /// Returns whether an attachment with the given name exists.
+  bool HasAttachment(const std::string& name) const;
+
   /// Removes the binary property with the given name.
   void delete_binary_property(const std::string& name);
 

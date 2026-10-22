@@ -123,6 +123,30 @@ std::vector<uint8_t> Entry::get_binary_property(const std::string& name) const {
   return {};
 }
 
+std::shared_ptr<Binary> Entry::FindAttachment(const std::string& name) const {
+  for (const auto& attachment : attachments_) {
+    if (attachment->name() == name)
+      return attachment->binary();
+  }
+  return nullptr;
+}
+
+std::vector<std::string> Entry::attachment_names() const {
+  std::vector<std::string> names;
+  names.reserve(attachments_.size());
+  for (const auto& attachment : attachments_)
+    names.push_back(attachment->name());
+  return names;
+}
+
+bool Entry::HasAttachment(const std::string& name) const {
+  for (const auto& attachment : attachments_) {
+    if (attachment->name() == name)
+      return true;
+  }
+  return false;
+}
+
 void Entry::delete_binary_property(const std::string& name) {
   for (auto it = attachments_.begin(); it != attachments_.end(); ++it) {
     if ((*it)->name() == name) {

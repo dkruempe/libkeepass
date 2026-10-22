@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `KeePass::Create` now derives and caches the transformed key for its
   password, so the returned database can be saved through a keyless
   `KeePass` instance. KDB output still needs an explicit key.
+- `KeePass::Open` accepts an in-memory `const uint8_t*`/size pair or byte
+  vector, and `Entry::FindAttachment`/`HasAttachment(name)`/`attachment_names`
+  add typed attachment access that distinguishes empty from missing payloads.
 - `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
   key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
   key-file streams directly.
