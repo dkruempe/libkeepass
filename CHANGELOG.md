@@ -103,6 +103,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Infrastructure
 
+- Added a dependency security workflow that resolves the Conan graph to
+  `conan.lock` and scans it with OSV-Scanner on pushes, pull requests and a
+  weekly schedule, uploading SARIF results to code scanning. Dependabot now
+  updates the GitHub Actions used by the CI workflows.
 - ConanCenter recipe raised to the CCI-v2 conventions (`test_package` instead
   of `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
   SPDX license `GPL-3.0-only`); `conan create` verified locally for both static

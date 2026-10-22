@@ -124,9 +124,12 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   covers the XML, hex and raw modes from both memory and streams.
 
 ### P2 - Automated dependency vulnerability scanning
-- Add OSV-Scanner/`conan audit` for the dependency graph and enable
-  Dependabot for Conan/CMake/CI files. Keep the existing CodeQL workflow, and
-  make sure the nightly security scan covers the CLI and tests.
+- [x] `.github/workflows/security.yml` resolves the Conan graph to
+  `conan.lock` and feeds it to the OSV-Scanner reusable workflow on pushes,
+  pull requests and a weekly schedule; results are uploaded to code scanning.
+  Dependabot (`.github/dependabot.yml`) keeps the GitHub Actions used by the
+  build, fuzz, sanitizer, release and security workflows current. The existing
+  CodeQL workflow continues to analyze the library, CLI and tests.
 
 ---
 

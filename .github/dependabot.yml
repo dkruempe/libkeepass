@@ -1,0 +1,15 @@
+version: 2
+
+# Dependabot does not support Conan or raw CMake dependency declarations.
+# The Conan dependency graph is covered by the OSV-Scanner workflow
+# (.github/workflows/security.yml); this configuration keeps the CI actions
+# themselves up to date.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
