@@ -19,6 +19,9 @@
 
 #include "libkeepass/random.hh"
 
+#include <algorithm>
+#include <cstring>
+
 #include <openssl/evp.h>
 
 #include "libkeepass/secure.hh"
@@ -88,45 +91,52 @@ void RandomObfuscator::FillBuffer() {
   buffer_pos_ = 0;
 }
 
-std::vector<uint8_t> RandomObfuscator::Process(const std::vector<uint8_t>& data) {
-  std::vector<uint8_t> obfuscated_data;
-  obfuscated_data.resize(data.size());
+void RandomObfuscator::ProcessBytes(uint8_t* data, std::size_t size) {
+  // Consume the keystream in whole 64-byte blocks and XOR word-wise where
+  // possible. memcpy keeps the accesses both alignment-safe and endian-safe:
+  // the same byte order is used for both operands and the result.
+  constexpr std::size_t kWordSize = sizeof(uint64_t);
 
-  for (std::size_t i = 0; i < data.size(); ++i) {
+  while (size > 0) {
     if (buffer_pos_ == buffer_.size())
       FillBuffer();
 
-    obfuscated_data[i] = data[i] ^ buffer_[buffer_pos_++];
-  }
+    const std::size_t count = std::min(size, buffer_.size() - buffer_pos_);
+    const uint8_t* keystream = buffer_.data() + buffer_pos_;
 
+    std::size_t i = 0;
+    for (; i + kWordSize <= count; i += kWordSize) {
+      uint64_t value = 0;
+      uint64_t key = 0;
+      std::memcpy(&value, data + i, kWordSize);
+      std::memcpy(&key, keystream + i, kWordSize);
+      value ^= key;
+      std::memcpy(data + i, &value, kWordSize);
+    }
+    for (; i < count; ++i)
+      data[i] ^= keystream[i];
+
+    buffer_pos_ += count;
+    data += count;
+    size -= count;
+  }
+}
+
+std::vector<uint8_t> RandomObfuscator::Process(const std::vector<uint8_t>& data) {
+  std::vector<uint8_t> obfuscated_data(data);
+  ProcessBytes(obfuscated_data.data(), obfuscated_data.size());
   return obfuscated_data;
 }
 
 std::string RandomObfuscator::Process(const std::string& data) {
-  std::string obfuscated_data;
-  obfuscated_data.resize(data.size());
-
-  for (std::size_t i = 0; i < data.size(); ++i) {
-    if (buffer_pos_ == buffer_.size())
-      FillBuffer();
-
-    obfuscated_data[i] = static_cast<char>(data[i] ^ buffer_[buffer_pos_++]);
-  }
-
+  std::string obfuscated_data(data);
+  ProcessBytes(reinterpret_cast<uint8_t*>(obfuscated_data.data()), obfuscated_data.size());
   return obfuscated_data;
 }
 
 secure_string RandomObfuscator::Process(const secure_string& data) {
   secure_string obfuscated_data(data);
-
-  for (std::size_t i = 0; i < data.size(); ++i) {
-    if (buffer_pos_ == buffer_.size())
-      FillBuffer();
-
-    obfuscated_data.data()[i] =
-        static_cast<char>(static_cast<uint8_t>(obfuscated_data.data()[i]) ^ buffer_[buffer_pos_++]);
-  }
-
+  ProcessBytes(reinterpret_cast<uint8_t*>(obfuscated_data.data()), obfuscated_data.size());
   return obfuscated_data;
 }
 

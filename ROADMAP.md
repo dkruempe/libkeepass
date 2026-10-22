@@ -55,9 +55,11 @@ few hot spots dominate memory and time.
   baseline, using a dedicated runner so numbers stay comparable.
 
 ### P2 - Vectorize hot byte loops
-- The inner random-stream XOR loop in `RandomObfuscator::Process`
-  (`src/random.cc:91`) processes one byte per iteration; process whole
-  keystream blocks with word-wise XOR when the buffers are aligned.
+- [x] `RandomObfuscator::Process` (`src/random.cc`) now consumes the keystream
+  in whole 64-byte blocks and XORs 64-bit words (alignment- and endian-safe
+  via `memcpy`), with a byte tail for the remainder. The vector, string and
+  `secure_string` overloads share the same chunked implementation; tests cover
+  every length from 0 to 200 bytes and cross-check all three overloads.
 
 ### P3 - Memory-mapped reader
 - For `Open(path)`, use a memory-mapped input (`mmap`/`CreateFileMapping`)

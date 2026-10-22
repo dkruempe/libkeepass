@@ -92,6 +92,35 @@ TEST(RandomObfuscatorTest, Kdbx4StreamKeyConstructors) {
   EXPECT_EQ(chacha_short.Process(TestVector(10)).size(), 10U);
 }
 
+TEST(RandomObfuscatorTest, ProcessVariantsShareTheSameKeystream) {
+  const std::string text(
+      "0123456789abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  const std::vector<uint8_t> bytes(text.begin(), text.end());
+  const secure_string secret(text);
+
+  RandomObfuscator vector_stream(TestKey(), TestIv());
+  RandomObfuscator string_stream(TestKey(), TestIv());
+  RandomObfuscator secure_stream(TestKey(), TestIv());
+
+  const std::vector<uint8_t> vector_out = vector_stream.Process(bytes);
+  const std::string string_out = string_stream.Process(text);
+  const secure_string secure_out = secure_stream.Process(secret);
+
+  EXPECT_EQ(std::vector<uint8_t>(string_out.begin(), string_out.end()), vector_out);
+  EXPECT_EQ(secure_out.str(), string_out);
+}
+
+TEST(RandomObfuscatorTest, ProcessHandlesKeystreamBlockBoundaries) {
+  for (std::size_t size = 0; size <= 200; ++size) {
+    const std::vector<uint8_t> input = TestVector(size);
+    RandomObfuscator obfuscator(TestKey(), TestIv());
+    const std::vector<uint8_t> obfuscated = obfuscator.Process(input);
+
+    RandomObfuscator deobfuscator(TestKey(), TestIv());
+    EXPECT_EQ(deobfuscator.Process(obfuscated), input) << "size " << size;
+  }
+}
+
 TEST(RandomObfuscatorTest, RandomArrayFillsAllBytes) {
   const std::array<uint8_t, 32> random = random_array<32>();
   EXPECT_EQ(random.size(), 32U);

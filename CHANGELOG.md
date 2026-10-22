@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (random-obfuscator stream processing) raise the line coverage of `key.cc`
   and `random.cc` from 76%/72% to 82%/95%.
 
+### Performance
+
+- `RandomObfuscator::Process` XORs the inner random stream word-wise in
+  64-byte keystream blocks instead of one byte per iteration. All three
+  overloads (byte vector, string and `secure_string`) share the chunked
+  implementation, and the new tests cover every length across block
+  boundaries.
+
 ### Fixed
 
 - The recycle-bin metadata now points to the group that actually holds the
