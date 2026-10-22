@@ -24,10 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Conan
-        run: |
-          python -m pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Resolve dependency graph
         run: conan lock create conanfile.py --lockfile-out conan.lock

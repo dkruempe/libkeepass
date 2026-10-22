@@ -23,16 +23,16 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
@@ -51,7 +51,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
@@ -119,16 +119,16 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
@@ -143,7 +143,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(sysctl -n hw.ncpu)
@@ -168,16 +168,16 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
             conan-${{ runner.os }}-
@@ -208,7 +208,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }}

@@ -32,10 +32,10 @@ jobs:
       # The Conan provider (conan_provider.cmake) provisions all dependencies
       # from the conanfile during the first CMake configure, so install Conan
       # before initializing CodeQL and simply build the project afterwards.
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         id: cache-restore

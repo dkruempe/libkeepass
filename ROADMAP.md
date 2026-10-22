@@ -377,9 +377,13 @@ Most-wanted commands that users of a KeePass tool expect:
   publishing.
 
 ### P2 - CI hygiene
-- Reduce matrix duplication across `cmake.yml`/`fuzz.yml` (shared composite
-  action), cache Conan in one place, and make lint run clang-tidy on Windows
-  too (currently Linux-only).
+- [x] Conan installation/profile setup now lives in the shared composite
+  action `.github/actions/setup-conan`, used by the build, fuzz, sanitizer,
+  lint, CodeQL, release and security workflows. Conan cache keys hash
+  `conanfile.py` instead of the non-existent `conanfile.txt`, so dependency
+  changes invalidate the cache correctly.
+- Remaining: fold the restore/save cache steps into the composite action and
+  run clang-tidy on Windows as well (currently Linux-only).
 
 ### P3 - WebAssembly demo
 - Build the library (and optionally `kpx`) for WASM so databases can be
