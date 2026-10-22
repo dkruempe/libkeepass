@@ -68,7 +68,8 @@ struct Options {
   bool has_url = false;
   bool has_notes = false;
   bool with_passwords = false;
-  bool all = false; // --all (history/purge scope)
+  bool include_attachments = false; // --include-attachments (JSON output)
+  bool all = false;                 // --all (history/purge scope)
   bool verbose = false;
   bool help = false;
   bool show_version = false;

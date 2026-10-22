@@ -23,11 +23,44 @@
 #include <cstring>
 #include <sstream>
 
+#include "libkeepass/base64.hh"
 #include "libkeepass/group.hh"
 #include "libkeepass/secure.hh"
 #include "libkeepass/util.hh"
 
 namespace keepass {
+
+namespace {
+
+std::string JsonEscape(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped.push_back(c);
+      break;
+    }
+  }
+  return escaped;
+}
+
+} // namespace
 
 Entry::Entry() : uuid_(generate_uuid()) {}
 
@@ -198,35 +231,37 @@ bool Entry::IsMetaEntry() const {
          has_binstream_attachment;
 }
 
-std::string Entry::Attachment::ToJson() const {
+std::string Entry::Attachment::ToJson(bool include_data) const {
   std::stringstream json;
 
   json << "{";
   if (!name_.empty())
-    json << R"("name":")" << name_ << "\"";
-  if (!binary_->Empty()) {
-    json << (name_.empty() ? "" : ",") << R"("data":")" << *binary_->data() << "\"";
+    json << R"("name":")" << JsonEscape(name_) << "\"";
+  if (include_data && binary_ && !binary_->Empty()) {
+    const secure_string& data = *binary_->data();
+    json << (name_.empty() ? "" : ",") << R"("data_base64":")"
+         << base64_encode(data.begin(), data.end()) << "\"";
   }
   json << "}";
 
   return json.str();
 }
 
-std::string Entry::ToJson() const {
+std::string Entry::ToJson(bool include_attachments) const {
   std::stringstream json;
 
   json << "{";
   json << "\"icon\":" << icon_;
   if (!title_->empty())
-    json << R"(,"title":")" << *title_ << "\"";
+    json << R"(,"title":")" << JsonEscape(title_->str()) << "\"";
   if (!url_->empty())
-    json << R"(,"url":")" << *url_ << "\"";
+    json << R"(,"url":")" << JsonEscape(url_->str()) << "\"";
   if (!username_->empty())
-    json << R"(,"username":")" << *username_ << "\"";
+    json << R"(,"username":")" << JsonEscape(username_->str()) << "\"";
   if (!password_->empty())
-    json << R"(,"password":")" << *password_ << "\"";
+    json << R"(,"password":")" << JsonEscape(password_->str()) << "\"";
   if (!notes_->empty())
-    json << R"(,"notes":")" << *notes_ << "\"";
+    json << R"(,"notes":")" << JsonEscape(notes_->str()) << "\"";
   if (creation_time_ != 0)
     json << R"(,"creation_time":")" << time_to_str(creation_time_) << "\"";
   if (modification_time_ != 0) {
@@ -236,8 +271,14 @@ std::string Entry::ToJson() const {
     json << R"(,"access_time":")" << time_to_str(access_time_) << "\"";
   if (expiry_time_ != 0)
     json << R"(,"expiry_time":")" << time_to_str(expiry_time_) << "\"";
-  for (const auto& attachment : attachments_) {
-    json << ",\"attachment\":" << attachment->ToJson();
+  if (!attachments_.empty()) {
+    json << ",\"attachments\":[";
+    for (std::size_t i = 0; i < attachments_.size(); ++i) {
+      if (i != 0)
+        json << ",";
+      json << attachments_[i]->ToJson(include_attachments);
+    }
+    json << "]";
   }
   json << "}";
 

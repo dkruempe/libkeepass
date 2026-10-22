@@ -266,7 +266,8 @@ public:
   bool HasNonMetaEntries() const;
 
   /// Serializes the group to a JSON object.
-  std::string ToJson() const;
+  /// @param include_attachments Include attachment payloads as base64.
+  std::string ToJson(bool include_attachments = false) const;
 
   /// Equality comparison.
   bool operator==(const Group& other) const;

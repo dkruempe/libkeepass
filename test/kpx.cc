@@ -31,6 +31,7 @@
 #include "libkeepass/entry.hh"
 #include "libkeepass/group.hh"
 #include "libkeepass/kdbx.hh"
+#include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
 
 #include "../cli/kpx.hh"
@@ -208,6 +209,24 @@ std::string CreateHistoryFixture(const std::string& name) {
     throw std::runtime_error("history fixture entry not found");
   entry->save_history();
   ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
+std::string CreateAttachmentFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("attachment fixture entry not found");
+  entry->set_binary_property("note.txt", std::vector<uint8_t>{'h', 'i', '!'});
+
+  // Use KDBX 4: KDBX 3 stores attachments in the Meta binary pool, which the
+  // generated fixture does not populate.
+  keepass::KeePass keeper(keepass::Key("password"));
+  keeper.SetFormat(keepass::KeePass::Format::kKdbx4);
+  keeper.Save(path, *db);
   return path;
 }
 
@@ -495,6 +514,21 @@ TEST_F(KpxTest, JsonOutput) {
   EXPECT_EQ(0, result.code);
   EXPECT_EQ('{', result.out[0]);
   EXPECT_NE(std::string::npos, result.out.find("quoted"));
+}
+
+TEST_F(KpxTest, JsonAttachmentsAreOptIn) {
+  const std::string path = CreateAttachmentFixture("cli-attachments.kdbx");
+
+  CliResult without = RunCli({"-p", "password", "-f", "json", path});
+  EXPECT_EQ(0, without.code);
+  EXPECT_NE(std::string::npos, without.out.find("\"name\":\"note.txt\""));
+  EXPECT_EQ(std::string::npos, without.out.find("data_base64"));
+
+  CliResult with = RunCli({"-p", "password", "-f", "json", "--include-attachments", path});
+  EXPECT_EQ(0, with.code);
+  EXPECT_NE(std::string::npos, with.out.find("\"name\":\"note.txt\""));
+  EXPECT_NE(std::string::npos, with.out.find("\"data_base64\":\"aGkh\"")) << with.out;
+  std::remove(path.c_str());
 }
 
 TEST_F(KpxTest, LongOptionSeparateValue) {

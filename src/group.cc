@@ -145,7 +145,7 @@ bool Group::HasNonMetaEntries() const {
          }) != entries_.end();
 }
 
-std::string Group::ToJson() const {
+std::string Group::ToJson(bool include_attachments) const {
   std::stringstream json;
 
   json << "{";
@@ -174,7 +174,7 @@ std::string Group::ToJson() const {
 
     std::string sep;
     for (const auto& group : groups_) {
-      json << sep << group->ToJson();
+      json << sep << group->ToJson(include_attachments);
       sep = ",";
     }
 
@@ -188,7 +188,7 @@ std::string Group::ToJson() const {
       if (entry->IsMetaEntry())
         continue;
 
-      json << sep << entry->ToJson();
+      json << sep << entry->ToJson(include_attachments);
       sep = ",";
     }
 

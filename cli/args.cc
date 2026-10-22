@@ -225,6 +225,8 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
           return false;
       } else if (name == "with-passwords") {
         opt.with_passwords = true;
+      } else if (name == "include-attachments") {
+        opt.include_attachments = true;
       } else if (name == "all") {
         opt.all = true;
       } else if (name == "verbose") {

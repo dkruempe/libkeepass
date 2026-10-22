@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `KeePass::Open` accepts an in-memory `const uint8_t*`/size pair or byte
   vector, and `Entry::FindAttachment`/`HasAttachment(name)`/`attachment_names`
   add typed attachment access that distinguishes empty from missing payloads.
+- `kpx --include-attachments` embeds attachment payloads as base64 in the print
+  JSON. `Entry`/`Group`/`Database::ToJson(bool include_attachments = false)`
+  expose the same behaviour; attachment data is emitted as `data_base64`
+  instead of raw, unescaped bytes.
 - `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
   key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
   key-file streams directly.

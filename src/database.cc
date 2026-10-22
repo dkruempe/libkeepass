@@ -252,7 +252,9 @@ void Database::EnableRecycleBin(bool enable) {
   meta_->set_recycle_bin_changed(std::time(nullptr));
 }
 
-std::string Database::ToJson() const { return root_ ? root_->ToJson() : "{}"; }
+std::string Database::ToJson(bool include_attachments) const {
+  return root_ ? root_->ToJson(include_attachments) : "{}";
+}
 
 namespace {
 

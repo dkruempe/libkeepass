@@ -281,8 +281,9 @@ Most-wanted commands that users of a KeePass tool expect:
 - [x] `docs/cli-output.md` documents the stable text/JSON/CSV schemas for
   print, `groups`, `history`, `otp` and `--audit`, and errors are emitted as
   structured JSON (`{"error":{"category":...,"message":...}}`) when
-  `--format json` is selected. CSV remains RFC 4180-quoted.
-- Remaining: `--include-attachments`/base64 output for entry payloads.
+  `--format json` is selected. CSV remains RFC 4180-quoted. Print JSON lists
+  attachment names by default and embeds payloads as base64 with
+  `--include-attachments`.
 
 ### P2 - Better diagnostics and consistent exit codes
 - [x] `kpx` maps exceptions to stable exit codes (0 success, 1

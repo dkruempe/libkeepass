@@ -339,7 +339,8 @@ public:
   void EnableRecycleBin(bool enable = true);
 
   /// Serializes the whole database to a JSON string.
-  std::string ToJson() const;
+  /// @param include_attachments Include attachment payloads as base64.
+  std::string ToJson(bool include_attachments = false) const;
 
   /// Serializes the database to CSV, one line per entry.
   /**

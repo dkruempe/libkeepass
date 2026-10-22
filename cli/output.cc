@@ -66,6 +66,8 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "  -o, --output <path>   write print output to <path> instead of stdout\n"
      << "  -e, --export <path>   export the database to <path> (.kdb or .kdbx)\n"
      << "      --with-passwords  include passwords in text/csv output\n"
+     << "      --include-attachments\n"
+     << "                        include attachment payloads as base64 in JSON\n"
      << "      --search <query>  only print entries matching <query> (title,\n"
      << "                        username, URL or notes; case-insensitive substring)\n"
      << "      --regex           treat --search as a regular expression\n"
@@ -748,7 +750,7 @@ int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
   std::ostream& out = OutputStream(opt, file);
 
   if (opt.format == "json") {
-    out << root->ToJson() << "\n";
+    out << root->ToJson(opt.include_attachments) << "\n";
   } else if (opt.format == "csv") {
     PrintCsv(out, root, opt.with_passwords);
   } else {

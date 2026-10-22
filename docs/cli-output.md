@@ -135,7 +135,19 @@ Categories: `auth`, `format`, `io`, `error`.
 
 ## Attachments
 
-Attachments are preserved in the database but are not included in the print
-JSON/CSV output yet (no `--include-attachments`/base64 mode). Use the library
-API (`Entry::attachment_names`, `Entry::FindAttachment`, `get_binary_property`)
-to access payloads.
+Print JSON lists attachment names by default:
+
+```json
+"attachments": [{"name": "note.txt"}]
+```
+
+With `--include-attachments` each attachment also carries its payload as
+base64:
+
+```json
+"attachments": [{"name": "note.txt", "data_base64": "aGkh"}]
+```
+
+CSV/text output does not include payloads. Library consumers can use
+`Entry::attachment_names`, `Entry::FindAttachment` and
+`get_binary_property`.

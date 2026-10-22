@@ -76,7 +76,11 @@ public:
     void set_binary(std::shared_ptr<Binary> binary) { binary_ = std::move(binary); }
 
     /// Serializes the attachment to a JSON fragment.
-    std::string ToJson() const;
+    /**
+     * @param include_data Include the payload as base64 in a `data_base64`
+     *                     member (default: metadata only).
+     */
+    std::string ToJson(bool include_data = false) const;
 
     /// Equality comparison.
     bool operator==(const Attachment& other) const {
@@ -474,7 +478,11 @@ public:
   bool IsMetaEntry() const;
 
   /// Serializes the entry to a JSON object.
-  std::string ToJson() const;
+  /**
+   * @param include_attachments Include attachment payloads as base64 (the
+   *                            default emits attachment names only).
+   */
+  std::string ToJson(bool include_attachments = false) const;
 
   /// Equality comparison.
   bool operator==(const Entry& other) const;
