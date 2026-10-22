@@ -32,7 +32,7 @@ if (SANITIZER_FLAGS)
     target_compile_options(libkeepass PRIVATE ${SANITIZER_FLAGS})
 endif()
 
-foreach (fuzz_target fuzz_kdbx fuzz_kdb fuzz_keyfile)
+foreach (fuzz_target fuzz_kdbx fuzz_kdb fuzz_keyfile fuzz_xml fuzz_export)
     add_executable(${fuzz_target} ${fuzz_target}.cc)
     target_compile_features(${fuzz_target} PRIVATE cxx_std_17)
     if (SANITIZER_FLAGS)

@@ -310,14 +310,16 @@ Most-wanted commands that users of a KeePass tool expect:
   option once the toolchain for dependencies is available.
 
 ### P2 - Broaden fuzzing
-- Current targets cover KDB and KDBX **import** only. Add:
-  - XML/protected-field mutation target (including inner-header and
-    variant-dictionary fuzzing),
-  - keyfile parsing,
-  - export/save path (fuzz the model feeding `Export`),
-  - KDB header field fuzzing (many paths are only covered by static seeds).
-- Integrate with OSS-Fuzz for continuous corpus growth and coverage
-  reporting; keep the in-repo corpus in sync.
+- [x] `fuzz_xml` parses arbitrary KDBX XML bodies directly (groups, entries,
+  protected fields, custom icons, binary references) and writes the resulting
+  model back. `fuzz_keyfile` covers XML/hex/raw key files from memory and
+  streams, `fuzz_export` builds a model from input bytes and exercises the
+  export/save path for KDBX 3 and 4, and `fuzz_kdb`/`fuzz_kdbx` continue to
+  mutate whole KDB/KDBX files (including their headers). The CI fuzz workflow
+  now builds and runs every target through a matrix with format-specific seed
+  corpora.
+- Remaining: submit the targets to OSS-Fuzz for continuous corpus growth and
+  coverage reporting, and sync the in-repo corpus with the OSS-Fuzz corpus.
 
 ### P2 - Adversarial fixtures
 - Extend `test/robustness.cc` with a generated fixture set: truncated,

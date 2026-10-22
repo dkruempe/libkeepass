@@ -23,8 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
   key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
   key-file streams directly.
-- A `fuzz_keyfile` libFuzzer target exercises XML, hexadecimal and raw key
-  files from both memory and streams.
+- New libFuzzer targets: `fuzz_keyfile` (XML/hex/raw key files from memory and
+  streams), `fuzz_xml` (arbitrary KDBX XML bodies parsed and written back) and
+  `fuzz_export` (export/save path driven by an arbitrary model). The fuzz CI
+  workflow now builds and runs all five targets as a matrix with dedicated
+  seed corpora.
 - Third-party interoperability for KeePassXC: real KeePassXC test-corpus
   fixtures are imported in the new `libkeepass.compat` test binary
   (`test/compat.cc`, fixtures under `test/data/compat/`) covering KDBX 4.0
