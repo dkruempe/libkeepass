@@ -20,6 +20,7 @@
 #include "output.hh"
 
 #include <cctype>
+#include <ctime>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -56,6 +57,7 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "  -k, --keyfile <path>  keyfile used together with the password\n"
      << "      --kdf <name>      change the KDF: aes, argon2d or argon2id\n"
      << "      --to <group>      destination group for the move command\n"
+     << "      --all             select all entries (purge)\n"
      << "      --force           overwrite an existing file for the create command\n"
      << "      (fallback: KEEPASS_PASSWORD; interactive prompt when stdin is a\n"
      << "       terminal and no other password source is given)\n"
@@ -89,6 +91,9 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "  passwd change the master password and/or KDF in place\n"
      << "         (--new-password*, --kdf)\n"
      << "  move   move entries (--title/--search) or a group (--group) to --to\n"
+     << "  history print entry history versions (--title/--search/--group)\n"
+     << "  purge  clear entry history (--title/--search/--group or --all)\n"
+     << "  otp    print TOTP seeds/settings stored in custom fields\n"
      << "\n"
      << "Exit code: 0 on success, 1 on any error.\n";
 }
@@ -141,6 +146,30 @@ SearchEntries(const std::shared_ptr<keepass::Group>& start, const std::string& q
       };
   collect(start);
   return result;
+}
+
+std::vector<std::shared_ptr<keepass::Entry>>
+CollectEntries(const std::shared_ptr<keepass::Group>& start) {
+  std::vector<std::shared_ptr<keepass::Entry>> result;
+  std::function<void(const std::shared_ptr<keepass::Group>&)> collect =
+      [&](const std::shared_ptr<keepass::Group>& group) {
+        for (const auto& entry : group->Entries())
+          result.push_back(entry);
+        for (const auto& child : group->Groups())
+          collect(child);
+      };
+  if (start)
+    collect(start);
+  return result;
+}
+
+std::vector<std::shared_ptr<keepass::Entry>>
+SelectEntries(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  if (opt.has_title)
+    return SearchEntries(start, opt.title, false, true);
+  if (!opt.search.empty())
+    return SearchEntries(start, opt.search, opt.regex, false);
+  return CollectEntries(start);
 }
 
 // Builds a lightweight copy of the group tree that contains only the entries
@@ -569,6 +598,138 @@ int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
   } else {
     for (const auto& group : groups)
       out << group->path() << "\n";
+  }
+  return 0;
+}
+
+std::string FormatTimestamp(std::time_t time) {
+  if (time <= 0)
+    return {};
+  const std::tm* tm = std::gmtime(&time);
+  if (tm == nullptr)
+    return std::to_string(time);
+  char buffer[32];
+  if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", tm) == 0)
+    return std::to_string(time);
+  return buffer;
+}
+
+int RunHistory(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  const auto entries = SelectEntries(opt, start);
+
+  if (opt.format == "json") {
+    bool first = true;
+    out << "[";
+    for (const auto& entry : entries) {
+      if (entry->history().empty())
+        continue;
+      if (!first)
+        out << ",";
+      first = false;
+      out << R"({"path":")" << JsonEscape(entry->path()) << R"(","history":[)";
+      for (std::size_t i = 0; i < entry->history().size(); ++i) {
+        const auto& history = entry->history()[i];
+        if (i != 0)
+          out << ",";
+        out << R"({"title":")" << JsonEscape(history->title()->str()) << R"(","username":")"
+            << JsonEscape(history->username()->str()) << R"(","modification_time":")"
+            << FormatTimestamp(history->modification_time()) << "\"}";
+      }
+      out << "]}";
+    }
+    out << "]\n";
+    return 0;
+  }
+
+  if (opt.format == "csv") {
+    out << "Path,Title,Username,ModificationTime\n";
+    for (const auto& entry : entries) {
+      for (const auto& history : entry->history()) {
+        out << CsvField(entry->path()) << ',' << CsvField(history->title()->str()) << ','
+            << CsvField(history->username()->str()) << ','
+            << CsvField(FormatTimestamp(history->modification_time())) << "\n";
+      }
+    }
+    return 0;
+  }
+
+  for (const auto& entry : entries) {
+    if (entry->history().empty())
+      continue;
+    out << entry->path() << " (" << entry->history().size() << " history "
+        << (entry->history().size() == 1 ? "entry" : "entries") << ")\n";
+    for (const auto& history : entry->history()) {
+      out << "  [" << FormatTimestamp(history->modification_time()) << "] "
+          << history->title()->str();
+      if (!history->username()->empty())
+        out << " (" << history->username()->str() << ")";
+      out << "\n";
+    }
+  }
+  return 0;
+}
+
+int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  struct OtpRow {
+    std::string path;
+    std::string seed;
+    std::string settings;
+  };
+
+  std::vector<OtpRow> rows;
+  for (const auto& entry : SelectEntries(opt, start)) {
+    const auto properties = entry->custom_properties();
+    std::string seed;
+    std::string settings;
+    for (const auto& [key, value] : properties) {
+      const std::string lower = Lower(key);
+      if (lower == "otp" || lower == "totp seed" || lower == "otp seed" || lower == "totpsecret" ||
+          lower == "totp_secret") {
+        seed = value;
+      } else if (lower == "totp settings" || lower == "otp settings") {
+        settings = value;
+      }
+    }
+    if (!seed.empty())
+      rows.push_back({entry->path(), seed, settings});
+  }
+
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  if (opt.format == "json") {
+    out << "[";
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+      if (i != 0)
+        out << ",";
+      out << R"({"path":")" << JsonEscape(rows[i].path) << R"(","seed":")"
+          << JsonEscape(rows[i].seed) << R"(","settings":")" << JsonEscape(rows[i].settings)
+          << "\"}";
+    }
+    out << "]\n";
+    return 0;
+  }
+
+  if (opt.format == "csv") {
+    out << "Path,Seed,Settings\n";
+    for (const auto& row : rows)
+      out << CsvField(row.path) << ',' << CsvField(row.seed) << ',' << CsvField(row.settings)
+          << "\n";
+    return 0;
+  }
+
+  for (const auto& row : rows) {
+    out << row.path << ": " << row.seed;
+    if (!row.settings.empty())
+      out << " [" << row.settings << "]";
+    out << "\n";
   }
   return 0;
 }

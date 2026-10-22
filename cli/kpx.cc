@@ -227,6 +227,19 @@ int Run(const Options& opt, const char* argv0) {
     return RunPasswd(opt, password, keeper, db.get());
   if (opt.command == "move")
     return RunMove(opt, keeper, db.get());
+  if (opt.command == "purge")
+    return RunPurge(opt, keeper, db.get());
+  if (opt.command == "history" || opt.command == "otp") {
+    std::shared_ptr<keepass::Group> start = db->root();
+    if (!opt.group.empty()) {
+      start = db->FindGroup(opt.group);
+      if (!start) {
+        std::cerr << "error: group '" << opt.group << "' not found\n";
+        return 1;
+      }
+    }
+    return opt.command == "history" ? RunHistory(opt, start) : RunOtp(opt, start);
+  }
 
   if (opt.command == "groups") {
     std::shared_ptr<keepass::Group> start = db->root();

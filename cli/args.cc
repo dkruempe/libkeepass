@@ -56,7 +56,7 @@ std::string Lower(const std::string& s) {
 // The edit commands are recognized as the first positional argument.
 bool IsCommand(const std::string& arg) {
   return arg == "add" || arg == "update" || arg == "rm" || arg == "groups" || arg == "create" ||
-         arg == "passwd" || arg == "move";
+         arg == "passwd" || arg == "move" || arg == "history" || arg == "purge" || arg == "otp";
 }
 
 // Parses the --generate length, printing an error and returning -1 on invalid
@@ -221,6 +221,8 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
           return false;
       } else if (name == "with-passwords") {
         opt.with_passwords = true;
+      } else if (name == "all") {
+        opt.all = true;
       } else if (name == "verbose") {
         opt.verbose = true;
       } else if (name == "help") {

@@ -198,6 +198,33 @@ std::string CreateEditFixture(const std::string& name) {
   return path;
 }
 
+std::string CreateHistoryFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("history fixture entry not found");
+  entry->save_history();
+  ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
+std::string CreateOtpFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("otp fixture entry not found");
+  entry->set_custom_property("otp", "JBSWY3DPEHPK3PXP");
+  entry->set_custom_property("TOTP Settings", "30;6");
+  ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
 // Builds a database specifically for the --audit tests, containing a strong
 // entry, a short lowercase-only entry, an empty-password entry, two entries
 // sharing the same password (reuse) and a password based on the username.
@@ -1219,6 +1246,61 @@ TEST_F(KpxTest, MoveRejectsInvalidTargets) {
   CliResult self = RunCli({"-p", "password", "--group", "Empty", "--to", "Empty", "move", path});
   EXPECT_EQ(1, self.code);
   EXPECT_NE(std::string::npos, self.err.find("already in"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, HistoryTextAndJson) {
+  const std::string path = CreateHistoryFixture("cli-history.kdbx");
+
+  CliResult text = RunCli({"-p", "password", "history", path});
+  EXPECT_EQ(0, text.code);
+  EXPECT_NE(std::string::npos, text.out.find("(1 history entry)"));
+  EXPECT_NE(std::string::npos, text.out.find("mail, \"quoted\""));
+
+  CliResult json = RunCli({"-p", "password", "-f", "json", "history", path});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"history\""));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PurgeHistory) {
+  const std::string path = CreateHistoryFixture("cli-purge.kdbx");
+
+  CliResult purge = RunCli({"-p", "password", "--title", "mail, \"quoted\"", "purge", path});
+  EXPECT_EQ(0, purge.code);
+  EXPECT_NE(std::string::npos, purge.out.find("purged history of 1 entry"));
+
+  CliResult history = RunCli({"-p", "password", "history", path});
+  EXPECT_EQ(0, history.code);
+  EXPECT_EQ(std::string::npos, history.out.find("history entry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PurgeRequiresSelector) {
+  const std::string path = CreateHistoryFixture("cli-purge-selector.kdbx");
+  CliResult result = RunCli({"-p", "password", "purge", path});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --title"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, OtpPrintsSeeds) {
+  const std::string path = CreateOtpFixture("cli-otp.kdbx");
+
+  CliResult text = RunCli({"-p", "password", "otp", path});
+  EXPECT_EQ(0, text.code);
+  EXPECT_NE(std::string::npos, text.out.find("JBSWY3DPEHPK3PXP"));
+  EXPECT_NE(std::string::npos, text.out.find("30;6"));
+
+  CliResult json = RunCli({"-p", "password", "-f", "json", "otp", path});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"seed\":\"JBSWY3DPEHPK3PXP\""));
+
+  CliResult csv = RunCli({"-p", "password", "-f", "csv", "otp", path});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_EQ("Path,Seed,Settings\n", csv.out.substr(0, 19));
   std::remove(path.c_str());
 }
 

@@ -48,13 +48,15 @@ struct Options {
   std::string format = "text";
   std::string output;
   std::string export_path;
-  std::string command; // "" | "add" | "update" | "rm" | "groups" | "create" | "passwd" | "move"
-  std::string search;  // --search query
-  bool regex = false;  // --regex
-  std::string group;   // --group name
-  int generate = 0;    // --generate[=n]; 0 = disabled, -1 = invalid
-  bool audit = false;  // --audit
-  std::string title;   // entry field
+  // "" | "add" | "update" | "rm" | "groups" | "create" | "passwd" | "move" |
+  // "history" | "purge" | "otp"
+  std::string command;
+  std::string search; // --search query
+  bool regex = false; // --regex
+  std::string group;  // --group name
+  int generate = 0;   // --generate[=n]; 0 = disabled, -1 = invalid
+  bool audit = false; // --audit
+  std::string title;  // entry field
   std::string user;
   std::string entry_password;
   std::string url;
@@ -65,6 +67,7 @@ struct Options {
   bool has_url = false;
   bool has_notes = false;
   bool with_passwords = false;
+  bool all = false; // --all (history/purge scope)
   bool verbose = false;
   bool help = false;
   bool show_version = false;

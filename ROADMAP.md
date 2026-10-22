@@ -268,8 +268,11 @@ Most-wanted commands that users of a KeePass tool expect:
 - [x] `kpx move` - move entries (`--title`/`--search`) or groups (`--group`)
   to `--to <group>`,
 - `kpx merge` / `kpx import` - merge a second database into the current one,
-- `kpx history`/`purge` - manage and clear entry history,
-- `kpx otp` - display/export TOTP seeds stored in custom fields.
+- [x] `kpx history`/`purge` - list history versions (text/JSON/CSV) and clear
+  history by `--title`/`--search`/`--group` or `--all`,
+- [x] `kpx otp` - display TOTP seeds and settings stored in the `otp`/
+  `TOTP Seed`/`TOTP Settings` custom fields (text/JSON/CSV; code generation is
+  still out of scope).
 
 ### P2 - CLI output improvements
 - CSV escaping is already RFC 4180-quoted (`CsvField`, `cli/kpx.cc:506`).

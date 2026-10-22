@@ -284,6 +284,35 @@ int RunMove(const Options& opt, keepass::KeePass& keeper, keepass::Database* db)
   return 0;
 }
 
+int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db) {
+  if (!opt.all && opt.search.empty() && !opt.has_title) {
+    std::cerr << "error: purge requires --title <title>, --search <query> or --all\n";
+    return 1;
+  }
+
+  std::shared_ptr<keepass::Group> start = db->root();
+  if (!opt.group.empty()) {
+    start = db->FindGroup(opt.group);
+    if (!start) {
+      std::cerr << "error: group '" << opt.group << "' not found\n";
+      return 1;
+    }
+  }
+
+  const auto entries = SelectEntries(opt, start);
+  std::size_t purged = 0;
+  for (const auto& entry : entries) {
+    if (entry->history().empty())
+      continue;
+    entry->delete_history();
+    ++purged;
+  }
+
+  keeper.Save(opt.input, *db);
+  std::cout << "purged history of " << purged << " entr" << (purged == 1 ? "y" : "ies") << "\n";
+  return 0;
+}
+
 int RunAdd(const Options& opt, keepass::KeePass& keeper, keepass::Database* db) {
   std::shared_ptr<keepass::Group> group = db->root();
   if (!group) {

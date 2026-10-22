@@ -41,6 +41,10 @@ int RunPasswd(const Options& opt, const keepass::secure_string& old_password,
 /// exit code.
 int RunMove(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);
 
+/// Clears entry history for the selected entries (--title/--search) or the
+/// whole database (--all). Returns the process exit code.
+int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);
+
 /// Creates a new entry from the --title/--user/--pass/--url/--notes options
 /// and saves the database. Returns the process exit code.
 int RunAdd(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);

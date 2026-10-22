@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   now also works on Windows consoles.
 - New `kpx` commands: `create` (empty database, `--force`, `--kdf`), `groups`
   (text/JSON/CSV group listing), `passwd` (change the master password and/or
-  KDF in place using an atomic temp-file replacement) and `move` (move entries
-  or groups to `--to <group>`).
+  KDF in place using an atomic temp-file replacement), `move` (move entries
+  or groups to `--to <group>`), `history` (list history versions),
+  `purge` (`--title`/`--search`/`--group`/`--all`) and `otp` (display TOTP
+  seeds/settings from custom fields).
 - `KeePass::Create` now derives and caches the transformed key for its
   password, so the returned database can be saved through a keyless
   `KeePass` instance. KDB output still needs an explicit key.
