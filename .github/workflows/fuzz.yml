@@ -10,6 +10,7 @@ jobs:
   fuzz:
     name: fuzz-${{ matrix.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -25,8 +26,9 @@ jobs:
 
       - name: Install Clang (libFuzzer)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-18
+          # Avoid an unbounded apt mirror stall on shared runners.
+          timeout 300 sudo apt-get -o Acquire::Retries=3 update
+          timeout 300 sudo apt-get install -y clang-18
 
       - name: Set up Conan
         uses: ./.github/actions/setup-conan
