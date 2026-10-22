@@ -1,0 +1,37 @@
+name: Security triage
+
+on:
+  schedule:
+    - cron: '17 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect open code-scanning alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate \
+            "/repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+            > alerts.json
+
+      - name: Render triage report
+        run: python3 tools/security_triage.py alerts.json > security-triage.md
+
+      - name: Publish job summary
+        run: cat security-triage.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload triage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-triage
+          path: security-triage.md
+          retention-days: 30

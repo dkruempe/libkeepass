@@ -119,6 +119,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Infrastructure
 
+- Added a weekly security-triage workflow that renders open CodeQL and
+  dependency-scanning alerts into a Markdown report (job summary and artifact)
+  via `tools/security_triage.py`.
 - Added a dependency security workflow that resolves the Conan graph to
   `conan.lock` and scans it with OSV-Scanner on pushes, pull requests and a
   weekly schedule, uploading SARIF results to code scanning. Dependabot now
