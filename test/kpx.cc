@@ -211,6 +211,21 @@ std::string CreateHistoryFixture(const std::string& name) {
   return path;
 }
 
+std::string CreateMergeSource(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto imported = keepass::Database::NewEntry("ImportedEntry");
+  imported->set_username(protect<secure_string>("imported-user", false));
+  imported->set_password(protect<secure_string>("imported-secret", true));
+  auto group = keepass::Database::NewGroup("ImportedGroup");
+  group->AddEntry(imported);
+  db->root()->AddGroup(group);
+  ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
 std::string CreateOtpFixture(const std::string& name) {
   const std::string path = GetTmpPath(name);
   std::remove(path.c_str());
@@ -1314,6 +1329,49 @@ TEST_F(KpxTest, OtpPrintsSeeds) {
   EXPECT_EQ(0, csv.code);
   EXPECT_EQ("Path,Seed,Settings\n", csv.out.substr(0, 19));
   std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MergeImportsGroupsAndEntries) {
+  const std::string target = CreateEditFixture("cli-merge-target.kdbx");
+  const std::string source = CreateMergeSource("cli-merge-source.kdbx");
+
+  CliResult merge = RunCli({"-p", "password", "--from", source, "merge", target});
+  EXPECT_EQ(0, merge.code);
+  EXPECT_NE(std::string::npos, merge.out.find("merged"));
+
+  CliResult read = RunCli({"-p", "password", "--search", "ImportedEntry", target});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("ImportedEntry"));
+  EXPECT_NE(std::string::npos, read.out.find("imported-user"));
+
+  CliResult groups = RunCli({"-p", "password", "groups", target});
+  EXPECT_NE(std::string::npos, groups.out.find("ImportedGroup"));
+
+  std::remove(target.c_str());
+  std::remove(source.c_str());
+}
+
+TEST_F(KpxTest, MergeIntoGroupAndAlias) {
+  const std::string target = CreateEditFixture("cli-import-target.kdbx");
+  const std::string source = CreateMergeSource("cli-import-source.kdbx");
+
+  CliResult merge = RunCli({"-p", "password", "--from", source, "--to", "Empty", "import", target});
+  EXPECT_EQ(0, merge.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", target});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("ImportedGroup"));
+
+  std::remove(target.c_str());
+  std::remove(source.c_str());
+}
+
+TEST_F(KpxTest, MergeRequiresSource) {
+  const std::string target = CreateEditFixture("cli-merge-missing.kdbx");
+  CliResult result = RunCli({"-p", "password", "merge", target});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --from"));
+  std::remove(target.c_str());
 }
 
 TEST_F(KpxTest, AuditNoIssues) {

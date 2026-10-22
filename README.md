@@ -198,6 +198,9 @@ kpx -p password groups database.kdbx
 # Move an entry (or a group with --group) to another group
 kpx -p password --search alice --to Archive move database.kdbx
 
+# Merge another database (same master password/keyfile) into this one
+kpx -p password --from old-backup.kdbx merge database.kdbx
+
 # Edit the database in place
 kpx -p password add --title "New" --user alice --pass secret --group Internet database.kdbx
 kpx -p password update --search alice --notes "changed" database.kdbx

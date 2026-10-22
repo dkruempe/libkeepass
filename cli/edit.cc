@@ -31,6 +31,7 @@
 #include "libkeepass/exception.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/random.hh"
+#include "libkeepass/util.hh"
 
 #include "kpx.hh"
 #include "output.hh"
@@ -121,6 +122,22 @@ std::string ResolveEntryPassword(const Options& opt) {
 // Wraps a plain-text string in a protected secure string for the entry setters.
 keepass::protect<keepass::secure_string> Prot(const std::string& s, bool protected_value) {
   return {keepass::secure_string(s), protected_value};
+}
+
+/// Gives an entry (and its history) fresh UUIDs so a merge cannot collide
+/// with an object already in the target database.
+void ReassignEntryUuids(const std::shared_ptr<keepass::Entry>& entry) {
+  entry->set_uuid(keepass::generate_uuid());
+  for (const auto& history : entry->history())
+    ReassignEntryUuids(history);
+}
+
+void ReassignGroupUuids(const std::shared_ptr<keepass::Group>& group) {
+  group->set_uuid(keepass::generate_uuid());
+  for (const auto& entry : group->Entries())
+    ReassignEntryUuids(entry);
+  for (const auto& child : group->Groups())
+    ReassignGroupUuids(child);
 }
 
 } // namespace
@@ -310,6 +327,55 @@ int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db
 
   keeper.Save(opt.input, *db);
   std::cout << "purged history of " << purged << " entr" << (purged == 1 ? "y" : "ies") << "\n";
+  return 0;
+}
+
+int RunMerge(const Options& opt, const keepass::secure_string& password, keepass::KeePass& keeper,
+             keepass::Database* db) {
+  if (opt.from.empty()) {
+    std::cerr << "error: merge requires --from <database>\n";
+    return 1;
+  }
+  if (opt.from == opt.input) {
+    std::cerr << "error: source and target database are the same file\n";
+    return 1;
+  }
+
+  std::shared_ptr<keepass::Group> target = db->root();
+  if (!opt.to.empty()) {
+    target = db->FindGroup(opt.to);
+    if (!target) {
+      std::cerr << "error: group '" << opt.to << "' not found\n";
+      return 1;
+    }
+  }
+  if (!target) {
+    std::cerr << "error: database has no root group\n";
+    return 1;
+  }
+
+  keepass::KeePass source_keeper(password.str(), opt.keyfile);
+  std::unique_ptr<keepass::Database> source = source_keeper.Open(opt.from);
+  if (!source || !source->root()) {
+    std::cerr << "error: source database is empty\n";
+    return 1;
+  }
+
+  const std::vector<std::shared_ptr<keepass::Group>> groups = source->root()->Groups();
+  const std::vector<std::shared_ptr<keepass::Entry>> entries = source->root()->Entries();
+  for (const auto& group : groups) {
+    ReassignGroupUuids(group);
+    keepass::Database::MoveGroup(group, target);
+  }
+  for (const auto& entry : entries) {
+    ReassignEntryUuids(entry);
+    keepass::Database::MoveEntry(entry, target);
+  }
+
+  keeper.Save(opt.input, *db);
+  std::cout << "merged " << entries.size() << " entr" << (entries.size() == 1 ? "y" : "ies")
+            << " and " << groups.size() << " group" << (groups.size() == 1 ? "" : "s") << " from '"
+            << opt.from << "'\n";
   return 0;
 }
 

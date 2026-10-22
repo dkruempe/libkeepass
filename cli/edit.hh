@@ -45,6 +45,12 @@ int RunMove(const Options& opt, keepass::KeePass& keeper, keepass::Database* db)
 /// whole database (--all). Returns the process exit code.
 int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);
 
+/// Merges the database named by --from into the target database (optionally
+/// into the --to group). Both databases use the same master credentials.
+/// Returns the process exit code.
+int RunMerge(const Options& opt, const keepass::secure_string& password, keepass::KeePass& keeper,
+             keepass::Database* db);
+
 /// Creates a new entry from the --title/--user/--pass/--url/--notes options
 /// and saves the database. Returns the process exit code.
 int RunAdd(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);

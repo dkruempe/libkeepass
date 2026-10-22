@@ -44,12 +44,13 @@ struct Options {
   std::string keyfile;
   std::string kdf;
   std::string to;
+  std::string from; // --from (merge/import source database)
   bool force = false;
   std::string format = "text";
   std::string output;
   std::string export_path;
   // "" | "add" | "update" | "rm" | "groups" | "create" | "passwd" | "move" |
-  // "history" | "purge" | "otp"
+  // "history" | "purge" | "otp" | "merge" | "import"
   std::string command;
   std::string search; // --search query
   bool regex = false; // --regex

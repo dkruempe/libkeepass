@@ -279,6 +279,8 @@ int Run(const Options& opt, const char* argv0) {
     return RunPasswd(opt, password, keeper, db.get());
   if (opt.command == "move")
     return RunMove(opt, keeper, db.get());
+  if (opt.command == "merge" || opt.command == "import")
+    return RunMerge(opt, password, keeper, db.get());
   if (opt.command == "purge")
     return RunPurge(opt, keeper, db.get());
   if (opt.command == "history" || opt.command == "otp") {

@@ -267,7 +267,10 @@ Most-wanted commands that users of a KeePass tool expect:
   (text/JSON/CSV, honours `--group`),
 - [x] `kpx move` - move entries (`--title`/`--search`) or groups (`--group`)
   to `--to <group>`,
-- `kpx merge` / `kpx import` - merge a second database into the current one,
+- [x] `kpx merge`/`kpx import` - merge another database (`--from <path>`,
+  both using the same credentials) into the target root or `--to <group>`.
+  Groups/entries (and history) receive fresh UUIDs so they cannot collide with
+  existing objects.
 - [x] `kpx history`/`purge` - list history versions (text/JSON/CSV) and clear
   history by `--title`/`--search`/`--group` or `--all`,
 - [x] `kpx otp` - display TOTP seeds and settings stored in the `otp`/
