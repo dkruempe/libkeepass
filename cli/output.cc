@@ -614,11 +614,18 @@ int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
 std::string FormatTimestamp(std::time_t time) {
   if (time <= 0)
     return {};
-  const std::tm* tm = std::gmtime(&time);
-  if (tm == nullptr)
+
+  std::tm tm_buffer{};
+#ifdef _WIN32
+  if (gmtime_s(&tm_buffer, &time) != 0)
     return std::to_string(time);
+#else
+  if (gmtime_r(&time, &tm_buffer) == nullptr)
+    return std::to_string(time);
+#endif
+
   char buffer[32];
-  if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", tm) == 0)
+  if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tm_buffer) == 0)
     return std::to_string(time);
   return buffer;
 }
