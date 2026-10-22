@@ -114,10 +114,7 @@
       "creation_time": "2014-05-20 16:23:37",
       "modification_time": "2014-05-20 16:23:37",
       "access_time": "2014-05-20 16:23:37",
-      "attachment": {
-        "name": "attachment.txt",
-        "data": "fringilla euismod enim. Etiam gravida molestie arcu. Sed"
-      }
+      "attachments": [{"name": "attachment.txt"}]
     }, {
       "icon": 47,
       "title": "Aenean massa. Integer vitae",
