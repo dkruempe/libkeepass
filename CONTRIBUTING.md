@@ -2,6 +2,21 @@
 
 Thanks for considering contributing to libkeepass! This document describes how to build the project, the code style we follow, and what to keep in mind when opening issues or pull requests.
 
+## Contents
+
+- [Getting Started](#getting-started)
+  - [Language Standard](#language-standard)
+  - [Prerequisites](#prerequisites)
+  - [Building and Testing](#building-and-testing)
+  - [Before You Submit](#before-you-submit)
+- [Code Style](#code-style)
+  - [Checking Formatting](#checking-formatting)
+  - [Static Analysis](#static-analysis)
+- [Documentation](#documentation)
+- [Opening an Issue](#opening-an-issue)
+- [Submitting a Pull Request](#submitting-a-pull-request)
+- [License and Legal](#license-and-legal)
+
 ## Getting Started
 
 The project is a C++17 library using [CMake](https://cmake.org/) and [Conan](https://conan.io/) for dependency management. The public API lives in `src/include/libkeepass/`.

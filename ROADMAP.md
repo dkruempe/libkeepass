@@ -285,10 +285,11 @@ Most-wanted commands that users of a KeePass tool expect:
   attachment accessors.
 
 ### P2 - Documentation and migration guides
-- Format × feature support matrix (KDB / KDBX3 / KDBX4 × ciphers/KDFs/
-  features), a 0.2 → 0.3 `secure_string` migration guide, worked examples for
-  attachments, tags, recycle bin and stream round-trips, and a TOC for
-  `CONTRIBUTING.md`.
+- [x] `docs/support-matrix.md` documents format × cipher/KDF × feature
+  support, `docs/migration-0.2-to-0.3.md` covers the `secure_string`/C++17
+  migration, and `docs/examples.md` contains worked examples for streams,
+  attachments, tags, recycle bin, history and resource limits. The architecture
+  index links all three and `CONTRIBUTING.md` now has a table of contents.
 
 ### P3 - Language bindings
 - Start with a C ABI (`libkeepass-c`) so Python/Go/Rust bindings and

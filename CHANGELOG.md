@@ -114,6 +114,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Docs
 
+- New `docs/support-matrix.md` (format × cipher/KDF × feature support),
+  `docs/migration-0.2-to-0.3.md` (`secure_string`, C++17 and other breaking
+  changes) and `docs/examples.md` (stream round-trips, attachments, tags,
+  recycle bin, history, resource limits). `CONTRIBUTING.md` gained a table of
+  contents.
 - `docs/kdbx-parsing.md` folded into the modular architecture (`KdbxHeader`,
   `KdbxKdf`, `KdbxXml` instead of the monolithic `KdbxFile`)
 
