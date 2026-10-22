@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   implementation, and the new tests cover every length across block
   boundaries.
 
+### Tests
+
+- `test/robustness.cc` gained explicit unknown-header-field, HMAC-tampering
+  and CBC-bit-flip cases on top of the existing truncation, oversized-field,
+  zip-bomb and resource-budget fixtures.
+
 ### Fixed
 
 - `SaveAs`/`Save(..., key)` now ignore a transformed key cached on an imported

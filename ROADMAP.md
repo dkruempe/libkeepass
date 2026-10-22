@@ -322,9 +322,10 @@ Most-wanted commands that users of a KeePass tool expect:
   coverage reporting, and sync the in-repo corpus with the OSS-Fuzz corpus.
 
 ### P2 - Adversarial fixtures
-- Extend `test/robustness.cc` with a generated fixture set: truncated,
-  oversized, unknown field ids, duplicate header fields, deep nesting, huge
-  declared sizes, zip bombs, HMAC tampering and CBC bit-flips.
+- [x] `test/robustness.cc` covers truncated payloads, oversized header fields
+  and variant-dictionary values, unknown KDB/KDBX header field ids, oversized
+  KDF parameters, deep XML nesting, group/entry/history/string/binary budgets,
+  zip bombs, HMAC block size/count limits, HMAC tampering and CBC bit flips.
 
 ### P3 - Concurrency & resource tests
 - Concurrent open of the same file, no leakage of the cached transformed key
