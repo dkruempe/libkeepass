@@ -147,7 +147,7 @@ std::size_t PeakRssKiB() {
   if (GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info)))
     return static_cast<std::size_t>(info.PeakWorkingSetSize / 1024);
 #else
-  struct rusage usage {};
+  struct rusage usage{};
   if (getrusage(RUSAGE_SELF, &usage) == 0)
     return static_cast<std::size_t>(usage.ru_maxrss); // Linux reports KiB.
 #endif
