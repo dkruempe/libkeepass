@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Tests
 
+- New `test/concurrency.cc` covers concurrent imports of the same file (eight
+  threads), transformed-key isolation between `KeePass` instances, and
+  `secure_alloc`/`secure_free` edge cases.
 - `test/robustness.cc` gained explicit unknown-header-field, HMAC-tampering
   and CBC-bit-flip cases on top of the existing truncation, oversized-field,
   zip-bomb and resource-budget fixtures.

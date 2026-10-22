@@ -328,9 +328,11 @@ Most-wanted commands that users of a KeePass tool expect:
   zip bombs, HMAC block size/count limits, HMAC tampering and CBC bit flips.
 
 ### P3 - Concurrency & resource tests
-- Concurrent open of the same file, no leakage of the cached transformed key
-  across `KeePass` instances, and `secure_alloc`/`secure_free` behavior under
-  allocation failure.
+- [x] `test/concurrency.cc` opens the same database from eight threads
+  concurrently and compares canonical snapshots, verifies that a failed or
+  successful import does not leak the cached transformed key into other
+  `KeePass` instances, and exercises `secure_alloc`/`secure_free` edge sizes
+  and null/zero-sized frees under the sanitizer job.
 
 ### P2 - CodeQL/security triage loop
 - Add a scheduled triage of CodeQL and nightly security scan findings into
