@@ -24,7 +24,9 @@
 
 #pragma once
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,14 @@ namespace keepass {
  */
 class LIBKEEPASS_API Key final {
 public:
+  /// Maximum size of a key file accepted by the parser.
+  /**
+   * Genuine KeePass key files are only a few hundred bytes (32 raw or
+   * base64-encoded bytes plus a small XML wrapper). The upper bound keeps a
+   * hostile file from making the parser buffer an unbounded amount of data.
+   */
+  static constexpr std::size_t kMaxKeyFileBytes = 1024 * 1024;
+
   /**
    * Strategies for how to resolve sub keys before applying the
    * transformation.
@@ -124,9 +134,44 @@ public:
 
   /// Loads a key file and derives the key file component from it.
   /**
+   * The file may be an XML v1/v2 key file, a 64-character hexadecimal key or
+   * 32 raw bytes. Files larger than kMaxKeyFileBytes are rejected.
+   *
    * @param path Path to the key file on disk.
    */
   void SetKeyFile(const std::string& path);
+
+  /// Loads a key file from an in-memory stream.
+  /**
+   * The stream is consumed from its current position. At most
+   * kMaxKeyFileBytes are read; larger inputs are rejected.
+   *
+   * @param src Stream containing the key file.
+   */
+  void SetKeyFile(std::istream& src);
+
+  /// Loads a key file from an in-memory byte range.
+  /**
+   * @param data Pointer to the key file contents.
+   * @param size Number of bytes in @p data.
+   */
+  void SetKeyFileData(const uint8_t* data, std::size_t size);
+
+  /// Creates a composite key from a password and an in-memory key file.
+  /**
+   * @param password Password part of the composite key.
+   * @param keyfile Raw key file contents.
+   * @return A key carrying both sub keys.
+   */
+  static Key FromBytes(const std::string& password, const std::vector<uint8_t>& keyfile);
+
+  /// Creates a composite key from a password and a key-file stream.
+  /**
+   * @param password Password part of the composite key.
+   * @param keyfile Stream containing the key file.
+   * @return A key carrying both sub keys.
+   */
+  static Key FromStream(const std::string& password, std::istream& keyfile);
 
   /// Derives the composite key using AES-KDF for KDBX 3 databases.
   /**

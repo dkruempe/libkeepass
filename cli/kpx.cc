@@ -25,12 +25,17 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#else
+#include <conio.h>
+#include <io.h>
 #endif
 
 #include "libkeepass/entry.hh"
+#include "libkeepass/exception.hh"
 #include "libkeepass/group.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/secure.hh"
 
 #include "kpx.hh"
 
@@ -47,18 +52,85 @@ bool IsKdbPath(const std::string& path) {
   return ext == "kdb";
 }
 
+namespace {
+
+// Largest password file accepted. Password files are expected to contain a
+// single line; the cap keeps a hostile path from exhausting memory.
+constexpr std::size_t kMaxPasswordFileBytes = 1024 * 1024;
+
+keepass::secure_string ReadPassword(std::istream& src, const char* what) {
+  std::string data((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+  if (src.bad() || data.size() > kMaxPasswordFileBytes) {
+    keepass::secure_zero(data.data(), data.size());
+    throw keepass::IoError(std::string("Unable to read ") + what + ".");
+  }
+
+  // A trailing line ending is not part of the password.
+  while (!data.empty() && (data.back() == '\n' || data.back() == '\r'))
+    data.pop_back();
+
+  keepass::secure_string password(data);
+  keepass::secure_zero(data.data(), data.size());
+  return password;
+}
+
+keepass::secure_string PromptPassword() {
+#ifdef _WIN32
+  std::cout << "Master password: ";
+  std::cout.flush();
+  std::string password;
+  for (;;) {
+    const int ch = _getch();
+    if (ch == '\r' || ch == '\n')
+      break;
+    if ((ch == '\b' || ch == 127) && !password.empty()) {
+      password.pop_back();
+      continue;
+    }
+    if (ch >= 32 && ch < 127)
+      password.push_back(static_cast<char>(ch));
+  }
+  std::cout << "\n";
+  keepass::secure_string result(password);
+  keepass::secure_zero(password.data(), password.size());
+  return result;
+#else
+  return {getpass("Master password: ")};
+#endif
+}
+
+bool HasTerminalInput() {
+#ifdef _WIN32
+  return _isatty(_fileno(stdin)) != 0;
+#else
+  return isatty(STDIN_FILENO) != 0;
+#endif
+}
+
+} // namespace
+
 keepass::secure_string ResolvePassword(const Options& opt) {
   if (!opt.password.empty())
     return opt.password;
+
+  if (!opt.password_file.empty()) {
+    if (opt.password_file == "-")
+      return ReadPassword(std::cin, "password from stdin");
+    std::ifstream file(opt.password_file, std::ios::in | std::ios::binary);
+    if (!file.is_open())
+      throw keepass::FileNotFoundError();
+    return ReadPassword(file, "password file");
+  }
+
+  if (opt.password_stdin)
+    return ReadPassword(std::cin, "password from stdin");
 
   const char* env = std::getenv("KEEPASS_PASSWORD");
   if (env != nullptr && *env != '\0')
     return {env};
 
-#ifndef _WIN32
-  if (isatty(STDIN_FILENO))
-    return {getpass("Master password: ")};
-#endif
+  if (HasTerminalInput())
+    return PromptPassword();
 
   return {};
 }
@@ -95,6 +167,15 @@ int Run(const Options& opt, const char* argv0) {
 
   if (opt.generate > 0 && opt.command.empty() && opt.input.empty())
     return RunGenerate(opt);
+
+  if (!opt.password.empty() && (!opt.password_file.empty() || opt.password_stdin)) {
+    std::cerr << "error: use only one of --password, --password-file and --password-stdin\n";
+    return 1;
+  }
+  if (!opt.password_file.empty() && opt.password_stdin) {
+    std::cerr << "error: use only one of --password-file and --password-stdin\n";
+    return 1;
+  }
 
   if (opt.input.empty()) {
     PrintUsage(argv0, std::cerr);

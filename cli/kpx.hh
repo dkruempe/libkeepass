@@ -33,8 +33,9 @@ namespace kpx {
 
 extern const char* const kVersion;
 
-/// Resolves the master password: the -p value, the KEEPASS_PASSWORD
-/// environment variable or, on a terminal, an interactive prompt.
+/// Resolves the master password in this order: the -p value, --password-file
+/// (or "-" for stdin), --password-stdin, the KEEPASS_PASSWORD environment
+/// variable or, on a terminal, an interactive prompt.
 keepass::secure_string ResolvePassword(const Options& opt);
 
 /// Returns true if the path names a KDB (legacy) key database.

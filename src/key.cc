@@ -20,8 +20,10 @@
 #include "libkeepass/key.hh"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <fstream>
+#include <istream>
 #include <memory>
 
 #include <argon2.h>
@@ -55,6 +57,20 @@ int HexValue(char c) {
     return c - 'A' + 10;
   return -1;
 }
+
+/// Wipes a byte range when leaving the scope, including exceptional paths.
+class WipeGuard {
+public:
+  WipeGuard(void* data, std::size_t size) : data_(data), size_(size) {}
+  ~WipeGuard() { secure_zero(data_, size_); }
+
+  WipeGuard(const WipeGuard&) = delete;
+  WipeGuard& operator=(const WipeGuard&) = delete;
+
+private:
+  void* data_;
+  std::size_t size_;
+};
 
 } // namespace
 
@@ -135,38 +151,91 @@ void Key::SetKeyFile(const std::string& path) {
   if (!src.is_open())
     throw FileNotFoundError();
 
+  src.seekg(0, std::ios::end);
+  const std::streamoff size = src.tellg();
+  if (size > static_cast<std::streamoff>(kMaxKeyFileBytes))
+    throw FormatError("Key file too large.");
+  src.seekg(0, std::ios::beg);
+  if (!src.good()) {
+    src.clear();
+    src.seekg(0, std::ios::beg);
+  }
+
+  SetKeyFile(src);
+}
+
+void Key::SetKeyFile(std::istream& src) {
+  std::vector<uint8_t> data;
+  std::array<uint8_t, 4096> chunk{};
+
+  while (src.good()) {
+    src.read(reinterpret_cast<char*>(chunk.data()), static_cast<std::streamsize>(chunk.size()));
+    const std::streamsize count = src.gcount();
+    if (count <= 0)
+      continue;
+
+    if (data.size() + static_cast<std::size_t>(count) > kMaxKeyFileBytes) {
+      secure_zero(chunk.data(), chunk.size());
+      secure_zero(data.data(), data.size());
+      throw FormatError("Key file too large.");
+    }
+    data.insert(data.end(), chunk.begin(), chunk.begin() + count);
+  }
+  secure_zero(chunk.data(), chunk.size());
+
+  const bool read_failed = src.bad();
+  if (read_failed) {
+    secure_zero(data.data(), data.size());
+    throw IoError("Unable to read key file.");
+  }
+
+  WipeGuard guard(data.data(), data.size());
+  SetKeyFileData(data.data(), data.size());
+}
+
+void Key::SetKeyFileData(const uint8_t* data, std::size_t size) {
+  if (data == nullptr || size == 0)
+    throw FormatError("Unknown key file format.");
+  if (size > kMaxKeyFileBytes)
+    throw FormatError("Key file too large.");
+
   // First, try to parse the key file as XML.
   pugi::xml_document doc;
-  if (doc.load(src, pugi::parse_default | pugi::parse_trim_pcdata)) {
+  if (doc.load_buffer(data, size, pugi::parse_default | pugi::parse_trim_pcdata)) {
     std::string key_str = base64_decode(doc.child("KeyFile").child("Key").child_value("Data"));
+    WipeGuard guard(key_str.data(), key_str.size());
     if (key_str.size() != 32)
       throw FormatError("Invalid key size in key file.");
 
     std::memcpy(key_.keyfile_key_.data(), key_str.data(), key_str.size());
-    secure_zero(key_str.data(), key_str.size());
     return;
   }
 
-  // If not XML, reset stream and try to parse as text.
-  src.seekg(0, std::ios::beg);
-
-  std::vector<char> data;
-  std::copy(std::istreambuf_iterator<char>(src), std::istreambuf_iterator<char>(),
-            std::back_inserter(data));
-  if (data.size() != 64)
+  // If not XML, try to parse as a 64-character hexadecimal key.
+  if (size != 64)
     throw FormatError("Unknown key file format.");
 
   for (std::size_t i = 0; i < key_.keyfile_key_.size(); ++i) {
-    const int hi = HexValue(data[i * 2]);
-    const int lo = HexValue(data[i * 2 + 1]);
+    const int hi = HexValue(static_cast<char>(data[i * 2]));
+    const int lo = HexValue(static_cast<char>(data[i * 2 + 1]));
 
     if (hi < 0 || lo < 0)
       throw FormatError("Unknown key file format.");
 
     key_.keyfile_key_[i] = static_cast<uint8_t>((hi << 4) | lo);
   }
+}
 
-  secure_zero(data.data(), data.size());
+Key Key::FromBytes(const std::string& password, const std::vector<uint8_t>& keyfile) {
+  Key key(password);
+  key.SetKeyFileData(keyfile.data(), keyfile.size());
+  return key;
+}
+
+Key Key::FromStream(const std::string& password, std::istream& keyfile) {
+  Key key(password);
+  key.SetKeyFile(keyfile);
+  return key;
 }
 
 SecureBuffer<32> Key::Transform(const SecureBuffer<32>& seed, uint64_t rounds,

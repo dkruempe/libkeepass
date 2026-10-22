@@ -109,14 +109,19 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   non-`secure_string` overloads once the audit is clean.
 
 ### P2 - CLI credential hygiene
-- `kpx -p <password>` and `KEEPASS_PASSWORD` leak the secret into `argv`/the
-  environment (visible in `ps`/`/proc`). Add `--password-file`/`--stdin`
-  (and a `getpass`-based prompt on Windows), and document the trade-off.
+- [x] `kpx` accepts `--password-file <path>` (including `-` for stdin) and
+  `--password-stdin`, so scripts no longer have to expose the master password
+  in `argv` or the environment. Conflicting password sources are rejected,
+  the interactive prompt now also works on Windows consoles, and `--help`
+  documents the trade-off between the convenience sources and the safe ones.
 
 ### P2 - Keyfile hardening
-- Add fuzz coverage and size limits for keyfile parsing (XML/hex/raw modes),
-  reject absurd keyfile sizes, and wipe keyfile-derived buffers on all error
-  paths.
+- [x] Key-file parsing enforces `Key::kMaxKeyFileBytes` (1 MiB) before
+  buffering, wipes every transient buffer on all paths (including malformed
+  XML/base64 and I/O errors), and no longer leaves the decoded XML key in an
+  unwiped `std::string` when the size check fails. `Key::FromBytes`/
+  `Key::FromStream` add in-memory key-file support, and `fuzz/fuzz_keyfile.cc`
+  covers the XML, hex and raw modes from both memory and streams.
 
 ### P2 - Automated dependency vulnerability scanning
 - Add OSV-Scanner/`conan audit` for the dependency graph and enable

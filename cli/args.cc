@@ -138,6 +138,11 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
       if (name == "password") {
         if (!NextValue(argc, argv, i, "--password", has_value, value, opt.password))
           return false;
+      } else if (name == "password-file") {
+        if (!NextValue(argc, argv, i, "--password-file", has_value, value, opt.password_file))
+          return false;
+      } else if (name == "password-stdin") {
+        opt.password_stdin = true;
       } else if (name == "keyfile") {
         if (!NextValue(argc, argv, i, "--keyfile", has_value, value, opt.keyfile))
           return false;

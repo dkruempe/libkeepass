@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `kpx --password-file <path>` (with `-` for stdin) and `--password-stdin`
+  read the master password without exposing it in `argv` or the environment;
+  conflicting password sources are rejected. The interactive password prompt
+  now also works on Windows consoles.
+- `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
+  key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
+  key-file streams directly.
+- A `fuzz_keyfile` libFuzzer target exercises XML, hexadecimal and raw key
+  files from both memory and streams.
 - Third-party interoperability for KeePassXC: real KeePassXC test-corpus
   fixtures are imported in the new `libkeepass.compat` test binary
   (`test/compat.cc`, fixtures under `test/data/compat/`) covering KDBX 4.0
@@ -38,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Key-file parsing rejects inputs larger than `Key::kMaxKeyFileBytes` (1 MiB)
+  before buffering and wipes all transient file/key buffers on error paths,
+  including malformed XML/base64 data that previously leaked an unwiped copy.
 - The recycle-bin metadata now points to the group that actually holds the
   recycled entries. Because `Meta` (parsed before the group tree) could
   resolve `RecycleBinUUID`/`EntryTemplatesGroup` to a placeholder instance,

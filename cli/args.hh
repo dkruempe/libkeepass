@@ -36,6 +36,8 @@ extern const char* const kGenerateCharset;
 struct Options {
   std::string input;
   keepass::secure_string password;
+  std::string password_file;
+  bool password_stdin = false;
   std::string keyfile;
   std::string format = "text";
   std::string output;
@@ -63,9 +65,10 @@ struct Options {
 };
 
 /// Parses the command-line arguments into opt. Supports long options
-/// (--password, --keyfile, --format, --output, --export, --with-passwords,
-/// --search, --regex, --group, --generate, --audit, --title, --user, --pass,
-/// --url, --notes, --verbose, --help, --version, both with '=' and as separate
+/// (--password, --password-file, --password-stdin, --keyfile, --format,
+/// --output, --export, --with-passwords, --search, --regex, --group,
+/// --generate, --audit, --title, --user, --pass, --url, --notes, --verbose,
+/// --help, --version, both with '=' and as separate
 /// value arguments), combined short options (-p, -k) and the "--" separator.
 /// The first positional argument may be the "add", "update" or "rm" command;
 /// the following positional argument is the database path. Returns false and

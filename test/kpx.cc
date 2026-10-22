@@ -130,6 +130,11 @@ std::string ReadFile(const std::string& path) {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+void WriteFile(const std::string& path, const std::string& content) {
+  std::ofstream file(path, std::ios::out | std::ios::binary | std::ios::trunc);
+  file << content;
+}
+
 // Builds a small database with known content. Metadata is reused from an
 // existing fixture so the exporters have a fully populated database to write.
 std::unique_ptr<keepass::Database> CreateTestDatabase() {
@@ -524,6 +529,28 @@ TEST_F(KpxTest, PasswordFromEnvironment) {
   EXPECT_NE(std::string::npos, result.out.find("- mail, \"quoted\" (alice) [https://example.com]"));
 }
 
+TEST_F(KpxTest, PasswordFromFile) {
+  const std::string path = GetTmpPath("cli-password.txt");
+  WriteFile(path, "password\n");
+
+  CliResult result = RunCli({"--password-file", path, Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("- mail, \"quoted\" (alice) [https://example.com]"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswordFromMissingFile) {
+  CliResult result = RunCli({"--password-file", GetTmpPath("cli-no-password.txt"), Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("error:"));
+}
+
+TEST_F(KpxTest, ConflictingPasswordSources) {
+  CliResult result = RunCli({"-p", "password", "--password-stdin", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("use only one of"));
+}
+
 TEST_F(KpxTest, KeyFile) {
   const std::string database = GetDataPath("complex-1-key_pw-aes.kdbx");
   const std::string keyfile = GetDataPath("complex-1-key_pw-aes.key");
@@ -607,6 +634,16 @@ TEST_F(KpxTest, ParseArgsOverrides) {
   EXPECT_TRUE(opt.with_passwords);
   EXPECT_TRUE(opt.verbose);
   EXPECT_TRUE(opt.help);
+
+  Options file_opt;
+  const char* file_argv[] = {"kpx", "--password-file=secret.txt", "db"};
+  EXPECT_TRUE(ParseArgs(3, file_argv, file_opt));
+  EXPECT_EQ("secret.txt", file_opt.password_file);
+
+  Options stdin_opt;
+  const char* stdin_argv[] = {"kpx", "--password-stdin", "db"};
+  EXPECT_TRUE(ParseArgs(3, stdin_argv, stdin_opt));
+  EXPECT_TRUE(stdin_opt.password_stdin);
 }
 
 TEST_F(KpxTest, IsKdbPath) {
@@ -625,6 +662,13 @@ TEST_F(KpxTest, ResolvePasswordPrecedence) {
     EnvGuard env("KEEPASS_PASSWORD", "from_env");
     EXPECT_EQ("from_env", ResolvePassword(env_opt));
   }
+
+  const std::string password_file = GetTmpPath("cli-resolve-password.txt");
+  WriteFile(password_file, "from_file\r\n");
+  Options file_opt;
+  file_opt.password_file = password_file;
+  EXPECT_EQ("from_file", ResolvePassword(file_opt));
+  std::remove(password_file.c_str());
 
 #ifndef _WIN32
   if (!isatty(STDIN_FILENO)) {
