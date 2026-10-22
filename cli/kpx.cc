@@ -107,6 +107,58 @@ bool HasTerminalInput() {
 #endif
 }
 
+std::string JsonEscape(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped.push_back(c);
+      break;
+    }
+  }
+  return escaped;
+}
+
+// Returns whether the command line asked for JSON output, so errors can use
+// the same machine-readable shape even when parsing fails later.
+bool WantsJsonErrors(int argc, const char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--")
+      break;
+    if (arg == "--format=json" || arg == "-fjson")
+      return true;
+    if ((arg == "--format" || arg == "-f") && i + 1 < argc && std::string(argv[i + 1]) == "json")
+      return true;
+  }
+  return false;
+}
+
+int ReportError(bool json, const char* category, const std::string& message, ExitCode code) {
+  if (json)
+    std::cerr << "{\"error\":{\"category\":\"" << category << "\",\"message\":\""
+              << JsonEscape(message) << "\"}}\n";
+  else
+    std::cerr << "error: " << message << "\n";
+  return static_cast<int>(code);
+}
+
 } // namespace
 
 keepass::secure_string ReadPasswordFile(const std::string& path) {
@@ -287,14 +339,22 @@ int Run(const Options& opt, const char* argv0) {
 }
 
 int kpx_main(int argc, const char* argv[]) {
+  const bool json_errors = WantsJsonErrors(argc, argv);
   try {
     Options opt;
     if (!ParseArgs(argc, argv, opt))
-      return 1;
+      return static_cast<int>(ExitCode::kError);
     return Run(opt, argv[0]);
+  } catch (const keepass::PasswordError& e) {
+    return ReportError(json_errors, "auth", e.what(), ExitCode::kAuth);
+  } catch (const keepass::FileNotFoundError& e) {
+    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
+  } catch (const keepass::IoError& e) {
+    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
+  } catch (const keepass::FormatError& e) {
+    return ReportError(json_errors, "format", e.what(), ExitCode::kFormat);
   } catch (const std::exception& e) {
-    std::cerr << "error: " << e.what() << "\n";
-    return 1;
+    return ReportError(json_errors, "error", e.what(), ExitCode::kError);
   }
 }
 

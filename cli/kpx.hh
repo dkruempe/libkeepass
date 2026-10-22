@@ -33,6 +33,16 @@ namespace kpx {
 
 extern const char* const kVersion;
 
+/// Stable process exit codes. Command/usage validation failures use kError;
+/// exceptions are categorized by type in kpx_main.
+enum class ExitCode : int {
+  kSuccess = 0,
+  kError = 1,
+  kAuth = 3,
+  kFormat = 4,
+  kIo = 5,
+};
+
 /// Resolves the master password in this order: the -p value, --password-file
 /// (or "-" for stdin), --password-stdin, the KEEPASS_PASSWORD environment
 /// variable or, on a terminal, an interactive prompt.

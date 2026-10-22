@@ -225,8 +225,12 @@ terminals and Windows consoles). `--password` and `KEEPASS_PASSWORD` are
 convenient but expose the secret through the process list or environment; use
 the file/stdin variants for scripts and services. Keyfiles are supported via
 `--keyfile <path>` and can also be passed as bytes through
-`Key::FromBytes`/`Key::FromStream`. The exit code is `0` on success and `1` on
-any error; see `kpx --help` for the full option and command reference.
+`Key::FromBytes`/`Key::FromStream`. Exit codes are stable per category (`0`
+success, `1` command/usage error, `3` wrong password/key, `4` corrupt or
+unsupported database, `5` I/O or missing file); with `--format json` errors are
+printed as `{"error":{"category":...,"message":...}}`. See
+[`docs/cli-output.md`](docs/cli-output.md) for the output schemas and
+`kpx --help` for the full option and command reference.
 
 ## Usage
 

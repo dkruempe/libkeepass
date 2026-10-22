@@ -275,14 +275,20 @@ Most-wanted commands that users of a KeePass tool expect:
   still out of scope).
 
 ### P2 - CLI output improvements
-- CSV escaping is already RFC 4180-quoted (`CsvField`, `cli/kpx.cc:506`).
-  Remaining: document the JSON/CSV field schema explicitly, support
-  `--include-attachments`/base64 and a machine-readable `--format json` error
-  output (structured errors).
+- [x] `docs/cli-output.md` documents the stable text/JSON/CSV schemas for
+  print, `groups`, `history`, `otp` and `--audit`, and errors are emitted as
+  structured JSON (`{"error":{"category":...,"message":...}}`) when
+  `--format json` is selected. CSV remains RFC 4180-quoted.
+- Remaining: `--include-attachments`/base64 output for entry payloads.
 
 ### P2 - Better diagnostics and consistent exit codes
-- Print context ("while parsing group X", "offset 0x1234") on failures and
-  document a stable exit-code mapping per error category.
+- [x] `kpx` maps exceptions to stable exit codes (0 success, 1
+  command/usage, 3 auth, 4 format, 5 I/O) and emits structured JSON errors;
+  the mapping is documented in `kpx --help`, the README and
+  `docs/cli-output.md`. Library exceptions already carry contextual messages
+  (`FormatError`, `IoError`) without key material.
+- Remaining: richer "while parsing group X"/offset context in every parser
+  error path.
 
 ### P2 - API ergonomics
 - [x] KDF parameter mutation invalidates the cached transformed key,

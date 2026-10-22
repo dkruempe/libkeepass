@@ -95,7 +95,10 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "  purge  clear entry history (--title/--search/--group or --all)\n"
      << "  otp    print TOTP seeds/settings stored in custom fields\n"
      << "\n"
-     << "Exit code: 0 on success, 1 on any error.\n";
+     << "Exit codes: 0 success, 1 command/usage error, 3 wrong password/key,\n"
+     << "            4 corrupt/unsupported database, 5 I/O or missing file.\n"
+     << "Errors are printed as {\"error\":{\"category\":...,\"message\":...}} when\n"
+     << "--format json is selected.\n";
 }
 
 // Case-insensitive containment of needle_lower in haystack.

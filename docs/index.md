@@ -26,6 +26,8 @@ pieces fit together*.
   ciphers, KDFs and object-model features are read and written.
 - [Worked examples](examples.md) — stream round-trips, attachments, tags,
   recycle bin, history and resource limits.
+- [`kpx` output schemas](cli-output.md) — stable text/JSON/CSV shapes, error
+  categories and exit codes.
 - [Migration 0.2 → 0.3](migration-0.2-to-0.3.md) — the `secure_string`
   migration, C++17 baseline and other breaking changes.
 

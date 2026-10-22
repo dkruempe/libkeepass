@@ -539,13 +539,25 @@ TEST_F(KpxTest, KdbInput) {
 
 TEST_F(KpxTest, WrongPassword) {
   CliResult result = RunCli({"-p", "wrong_password", Kdbx()});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
+}
+
+TEST_F(KpxTest, JsonErrorOutput) {
+  CliResult auth = RunCli({"-p", "wrong_password", "-f", "json", Kdbx()});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), auth.code);
+  EXPECT_EQ('{', auth.err[0]);
+  EXPECT_NE(std::string::npos, auth.err.find("\"category\":\"auth\""));
+  EXPECT_NE(std::string::npos, auth.err.find("\"message\":\"Invalid password.\""));
+
+  CliResult io = RunCli({"-p", "password", "-f", "json", GetTmpPath("missing.kdbx")});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), io.code);
+  EXPECT_NE(std::string::npos, io.err.find("\"category\":\"io\""));
 }
 
 TEST_F(KpxTest, MissingFile) {
   CliResult result = RunCli({"-p", "password", GetTmpPath("does-not-exist.kdbx")});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
 }
 
@@ -568,7 +580,7 @@ TEST_F(KpxTest, PasswordFromFile) {
 
 TEST_F(KpxTest, PasswordFromMissingFile) {
   CliResult result = RunCli({"--password-file", GetTmpPath("cli-no-password.txt"), Kdbx()});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
 }
 
@@ -589,7 +601,7 @@ TEST_F(KpxTest, KeyFile) {
 
 TEST_F(KpxTest, DoubleDashSeparator) {
   CliResult result = RunCli({"-p", "password", "--", "-f"});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
 }
 
@@ -709,7 +721,7 @@ TEST_F(KpxTest, PrintUsage) {
   std::stringstream os;
   PrintUsage("prog", os);
   EXPECT_NE(std::string::npos, os.str().find("Usage: prog [options] <database>"));
-  EXPECT_NE(std::string::npos, os.str().find("Exit code: 0 on success, 1 on any error."));
+  EXPECT_NE(std::string::npos, os.str().find("Exit codes: 0 success"));
 }
 
 TEST_F(KpxTest, SearchFiltersTextOutput) {
@@ -1185,7 +1197,7 @@ TEST_F(KpxTest, PasswdChangesPassword) {
   EXPECT_EQ(0, change.code);
 
   CliResult old_password = RunCli({"-p", "password", path});
-  EXPECT_EQ(1, old_password.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), old_password.code);
 
   CliResult new_password = RunCli({"-p", "new-secret", path});
   EXPECT_EQ(0, new_password.code);

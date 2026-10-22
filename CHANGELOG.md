@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `kpx` now returns stable exit codes by error category (1 command/usage,
+  3 auth, 4 format, 5 I/O) and emits structured JSON errors when `--format
+  json` is selected. The schemas for every output format are documented in
+  `docs/cli-output.md`.
 - `kpx --password-file <path>` (with `-` for stdin) and `--password-stdin`
   read the master password without exposing it in `argv` or the environment;
   conflicting password sources are rejected. The interactive password prompt
