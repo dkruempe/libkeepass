@@ -218,11 +218,21 @@ jobs:
       actions: read
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: packages-*
           path: release-assets
           merge-multiple: true
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: release-assets/libkeepass-${{ github.ref_name }}.spdx.json
+          upload-artifact: false
 
       - name: Compute SHA-256 checksums
         working-directory: release-assets
