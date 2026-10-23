@@ -31,6 +31,7 @@
 #include "libkeepass/entry.hh"
 #include "libkeepass/group.hh"
 #include "libkeepass/kdbx.hh"
+#include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
 
 #include "../cli/kpx.hh"
@@ -130,6 +131,11 @@ std::string ReadFile(const std::string& path) {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+void WriteFile(const std::string& path, const std::string& content) {
+  std::ofstream file(path, std::ios::out | std::ios::binary | std::ios::trunc);
+  file << content;
+}
+
 // Builds a small database with known content. Metadata is reused from an
 // existing fixture so the exporters have a fully populated database to write.
 std::unique_ptr<keepass::Database> CreateTestDatabase() {
@@ -190,6 +196,66 @@ std::string CreateEditFixture(const std::string& name) {
   const std::string path = GetTmpPath(name);
   std::remove(path.c_str());
   ExportFixture(path);
+  return path;
+}
+
+std::string CreateHistoryFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("history fixture entry not found");
+  entry->save_history();
+  ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
+std::string CreateAttachmentFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("attachment fixture entry not found");
+  entry->set_binary_property("note.txt", std::vector<uint8_t>{'h', 'i', '!'});
+
+  // Use KDBX 4: KDBX 3 stores attachments in the Meta binary pool, which the
+  // generated fixture does not populate.
+  keepass::KeePass keeper(keepass::Key("password"));
+  keeper.SetFormat(keepass::KeePass::Format::kKdbx4);
+  keeper.Save(path, *db);
+  return path;
+}
+
+std::string CreateMergeSource(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto imported = keepass::Database::NewEntry("ImportedEntry");
+  imported->set_username(protect<secure_string>("imported-user", false));
+  imported->set_password(protect<secure_string>("imported-secret", true));
+  auto group = keepass::Database::NewGroup("ImportedGroup");
+  group->AddEntry(imported);
+  db->root()->AddGroup(group);
+  ExportDatabase(path, *db, keepass::Key("password"));
+  return path;
+}
+
+std::string CreateOtpFixture(const std::string& name) {
+  const std::string path = GetTmpPath(name);
+  std::remove(path.c_str());
+
+  std::unique_ptr<keepass::Database> db = CreateTestDatabase();
+  auto entry = db->FindEntry("mail, \"quoted\"");
+  if (!entry)
+    throw std::runtime_error("otp fixture entry not found");
+  entry->set_custom_property("otp", "JBSWY3DPEHPK3PXP");
+  entry->set_custom_property("TOTP Settings", "30;6");
+  ExportDatabase(path, *db, keepass::Key("password"));
   return path;
 }
 
@@ -450,6 +516,21 @@ TEST_F(KpxTest, JsonOutput) {
   EXPECT_NE(std::string::npos, result.out.find("quoted"));
 }
 
+TEST_F(KpxTest, JsonAttachmentsAreOptIn) {
+  const std::string path = CreateAttachmentFixture("cli-attachments.kdbx");
+
+  CliResult without = RunCli({"-p", "password", "-f", "json", path});
+  EXPECT_EQ(0, without.code);
+  EXPECT_NE(std::string::npos, without.out.find("\"name\":\"note.txt\""));
+  EXPECT_EQ(std::string::npos, without.out.find("data_base64"));
+
+  CliResult with = RunCli({"-p", "password", "-f", "json", "--include-attachments", path});
+  EXPECT_EQ(0, with.code);
+  EXPECT_NE(std::string::npos, with.out.find("\"name\":\"note.txt\""));
+  EXPECT_NE(std::string::npos, with.out.find("\"data_base64\":\"aGkh\"")) << with.out;
+  std::remove(path.c_str());
+}
+
 TEST_F(KpxTest, LongOptionSeparateValue) {
   CliResult result = RunCli({"--password", "password", "--format=json", Kdbx()});
   EXPECT_EQ(0, result.code);
@@ -507,13 +588,25 @@ TEST_F(KpxTest, KdbInput) {
 
 TEST_F(KpxTest, WrongPassword) {
   CliResult result = RunCli({"-p", "wrong_password", Kdbx()});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
+}
+
+TEST_F(KpxTest, JsonErrorOutput) {
+  CliResult auth = RunCli({"-p", "wrong_password", "-f", "json", Kdbx()});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), auth.code);
+  EXPECT_EQ('{', auth.err[0]);
+  EXPECT_NE(std::string::npos, auth.err.find("\"category\":\"auth\""));
+  EXPECT_NE(std::string::npos, auth.err.find("\"message\":\"Invalid password.\""));
+
+  CliResult io = RunCli({"-p", "password", "-f", "json", GetTmpPath("missing.kdbx")});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), io.code);
+  EXPECT_NE(std::string::npos, io.err.find("\"category\":\"io\""));
 }
 
 TEST_F(KpxTest, MissingFile) {
   CliResult result = RunCli({"-p", "password", GetTmpPath("does-not-exist.kdbx")});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
 }
 
@@ -522,6 +615,28 @@ TEST_F(KpxTest, PasswordFromEnvironment) {
   CliResult result = RunCli({Kdbx()});
   EXPECT_EQ(0, result.code);
   EXPECT_NE(std::string::npos, result.out.find("- mail, \"quoted\" (alice) [https://example.com]"));
+}
+
+TEST_F(KpxTest, PasswordFromFile) {
+  const std::string path = GetTmpPath("cli-password.txt");
+  WriteFile(path, "password\n");
+
+  CliResult result = RunCli({"--password-file", path, Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("- mail, \"quoted\" (alice) [https://example.com]"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswordFromMissingFile) {
+  CliResult result = RunCli({"--password-file", GetTmpPath("cli-no-password.txt"), Kdbx()});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
+  EXPECT_NE(std::string::npos, result.err.find("error:"));
+}
+
+TEST_F(KpxTest, ConflictingPasswordSources) {
+  CliResult result = RunCli({"-p", "password", "--password-stdin", Kdbx()});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("use only one of"));
 }
 
 TEST_F(KpxTest, KeyFile) {
@@ -535,7 +650,7 @@ TEST_F(KpxTest, KeyFile) {
 
 TEST_F(KpxTest, DoubleDashSeparator) {
   CliResult result = RunCli({"-p", "password", "--", "-f"});
-  EXPECT_EQ(1, result.code);
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kIo), result.code);
   EXPECT_NE(std::string::npos, result.err.find("error:"));
 }
 
@@ -607,6 +722,16 @@ TEST_F(KpxTest, ParseArgsOverrides) {
   EXPECT_TRUE(opt.with_passwords);
   EXPECT_TRUE(opt.verbose);
   EXPECT_TRUE(opt.help);
+
+  Options file_opt;
+  const char* file_argv[] = {"kpx", "--password-file=secret.txt", "db"};
+  EXPECT_TRUE(ParseArgs(3, file_argv, file_opt));
+  EXPECT_EQ("secret.txt", file_opt.password_file);
+
+  Options stdin_opt;
+  const char* stdin_argv[] = {"kpx", "--password-stdin", "db"};
+  EXPECT_TRUE(ParseArgs(3, stdin_argv, stdin_opt));
+  EXPECT_TRUE(stdin_opt.password_stdin);
 }
 
 TEST_F(KpxTest, IsKdbPath) {
@@ -626,6 +751,13 @@ TEST_F(KpxTest, ResolvePasswordPrecedence) {
     EXPECT_EQ("from_env", ResolvePassword(env_opt));
   }
 
+  const std::string password_file = GetTmpPath("cli-resolve-password.txt");
+  WriteFile(password_file, "from_file\r\n");
+  Options file_opt;
+  file_opt.password_file = password_file;
+  EXPECT_EQ("from_file", ResolvePassword(file_opt));
+  std::remove(password_file.c_str());
+
 #ifndef _WIN32
   if (!isatty(STDIN_FILENO)) {
     Options empty_opt;
@@ -638,7 +770,7 @@ TEST_F(KpxTest, PrintUsage) {
   std::stringstream os;
   PrintUsage("prog", os);
   EXPECT_NE(std::string::npos, os.str().find("Usage: prog [options] <database>"));
-  EXPECT_NE(std::string::npos, os.str().find("Exit code: 0 on success, 1 on any error."));
+  EXPECT_NE(std::string::npos, os.str().find("Exit codes: 0 success"));
 }
 
 TEST_F(KpxTest, SearchFiltersTextOutput) {
@@ -1060,6 +1192,220 @@ TEST_F(KpxTest, AuditGroupScope) {
   EXPECT_NE(std::string::npos,
             result.out.find("Summary: 3 of 4 entries have issues, 1 reused password.\n"));
   EXPECT_EQ(std::string::npos, result.out.find("RootEntry"));
+}
+
+TEST_F(KpxTest, GroupsListsGroupPaths) {
+  CliResult result = RunCli({"-p", "password", "groups", Kdbx()});
+  EXPECT_EQ(0, result.code);
+  EXPECT_NE(std::string::npos, result.out.find("/root/Internet\n")) << result.out;
+  EXPECT_NE(std::string::npos, result.out.find("/root/Empty\n")) << result.out;
+  EXPECT_EQ(std::string::npos, result.out.find("mail"));
+}
+
+TEST_F(KpxTest, GroupsJsonAndCsv) {
+  CliResult json = RunCli({"-p", "password", "-f", "json", "groups", Kdbx()});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"path\":\"/root/Internet\""));
+
+  CliResult csv = RunCli({"-p", "password", "-f", "csv", "groups", Kdbx()});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_EQ("Path,Entries,Groups\n", csv.out.substr(0, 20));
+  EXPECT_NE(std::string::npos, csv.out.find("/root/Internet,1,0"));
+}
+
+TEST_F(KpxTest, CreateDatabase) {
+  const std::string path = GetTmpPath("cli-created.kdbx");
+  std::remove(path.c_str());
+
+  CliResult create = RunCli({"-p", "password", "create", path});
+  EXPECT_EQ(0, create.code);
+  EXPECT_NE(std::string::npos, create.out.find("created"));
+
+  CliResult read = RunCli({"-p", "password", "groups", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("/\n"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, CreateRefusesToOverwriteWithoutForce) {
+  const std::string path = CreateEditFixture("cli-created-existing.kdbx");
+  CliResult create = RunCli({"-p", "password", "create", path});
+  EXPECT_EQ(1, create.code);
+  EXPECT_NE(std::string::npos, create.err.find("already exists"));
+
+  CliResult forced = RunCli({"-p", "password", "--force", "create", path});
+  EXPECT_EQ(0, forced.code);
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdChangesPassword) {
+  const std::string path = CreateEditFixture("cli-passwd.kdbx");
+
+  CliResult change = RunCli({"-p", "password", "--new-password", "new-secret", "passwd", path});
+  EXPECT_EQ(0, change.code);
+
+  CliResult old_password = RunCli({"-p", "password", path});
+  EXPECT_EQ(static_cast<int>(kpx::ExitCode::kAuth), old_password.code);
+
+  CliResult new_password = RunCli({"-p", "new-secret", path});
+  EXPECT_EQ(0, new_password.code);
+  EXPECT_NE(std::string::npos, new_password.out.find("RootEntry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdChangesKdf) {
+  const std::string path = CreateEditFixture("cli-passwd-kdf.kdbx");
+  CliResult change = RunCli({"-p", "password", "--kdf", "argon2id", "passwd", path});
+  EXPECT_EQ(0, change.code);
+
+  CliResult read = RunCli({"-p", "password", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("RootEntry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PasswdRequiresChange) {
+  const std::string path = CreateEditFixture("cli-passwd-noop.kdbx");
+  CliResult result = RunCli({"-p", "password", "passwd", path});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --new-password"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveEntryToGroup) {
+  const std::string path = CreateEditFixture("cli-move-entry.kdbx");
+
+  CliResult move = RunCli({"-p", "password", "--search", "alice", "--to", "Empty", "move", path});
+  EXPECT_EQ(0, move.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("mail"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveGroupToGroup) {
+  const std::string path = CreateEditFixture("cli-move-group.kdbx");
+
+  CliResult move = RunCli({"-p", "password", "--group", "Internet", "--to", "Empty", "move", path});
+  EXPECT_EQ(0, move.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", path});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("Internet/"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MoveRejectsInvalidTargets) {
+  const std::string path = CreateEditFixture("cli-move-invalid.kdbx");
+
+  CliResult no_target = RunCli({"-p", "password", "--search", "alice", "move", path});
+  EXPECT_EQ(1, no_target.code);
+  EXPECT_NE(std::string::npos, no_target.err.find("requires --to"));
+
+  CliResult self = RunCli({"-p", "password", "--group", "Empty", "--to", "Empty", "move", path});
+  EXPECT_EQ(1, self.code);
+  EXPECT_NE(std::string::npos, self.err.find("already in"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, HistoryTextAndJson) {
+  const std::string path = CreateHistoryFixture("cli-history.kdbx");
+
+  CliResult text = RunCli({"-p", "password", "history", path});
+  EXPECT_EQ(0, text.code);
+  EXPECT_NE(std::string::npos, text.out.find("(1 history entry)"));
+  EXPECT_NE(std::string::npos, text.out.find("mail, \"quoted\""));
+
+  CliResult json = RunCli({"-p", "password", "-f", "json", "history", path});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"history\""));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PurgeHistory) {
+  const std::string path = CreateHistoryFixture("cli-purge.kdbx");
+
+  CliResult purge = RunCli({"-p", "password", "--title", "mail, \"quoted\"", "purge", path});
+  EXPECT_EQ(0, purge.code);
+  EXPECT_NE(std::string::npos, purge.out.find("purged history of 1 entry"));
+
+  CliResult history = RunCli({"-p", "password", "history", path});
+  EXPECT_EQ(0, history.code);
+  EXPECT_EQ(std::string::npos, history.out.find("history entry"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, PurgeRequiresSelector) {
+  const std::string path = CreateHistoryFixture("cli-purge-selector.kdbx");
+  CliResult result = RunCli({"-p", "password", "purge", path});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --title"));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, OtpPrintsSeeds) {
+  const std::string path = CreateOtpFixture("cli-otp.kdbx");
+
+  CliResult text = RunCli({"-p", "password", "otp", path});
+  EXPECT_EQ(0, text.code);
+  EXPECT_NE(std::string::npos, text.out.find("JBSWY3DPEHPK3PXP"));
+  EXPECT_NE(std::string::npos, text.out.find("30;6"));
+
+  CliResult json = RunCli({"-p", "password", "-f", "json", "otp", path});
+  EXPECT_EQ(0, json.code);
+  EXPECT_EQ('[', json.out[0]);
+  EXPECT_NE(std::string::npos, json.out.find("\"seed\":\"JBSWY3DPEHPK3PXP\""));
+
+  CliResult csv = RunCli({"-p", "password", "-f", "csv", "otp", path});
+  EXPECT_EQ(0, csv.code);
+  EXPECT_EQ("Path,Seed,Settings\n", csv.out.substr(0, 19));
+  std::remove(path.c_str());
+}
+
+TEST_F(KpxTest, MergeImportsGroupsAndEntries) {
+  const std::string target = CreateEditFixture("cli-merge-target.kdbx");
+  const std::string source = CreateMergeSource("cli-merge-source.kdbx");
+
+  CliResult merge = RunCli({"-p", "password", "--from", source, "merge", target});
+  EXPECT_EQ(0, merge.code);
+  EXPECT_NE(std::string::npos, merge.out.find("merged"));
+
+  CliResult read = RunCli({"-p", "password", "--search", "ImportedEntry", target});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("ImportedEntry"));
+  EXPECT_NE(std::string::npos, read.out.find("imported-user"));
+
+  CliResult groups = RunCli({"-p", "password", "groups", target});
+  EXPECT_NE(std::string::npos, groups.out.find("ImportedGroup"));
+
+  std::remove(target.c_str());
+  std::remove(source.c_str());
+}
+
+TEST_F(KpxTest, MergeIntoGroupAndAlias) {
+  const std::string target = CreateEditFixture("cli-import-target.kdbx");
+  const std::string source = CreateMergeSource("cli-import-source.kdbx");
+
+  CliResult merge = RunCli({"-p", "password", "--from", source, "--to", "Empty", "import", target});
+  EXPECT_EQ(0, merge.code);
+
+  CliResult read = RunCli({"-p", "password", "--group", "Empty", target});
+  EXPECT_EQ(0, read.code);
+  EXPECT_NE(std::string::npos, read.out.find("ImportedGroup"));
+
+  std::remove(target.c_str());
+  std::remove(source.c_str());
+}
+
+TEST_F(KpxTest, MergeRequiresSource) {
+  const std::string target = CreateEditFixture("cli-merge-missing.kdbx");
+  CliResult result = RunCli({"-p", "password", "merge", target});
+  EXPECT_EQ(1, result.code);
+  EXPECT_NE(std::string::npos, result.err.find("requires --from"));
+  std::remove(target.c_str());
 }
 
 TEST_F(KpxTest, AuditNoIssues) {

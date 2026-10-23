@@ -200,6 +200,47 @@ TEST(RobustnessTest, Kdbx4AesKdfRoundsTooLarge) {
   EXPECT_THROW(ImportBytes(file, bad, key), FormatError);
 }
 
+TEST(RobustnessTest, Kdbx4UnknownHeaderFieldId) {
+  // Unknown outer-header field ids must be rejected, not silently ignored.
+  KdbxFile file;
+  Key key("password");
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+
+  // The first field after the 12-byte prefix is the cipher id (field 2).
+  const std::vector<uint8_t> bad = Patch(good, 12, std::string("\x7f", 1));
+  EXPECT_THROW(ImportBytes(file, bad, key), FormatError);
+}
+
+TEST(RobustnessTest, Kdbx3UnknownHeaderFieldId) {
+  KdbxFile file;
+  Key key("password");
+  const std::vector<uint8_t> good = ReadFileBytes(GetTestPath("kdbx/groups-1-empty-pw-aes.kdbx"));
+  const std::vector<uint8_t> bad = Patch(good, 12, std::string("\x7f", 1));
+  EXPECT_THROW(ImportBytes(file, bad, key), FormatError);
+}
+
+TEST(RobustnessTest, Kdbx4HmacTamperingDetected) {
+  // Flipping one ciphertext byte must fail the per-block HMAC (or padding)
+  // rather than yielding a partially decrypted database.
+  KdbxFile file;
+  Key key("password");
+  std::vector<uint8_t> bad = ReadFileBytes(GetTestPath("kdbx4/kdbx4-chacha20-aeskdf.kdbx"));
+  ASSERT_GT(bad.size(), 16U);
+  bad.back() ^= 0x01;
+  EXPECT_THROW(ImportBytes(file, bad, key), std::exception);
+}
+
+TEST(RobustnessTest, Kdbx3CbcBitFlipDetected) {
+  // KDBX 3 has no per-block MAC; a CBC bit flip must still be caught by the
+  // content-start bytes/header hash or the padding check.
+  KdbxFile file;
+  Key key("password");
+  std::vector<uint8_t> bad = ReadFileBytes(GetTestPath("kdbx/groups-1-empty-pw-aes.kdbx"));
+  ASSERT_GT(bad.size(), 16U);
+  bad.back() ^= 0x01;
+  EXPECT_THROW(ImportBytes(file, bad, key), std::exception);
+}
+
 TEST(RobustnessTest, Kdbx4TruncatedCiphertext) {
   // Truncating a valid database in the middle of the HMAC-protected ciphertext
   // must fail cleanly (block checksum/read error) rather than loop or leak.

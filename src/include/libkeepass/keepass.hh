@@ -23,10 +23,13 @@
  */
 
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <istream>
 #include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "database.hh"
 #include "kdbx.hh"
@@ -87,6 +90,23 @@ public:
    * @return A unique pointer to the imported Database object.
    */
   std::unique_ptr<Database> Open(std::istream& src);
+
+  /// Opens a KeePass database from an in-memory byte range.
+  /**
+   * The bytes are copied into a seekable stream; no reference is retained
+   * after the call. This is a convenience overload for callers that already
+   * hold the database in memory (for example after a network transfer).
+   *
+   * @param data Pointer to the database bytes.
+   * @param size Number of bytes in @p data.
+   * @return A unique pointer to the imported Database object.
+   */
+  std::unique_ptr<Database> Open(const uint8_t* data, std::size_t size);
+
+  /// Opens a KeePass database from an in-memory byte vector.
+  std::unique_ptr<Database> Open(const std::vector<uint8_t>& data) {
+    return Open(data.data(), data.size());
+  }
 
   /// Saves a database to a file.
   /**
@@ -177,7 +197,13 @@ public:
 
   /// Creates a new empty database with generated cryptographic material.
   /**
-   * @param password Password of the new database (not required for creation).
+   * When @p password is non-empty and @p format is not KDB, the transformed
+   * key is derived immediately and cached on the returned Database. A later
+   * KDBX \ref Save then works with an empty KeePass key (or use \ref SaveAs
+   * with a new key to re-encrypt). KDB (1.x) export still requires an explicit
+   * key because the legacy format derives its key with different parameters.
+   *
+   * @param password Password to derive and cache the transformed key for.
    * @param format Preferred output format of the new database.
    * @param cipher Payload cipher to use.
    * @param kdf Key derivation function to use.

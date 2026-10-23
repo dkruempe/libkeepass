@@ -190,6 +190,17 @@ kpx -p password --group Internet database.kdbx
 kpx --generate
 kpx --generate 32
 
+# Create a database, change its credentials, and inspect its group tree
+kpx -p password create database.kdbx
+kpx -p password --new-password "$NEW_SECRET" passwd database.kdbx
+kpx -p password groups database.kdbx
+
+# Move an entry (or a group with --group) to another group
+kpx -p password --search alice --to Archive move database.kdbx
+
+# Merge another database (same master password/keyfile) into this one
+kpx -p password --from old-backup.kdbx merge database.kdbx
+
 # Edit the database in place
 kpx -p password add --title "New" --user alice --pass secret --group Internet database.kdbx
 kpx -p password update --search alice --notes "changed" database.kdbx
@@ -203,11 +214,26 @@ kpx -p password --audit database.kdbx
 kpx -p password --audit --group Internet database.kdbx
 kpx -p password --audit -f json --with-passwords database.kdbx
 
+# Keep the password out of argv and the environment
+printf '%s\n' "$SECRET" | kpx --password-stdin database.kdbx
+kpx --password-file /run/secrets/keepass database.kdbx
+
 # Passwords can also come from an environment variable or an interactive prompt
 KEEPASS_PASSWORD=secret kpx database.kdbx
 ```
 
-The password is read from `--password`, otherwise from the `KEEPASS_PASSWORD` environment variable, otherwise interactively (POSIX terminals only). Keyfiles are supported via `--keyfile <path>`. The exit code is `0` on success and `1` on any error; see `kpx --help` for the full option and command reference.
+The password is read from `--password`, `--password-file <path>` (or `-` for
+stdin), `--password-stdin`, `KEEPASS_PASSWORD`, or an interactive prompt (POSIX
+terminals and Windows consoles). `--password` and `KEEPASS_PASSWORD` are
+convenient but expose the secret through the process list or environment; use
+the file/stdin variants for scripts and services. Keyfiles are supported via
+`--keyfile <path>` and can also be passed as bytes through
+`Key::FromBytes`/`Key::FromStream`. Exit codes are stable per category (`0`
+success, `1` command/usage error, `3` wrong password/key, `4` corrupt or
+unsupported database, `5` I/O or missing file); with `--format json` errors are
+printed as `{"error":{"category":...,"message":...}}`. See
+[`docs/cli-output.md`](docs/cli-output.md) for the output schemas and
+`kpx --help` for the full option and command reference.
 
 ## Usage
 

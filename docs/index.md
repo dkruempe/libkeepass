@@ -22,6 +22,14 @@ pieces fit together*.
 - [Hardware Tokens / YubiKey](hardware-tokens.md) — a documented decision to
   keep hardware-token support out of scope and leave the `Key` extension point
   open.
+- [Format and feature support matrix](support-matrix.md) — which formats,
+  ciphers, KDFs and object-model features are read and written.
+- [Worked examples](examples.md) — stream round-trips, attachments, tags,
+  recycle bin, history and resource limits.
+- [`kpx` output schemas](cli-output.md) — stable text/JSON/CSV shapes, error
+  categories and exit codes.
+- [Migration 0.2 → 0.3](migration-0.2-to-0.3.md) — the `secure_string`
+  migration, C++17 baseline and other breaking changes.
 
 ## High-level flow
 
@@ -51,13 +59,16 @@ Source layout:
 src/
 ├── include/libkeepass/   public headers (Doxygen-documented API)
 ├── aes_ni.cc             AES-NI accelerated AES-KDF core loop
-├── cipher.cc             block/stream ciphers (AES, Twofish, Salsa20, ChaCha20)
+├── cipher_*.cc           block/stream ciphers (AES, Twofish, Salsa20, ChaCha20)
 ├── entry.cc              Entry, Attachment, AutoType, history
 ├── group.cc              Group tree and ToJson() serialization
 ├── io.cc                 endian-aware read/write helpers (consume/conserve)
-├── kdb.cc                legacy KDB 1.x importer/exporter
-├── kdbx_import.cc        KDBX 2.x importer (import pipeline)
-├── kdbx_export.cc        KDBX 2.x exporter (export pipeline)
+├── kdb_fields.cc         KDB 1.x header/field codec
+├── kdb_import.cc         legacy KDB 1.x importer
+├── kdb_export.cc         legacy KDB 1.x exporter
+├── kdbx_import.cc        KDBX 3/4 importer
+├── kdbx_export.cc        KDBX 3/4 exporter
+├── kdbx_xml_*.cc         KDBX XML meta/group/entry serializers
 ├── key.cc                user key handling and key derivation (AES-KDF, Argon2)
 ├── metadata.cc           Metadata (database meta, binaries, icons, custom data)
 ├── random.cc             inner random stream obfuscator (Salsa20 / ChaCha20)

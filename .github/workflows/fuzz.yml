@@ -7,8 +7,15 @@ on:
     branches: [ main, master ]
 
 jobs:
-  fuzz-kdbx:
+  fuzz:
+    name: fuzz-${{ matrix.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_kdbx, fuzz_kdb, fuzz_keyfile, fuzz_xml, fuzz_export]
+
     env:
       CONAN_VERSION: "2.31.2"
 
@@ -19,19 +26,20 @@ jobs:
 
       - name: Install Clang (libFuzzer)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-18
+          # Avoid an unbounded apt mirror stall on shared runners.
+          timeout 300 sudo apt-get -o Acquire::Retries=3 update
+          timeout 300 sudo apt-get install -y clang-18
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
+          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-
 
@@ -46,92 +54,48 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DLIBKEEPASS_BUILD_FUZZING=ON
 
-      - name: Build fuzz_kdbx
-        run: cmake --build build-fuzz --target fuzz_kdbx -- -j $(nproc)
+      - name: Build ${{ matrix.target }}
+        run: cmake --build build-fuzz --target ${{ matrix.target }} -- -j $(nproc)
 
-      - name: Create seed corpus for KDBX fuzzer
+      - name: Create seed corpus
         run: |
-          mkdir -p seed-kdbx
-          # Copy valid KDBX 4 databases as seeds
-          cp test/data/kdbx4/*.kdbx seed-kdbx/ 2>/dev/null || true
-          # Copy KDBX 3 databases (these may contain version 3 files)
-          cp test/data/kdbx/*.kdbx seed-kdbx/ 2>/dev/null || true
+          mkdir -p seed-${{ matrix.target }}
+          case "${{ matrix.target }}" in
+            fuzz_kdbx)
+              cp test/data/kdbx4/*.kdbx seed-${{ matrix.target }}/ 2>/dev/null || true
+              cp test/data/kdbx/*.kdbx seed-${{ matrix.target }}/ 2>/dev/null || true
+              ;;
+            fuzz_kdb)
+              cp test/data/kdb/*.kdb seed-${{ matrix.target }}/ 2>/dev/null || true
+              ;;
+            fuzz_keyfile)
+              cp test/data/*.key seed-${{ matrix.target }}/ 2>/dev/null || true
+              cp test/data/kdbx4/*.key seed-${{ matrix.target }}/ 2>/dev/null || true
+              printf '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f' \
+                > seed-${{ matrix.target }}/hex.key
+              printf '%s' '<?xml version="1.0"?><KeyFile><Key><Data>AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=</Data></Key></KeyFile>' \
+                > seed-${{ matrix.target }}/xml.key
+              ;;
+            fuzz_xml)
+              printf '%s' '<?xml version="1.0"?><KeePassFile><Meta><Generator>fuzz</Generator></Meta><Root><Group><UUID>AAAAAAAAAAAAAAAAAAAAAA==</UUID><Name>Root</Name><Entry><UUID>AQEBAQEBAQEBAQEBAQEBAQ==</UUID><String><Key>Title</Key><Value>seed</Value></String></Entry></Group></Root></KeePassFile>' \
+                > seed-${{ matrix.target }}/seed.xml
+              ;;
+            *)
+              ;;
+          esac
 
-      - name: Run fuzz_kdbx (60s)
+      - name: Run ${{ matrix.target }} (60s)
         run: |
           timeout 120 \
-            ./bin/fuzz_kdbx \
+            ./bin/${{ matrix.target }} \
               -detect_leaks=0 \
               -max_total_time=60 \
               -rss_limit_mb=4096 \
               -timeout=5 \
-              seed-kdbx || exit_code=$?
+              seed-${{ matrix.target }} || exit_code=$?
           # Exit code 0 = no issues found
           # Exit code 1 = crash found
           # Exit code 77 = timeout (expected)
-          if [ "${exit_code:-0}" -eq 1 ]; then
-            echo "Fuzzer found a crash!"
-            exit 1
-          fi
-          echo "Fuzzing completed without crashes."
-
-  fuzz-kdb:
-    runs-on: ubuntu-latest
-    env:
-      CONAN_VERSION: "2.31.2"
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-
-      - name: Install Clang (libFuzzer)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-18
-
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
-
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.txt') }}
-          restore-keys: |
-            conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-
-
-      - name: Configure CMake (fuzzing)
-        run: |
-          cmake -B build-fuzz \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_STANDARD=17 \
-            -DCMAKE_C_STANDARD=11 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DLIBKEEPASS_BUILD_FUZZING=ON
-
-      - name: Build fuzz_kdb
-        run: cmake --build build-fuzz --target fuzz_kdb -- -j $(nproc)
-
-      - name: Create seed corpus for KDB fuzzer
-        run: |
-          mkdir -p seed-kdb
-          # Copy valid KDB databases as seeds
-          cp test/data/kdb/*.kdb seed-kdb/ 2>/dev/null || true
-
-      - name: Run fuzz_kdb (60s)
-        run: |
-          timeout 120 \
-            ./bin/fuzz_kdb \
-              -detect_leaks=0 \
-              -max_total_time=60 \
-              -rss_limit_mb=4096 \
-              -timeout=5 \
-              seed-kdb || exit_code=$?
           if [ "${exit_code:-0}" -eq 1 ]; then
             echo "Fuzzer found a crash!"
             exit 1

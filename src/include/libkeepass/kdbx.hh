@@ -47,6 +47,9 @@ private:
   /** Force KDBX 4 output even if the database could be written as KDBX 3. */
   bool write_kdbx4_ = false;
 
+  /** Reuse a transformed key cached on the Database instead of deriving it. */
+  bool use_cached_key_ = true;
+
   /** KDBX XML body serializer/deserializer holding all per-operation state. */
   KdbxXml xml_;
 
@@ -120,6 +123,18 @@ public:
 
   /** Forces the exporter to produce a KDBX 4 format database. */
   void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }
+
+  /**
+   * Selects whether a transformed key cached on the Database may be reused.
+   * Callers that explicitly supply a key (for example SaveAs/re-encryption)
+   * must disable this so that the supplied key actually replaces the cached
+   * one. Enabled by default, so keyless saves of freshly created or imported
+   * databases can reuse the cache.
+   */
+  void set_use_cached_key(bool use_cached_key) { use_cached_key_ = use_cached_key; }
+
+  /** Returns whether a cached transformed key may be reused. */
+  bool use_cached_key() const { return use_cached_key_; }
 
   /** Sets the resource budgets enforced while importing and parsing. */
   void set_resource_limits(const detail::ResourceLimits& limits);

@@ -221,6 +221,22 @@ TEST_F(KeePassTest, OpenFromStream) {
   EXPECT_EQ(db->root()->ToJson(), GetTestJson("groups-2-random_entry-4-pw-aes.json"));
 }
 
+TEST_F(KeePassTest, OpenFromByteRange) {
+  const std::string data = ReadFile(GetDataPath("groups-2-random_entry-4-pw-aes.kdbx"));
+  const std::vector<uint8_t> bytes(data.begin(), data.end());
+
+  KeePass kp("password");
+  std::unique_ptr<Database> db = kp.Open(bytes);
+  ASSERT_TRUE(db);
+  EXPECT_GT(db->EntryCount(), 0U);
+
+  std::unique_ptr<Database> raw = kp.Open(bytes.data(), bytes.size());
+  ASSERT_TRUE(raw);
+  EXPECT_EQ(db->ToJson(), raw->ToJson());
+
+  EXPECT_THROW(kp.Open(static_cast<const uint8_t*>(nullptr), 1), FormatError);
+}
+
 TEST_F(KeePassTest, OpenMissingFileThrows) {
   KeePass kp("password");
   EXPECT_THROW(kp.Open(GetTmpPath("does-not-exist.kdbx")), FileNotFoundError);
@@ -320,6 +336,27 @@ TEST_F(KeePassTest, SaveAsChangesKey) {
   std::unique_ptr<Database> reopened = fresh.Open(out);
   ASSERT_TRUE(reopened);
   ExpectSameDatabase(*db, *reopened);
+}
+
+TEST_F(KeePassTest, SaveAsOverridesImportedTransformedKey) {
+  const std::string source = GetDataPath("groups-2-random_entry-4-pw-aes.kdbx");
+  const std::string out = GetTmpPath("saveas-imported.kdbx");
+
+  KeePass importer("password");
+  std::unique_ptr<Database> db = importer.Open(source);
+  ASSERT_TRUE(db);
+  ASSERT_TRUE(db->has_transformed_key());
+
+  KeePass rekey("unused");
+  rekey.SaveAs(out, *db, "new_password");
+
+  KeePass old("password");
+  EXPECT_THROW(old.Open(out), PasswordError);
+
+  KeePass fresh("new_password");
+  std::unique_ptr<Database> reopened = fresh.Open(out);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
 }
 
 TEST_F(KeePassTest, SaveAsToStreamChangesKey) {
@@ -431,6 +468,32 @@ TEST_F(KeePassTest, CreateDefaults) {
                               [](uint8_t b) { return b != 0; }));
   EXPECT_EQ(0U, db->EntryCount());
   EXPECT_EQ(1U, db->GroupCount());
+}
+
+TEST_F(KeePassTest, CreateCachesTransformedKeyForSaving) {
+  std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdbx4,
+                                                 Database::Cipher::kAes, Database::Kdf::kArgon2id);
+  ASSERT_TRUE(db);
+  EXPECT_TRUE(db->has_transformed_key());
+
+  Database::AddEntry(db->root(), Database::NewEntry("Created"));
+  std::ostringstream out;
+  KeePass keyless; // No password: the cached transformed key must be used.
+  keyless.SetFormat(KeePass::Format::kKdbx4);
+  keyless.Save(out, *db);
+
+  std::istringstream in(out.str());
+  KeePass reader("password");
+  std::unique_ptr<Database> reopened = reader.Open(in);
+  ASSERT_TRUE(reopened);
+  EXPECT_EQ(reopened->ToJson(), db->ToJson());
+}
+
+TEST_F(KeePassTest, CreateKdbDoesNotCacheTransformedKey) {
+  std::unique_ptr<Database> db = KeePass::Create("password", KeePass::Format::kKdb,
+                                                 Database::Cipher::kAes, Database::Kdf::kAes);
+  ASSERT_TRUE(db);
+  EXPECT_FALSE(db->has_transformed_key());
 }
 
 TEST_F(KeePassTest, CreateAesUsesTransformRounds) {
@@ -685,9 +748,20 @@ TEST_F(KeePassTest, EntryBinaryProperties) {
 
   const std::vector<uint8_t> data = {{0xde, 0xad, 0xbe, 0xef}};
   EXPECT_TRUE(entry->get_binary_property("att").empty());
+  EXPECT_FALSE(entry->HasAttachment("att"));
+  EXPECT_EQ(nullptr, entry->FindAttachment("att"));
 
   entry->set_binary_property("att", data);
   EXPECT_EQ(data, entry->get_binary_property("att"));
+  EXPECT_TRUE(entry->HasAttachment("att"));
+  ASSERT_NE(nullptr, entry->FindAttachment("att"));
+  EXPECT_EQ(std::vector<std::string>{"att"}, entry->attachment_names());
+
+  // An existing but empty attachment is distinguishable from a missing one.
+  entry->set_binary_property("empty", {});
+  EXPECT_TRUE(entry->HasAttachment("empty"));
+  ASSERT_NE(nullptr, entry->FindAttachment("empty"));
+  EXPECT_TRUE(entry->get_binary_property("empty").empty());
 
   const std::vector<uint8_t> other = {{0x01, 0x02}};
   entry->set_binary_property("att", other);
@@ -695,6 +769,7 @@ TEST_F(KeePassTest, EntryBinaryProperties) {
 
   entry->delete_binary_property("att");
   EXPECT_TRUE(entry->get_binary_property("att").empty());
+  EXPECT_FALSE(entry->HasAttachment("att"));
 }
 
 TEST_F(KeePassTest, EntryHistoryAndTouch) {

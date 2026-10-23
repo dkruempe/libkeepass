@@ -20,6 +20,7 @@
 #include "output.hh"
 
 #include <cctype>
+#include <ctime>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -40,13 +41,33 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "it to a new KeePass file, or edits it in place (add/update/rm).\n"
      << "\n"
      << "Options:\n"
-     << "  -p, --password <pw>   master password (env: KEEPASS_PASSWORD;\n"
-     << "                        prompted if not given and stdin is a terminal)\n"
+     << "  -p, --password <pw>   master password (visible in the process list;\n"
+     << "                        prefer --password-file or --password-stdin)\n"
+     << "      --password-file <path>\n"
+     << "                        read the master password from <path> (\"-\" for\n"
+     << "                        stdin; a trailing line break is stripped)\n"
+     << "      --password-stdin  read the master password from stdin\n"
+     << "      --new-password <pw>\n"
+     << "                        new master password for the passwd command\n"
+     << "      --new-password-file <path>\n"
+     << "                        read the new master password from <path> (\"-\"\n"
+     << "                        for stdin)\n"
+     << "      --new-password-stdin\n"
+     << "                        read the new master password from stdin\n"
      << "  -k, --keyfile <path>  keyfile used together with the password\n"
+     << "      --kdf <name>      change the KDF: aes, argon2d or argon2id\n"
+     << "      --to <group>      destination group for move/merge\n"
+     << "      --from <path>     source database for merge/import\n"
+     << "      --all             select all entries (purge)\n"
+     << "      --force           overwrite an existing file for the create command\n"
+     << "      (fallback: KEEPASS_PASSWORD; interactive prompt when stdin is a\n"
+     << "       terminal and no other password source is given)\n"
      << "  -f, --format <fmt>    print format: text (default), json, csv\n"
      << "  -o, --output <path>   write print output to <path> instead of stdout\n"
      << "  -e, --export <path>   export the database to <path> (.kdb or .kdbx)\n"
      << "      --with-passwords  include passwords in text/csv output\n"
+     << "      --include-attachments\n"
+     << "                        include attachment payloads as base64 in JSON\n"
      << "      --search <query>  only print entries matching <query> (title,\n"
      << "                        username, URL or notes; case-insensitive substring)\n"
      << "      --regex           treat --search as a regular expression\n"
@@ -68,8 +89,22 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "         of --title, --user, --pass, --url, --notes)\n"
      << "  rm     delete the entry with an exact title (--title), all entries\n"
      << "         matching --search <query>, or a whole group (--group <name>)\n"
+     << "  groups list all groups (or the --group subtree) without entries\n"
+     << "  create create a new empty database at <path> (--force to overwrite)\n"
+     << "  passwd change the master password and/or KDF in place\n"
+     << "         (--new-password*, --kdf)\n"
+     << "  move   move entries (--title/--search) or a group (--group) to --to\n"
+     << "  history print entry history versions (--title/--search/--group)\n"
+     << "  purge  clear entry history (--title/--search/--group or --all)\n"
+     << "  otp    print TOTP seeds/settings stored in custom fields\n"
+     << "  merge  merge a second database (--from <path>, optional --to <group>)\n"
+     << "         into the target; both use the same password/keyfile\n"
+     << "  import alias for merge\n"
      << "\n"
-     << "Exit code: 0 on success, 1 on any error.\n";
+     << "Exit codes: 0 success, 1 command/usage error, 3 wrong password/key,\n"
+     << "            4 corrupt/unsupported database, 5 I/O or missing file.\n"
+     << "Errors are printed as {\"error\":{\"category\":...,\"message\":...}} when\n"
+     << "--format json is selected.\n";
 }
 
 // Case-insensitive containment of needle_lower in haystack.
@@ -120,6 +155,30 @@ SearchEntries(const std::shared_ptr<keepass::Group>& start, const std::string& q
       };
   collect(start);
   return result;
+}
+
+std::vector<std::shared_ptr<keepass::Entry>>
+CollectEntries(const std::shared_ptr<keepass::Group>& start) {
+  std::vector<std::shared_ptr<keepass::Entry>> result;
+  std::function<void(const std::shared_ptr<keepass::Group>&)> collect =
+      [&](const std::shared_ptr<keepass::Group>& group) {
+        for (const auto& entry : group->Entries())
+          result.push_back(entry);
+        for (const auto& child : group->Groups())
+          collect(child);
+      };
+  if (start)
+    collect(start);
+  return result;
+}
+
+std::vector<std::shared_ptr<keepass::Entry>>
+SelectEntries(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  if (opt.has_title)
+    return SearchEntries(start, opt.title, false, true);
+  if (!opt.search.empty())
+    return SearchEntries(start, opt.search, opt.regex, false);
+  return CollectEntries(start);
 }
 
 // Builds a lightweight copy of the group tree that contains only the entries
@@ -515,6 +574,182 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
   return 0;
 }
 
+int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  std::vector<std::shared_ptr<keepass::Group>> groups;
+  std::function<void(const std::shared_ptr<keepass::Group>&)> collect =
+      [&](const std::shared_ptr<keepass::Group>& group) {
+        groups.push_back(group);
+        for (const auto& child : group->Groups())
+          collect(child);
+      };
+  if (root)
+    collect(root);
+
+  if (opt.format == "json") {
+    out << "[";
+    for (std::size_t i = 0; i < groups.size(); ++i) {
+      if (i != 0)
+        out << ",";
+      out << R"({"path":")" << JsonEscape(groups[i]->path()) << R"(","entries":)"
+          << groups[i]->entries_count() << R"(,"groups":)" << groups[i]->groups_count() << "}";
+    }
+    out << "]\n";
+  } else if (opt.format == "csv") {
+    out << "Path,Entries,Groups\n";
+    for (const auto& group : groups)
+      out << CsvField(group->path()) << ',' << group->entries_count() << ','
+          << group->groups_count() << "\n";
+  } else {
+    for (const auto& group : groups)
+      out << group->path() << "\n";
+  }
+  return 0;
+}
+
+std::string FormatTimestamp(std::time_t time) {
+  if (time <= 0)
+    return {};
+
+  std::tm tm_buffer{};
+#ifdef _WIN32
+  if (gmtime_s(&tm_buffer, &time) != 0)
+    return std::to_string(time);
+#else
+  if (gmtime_r(&time, &tm_buffer) == nullptr)
+    return std::to_string(time);
+#endif
+
+  char buffer[32];
+  if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tm_buffer) == 0)
+    return std::to_string(time);
+  return buffer;
+}
+
+int RunHistory(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  const auto entries = SelectEntries(opt, start);
+
+  if (opt.format == "json") {
+    bool first = true;
+    out << "[";
+    for (const auto& entry : entries) {
+      if (entry->history().empty())
+        continue;
+      if (!first)
+        out << ",";
+      first = false;
+      out << R"({"path":")" << JsonEscape(entry->path()) << R"(","history":[)";
+      for (std::size_t i = 0; i < entry->history().size(); ++i) {
+        const auto& history = entry->history()[i];
+        if (i != 0)
+          out << ",";
+        out << R"({"title":")" << JsonEscape(history->title()->str()) << R"(","username":")"
+            << JsonEscape(history->username()->str()) << R"(","modification_time":")"
+            << FormatTimestamp(history->modification_time()) << "\"}";
+      }
+      out << "]}";
+    }
+    out << "]\n";
+    return 0;
+  }
+
+  if (opt.format == "csv") {
+    out << "Path,Title,Username,ModificationTime\n";
+    for (const auto& entry : entries) {
+      for (const auto& history : entry->history()) {
+        out << CsvField(entry->path()) << ',' << CsvField(history->title()->str()) << ','
+            << CsvField(history->username()->str()) << ','
+            << CsvField(FormatTimestamp(history->modification_time())) << "\n";
+      }
+    }
+    return 0;
+  }
+
+  for (const auto& entry : entries) {
+    if (entry->history().empty())
+      continue;
+    out << entry->path() << " (" << entry->history().size() << " history "
+        << (entry->history().size() == 1 ? "entry" : "entries") << ")\n";
+    for (const auto& history : entry->history()) {
+      out << "  [" << FormatTimestamp(history->modification_time()) << "] "
+          << history->title()->str();
+      if (!history->username()->empty())
+        out << " (" << history->username()->str() << ")";
+      out << "\n";
+    }
+  }
+  return 0;
+}
+
+int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
+  struct OtpRow {
+    std::string path;
+    std::string seed;
+    std::string settings;
+  };
+
+  std::vector<OtpRow> rows;
+  for (const auto& entry : SelectEntries(opt, start)) {
+    const auto properties = entry->custom_properties();
+    std::string seed;
+    std::string settings;
+    for (const auto& [key, value] : properties) {
+      const std::string lower = Lower(key);
+      if (lower == "otp" || lower == "totp seed" || lower == "otp seed" || lower == "totpsecret" ||
+          lower == "totp_secret") {
+        seed = value;
+      } else if (lower == "totp settings" || lower == "otp settings") {
+        settings = value;
+      }
+    }
+    if (!seed.empty())
+      rows.push_back({entry->path(), seed, settings});
+  }
+
+  std::ofstream file;
+  if (!OpenOutput(opt, file))
+    return 1;
+  std::ostream& out = OutputStream(opt, file);
+
+  if (opt.format == "json") {
+    out << "[";
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+      if (i != 0)
+        out << ",";
+      out << R"({"path":")" << JsonEscape(rows[i].path) << R"(","seed":")"
+          << JsonEscape(rows[i].seed) << R"(","settings":")" << JsonEscape(rows[i].settings)
+          << "\"}";
+    }
+    out << "]\n";
+    return 0;
+  }
+
+  if (opt.format == "csv") {
+    out << "Path,Seed,Settings\n";
+    for (const auto& row : rows)
+      out << CsvField(row.path) << ',' << CsvField(row.seed) << ',' << CsvField(row.settings)
+          << "\n";
+    return 0;
+  }
+
+  for (const auto& row : rows) {
+    out << row.path << ": " << row.seed;
+    if (!row.settings.empty())
+      out << " [" << row.settings << "]";
+    out << "\n";
+  }
+  return 0;
+}
+
 int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
   std::ofstream file;
   if (!OpenOutput(opt, file))
@@ -522,7 +757,7 @@ int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root) {
   std::ostream& out = OutputStream(opt, file);
 
   if (opt.format == "json") {
-    out << root->ToJson() << "\n";
+    out << root->ToJson(opt.include_attachments) << "\n";
   } else if (opt.format == "csv") {
     PrintCsv(out, root, opt.with_passwords);
   } else {

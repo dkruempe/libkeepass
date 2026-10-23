@@ -42,6 +42,15 @@ std::vector<std::shared_ptr<keepass::Entry>>
 SearchEntries(const std::shared_ptr<keepass::Group>& start, const std::string& query, bool regex,
               bool exact_title);
 
+/// Collects every entry in the group subtree.
+std::vector<std::shared_ptr<keepass::Entry>>
+CollectEntries(const std::shared_ptr<keepass::Group>& start);
+
+/// Selects entries by --title (exact), --search, or the whole subtree when
+/// neither is given.
+std::vector<std::shared_ptr<keepass::Entry>>
+SelectEntries(const Options& opt, const std::shared_ptr<keepass::Group>& start);
+
 /// Builds a lightweight copy of the group tree that contains only the entries
 /// matching the query and their ancestor groups. The copied groups only carry
 /// their names; the entries are the original objects.
@@ -64,5 +73,16 @@ int RunAudit(const Options& opt, const std::shared_ptr<keepass::Group>& start);
 /// Runs the print command for the given group tree (possibly a pruned search
 /// result or a --group subtree) in the configured format.
 int RunPrint(const Options& opt, const std::shared_ptr<keepass::Group>& root);
+
+/// Lists the groups in the given subtree in the configured format, without
+/// printing any entries.
+int RunGroups(const Options& opt, const std::shared_ptr<keepass::Group>& root);
+
+/// Prints entry history for the selected entries in the configured format.
+int RunHistory(const Options& opt, const std::shared_ptr<keepass::Group>& start);
+
+/// Prints TOTP seeds/settings stored in custom fields for the selected
+/// entries. This only displays the stored seed; it does not generate codes.
+int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start);
 
 } // namespace kpx

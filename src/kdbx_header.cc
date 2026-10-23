@@ -23,6 +23,7 @@
 #include <cassert>
 #include <sstream>
 
+#include "libkeepass/detail/constants.hh"
 #include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/io.hh"
@@ -39,26 +40,12 @@ namespace {
 using keepass::detail::WipeBuffer;
 using keepass::detail::WipeStream;
 
-constexpr std::uint32_t kKdbxVersionCriticalMin = 0x00030001;
-constexpr std::uint32_t kKdbxVersion4_1 = 0x00040001;
-
-constexpr std::array<uint8_t, 16> kKdbxCipherAes = {{0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50,
-                                                     0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a,
-                                                     0xff}};
-constexpr std::array<uint8_t, 16> kKdbxCipherChaCha20 = {{0xd6, 0x03, 0x8a, 0x2b, 0x8b, 0x6f, 0x4c,
-                                                          0xb5, 0xa5, 0x24, 0x33, 0x9a, 0x31, 0xdb,
-                                                          0xb5, 0x9a}};
-constexpr std::array<uint8_t, 16> kKdbxCipherTwofish = {{0xad, 0x68, 0xf2, 0x9f, 0x57, 0x6f, 0x4b,
-                                                         0xb9, 0xa3, 0x6a, 0xd4, 0x7a, 0xf9, 0x65,
-                                                         0x34, 0x6c}};
-
-/**
- * Upper bound for a single outer header field. Real KDBX headers only contain
- * short fields (cipher id, seeds, KDF parameters); the cap exists to reject
- * crafted files whose declared field lengths would trigger unbounded
- * allocations or reads before the header integrity check runs.
- */
-constexpr uint32_t kMaxOuterHeaderFieldSize = 1U << 20;
+using detail::kKdbxCipherAes;
+using detail::kKdbxCipherChaCha20;
+using detail::kKdbxCipherTwofish;
+using detail::kKdbxVersion4_1;
+using detail::kKdbxVersionCriticalMin;
+using detail::kMaxOuterHeaderFieldSize;
 
 enum class kKdbxCompressionFlags : uint32_t {
   kNone,

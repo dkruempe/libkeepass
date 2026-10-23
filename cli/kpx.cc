@@ -25,12 +25,17 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#else
+#include <conio.h>
+#include <io.h>
 #endif
 
 #include "libkeepass/entry.hh"
+#include "libkeepass/exception.hh"
 #include "libkeepass/group.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/secure.hh"
 
 #include "kpx.hh"
 
@@ -47,18 +52,143 @@ bool IsKdbPath(const std::string& path) {
   return ext == "kdb";
 }
 
+namespace {
+
+// Largest password file accepted. Password files are expected to contain a
+// single line; the cap keeps a hostile path from exhausting memory.
+constexpr std::size_t kMaxPasswordFileBytes = 1024ULL * 1024ULL;
+
+keepass::secure_string ReadPassword(std::istream& src, const char* what) {
+  std::string data((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+  if (src.bad() || data.size() > kMaxPasswordFileBytes) {
+    keepass::secure_zero(data.data(), data.size());
+    throw keepass::IoError(std::string("Unable to read ") + what + ".");
+  }
+
+  // A trailing line ending is not part of the password.
+  while (!data.empty() && (data.back() == '\n' || data.back() == '\r'))
+    data.pop_back();
+
+  keepass::secure_string password(data);
+  keepass::secure_zero(data.data(), data.size());
+  return password;
+}
+
+keepass::secure_string PromptPassword() {
+#ifdef _WIN32
+  std::cout << "Master password: ";
+  std::cout.flush();
+  std::string password;
+  for (;;) {
+    const int ch = _getch();
+    if (ch == '\r' || ch == '\n')
+      break;
+    if ((ch == '\b' || ch == 127) && !password.empty()) {
+      password.pop_back();
+      continue;
+    }
+    if (ch >= 32 && ch < 127)
+      password.push_back(static_cast<char>(ch));
+  }
+  std::cout << "\n";
+  keepass::secure_string result(password);
+  keepass::secure_zero(password.data(), password.size());
+  return result;
+#else
+  return {getpass("Master password: ")};
+#endif
+}
+
+bool HasTerminalInput() {
+#ifdef _WIN32
+  return _isatty(_fileno(stdin)) != 0;
+#else
+  return isatty(STDIN_FILENO) != 0;
+#endif
+}
+
+std::string JsonEscape(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped.push_back(c);
+      break;
+    }
+  }
+  return escaped;
+}
+
+// Returns whether the command line asked for JSON output, so errors can use
+// the same machine-readable shape even when parsing fails later.
+bool WantsJsonErrors(int argc, const char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--")
+      break;
+    if (arg == "--format=json" || arg == "-fjson")
+      return true;
+    if ((arg == "--format" || arg == "-f") && i + 1 < argc && std::string(argv[i + 1]) == "json")
+      return true;
+  }
+  return false;
+}
+
+int ReportError(bool json, const char* category, const std::string& message, ExitCode code) {
+  if (json)
+    std::cerr << R"({"error":{"category":")" << category << R"(","message":")"
+              << JsonEscape(message) << R"("}})" << '\n';
+  else
+    std::cerr << "error: " << message << "\n";
+  return static_cast<int>(code);
+}
+
+} // namespace
+
+keepass::secure_string ReadPasswordFile(const std::string& path) {
+  if (path == "-")
+    return ReadPassword(std::cin, "password from stdin");
+
+  std::ifstream file(path, std::ios::in | std::ios::binary);
+  if (!file.is_open())
+    throw keepass::FileNotFoundError();
+  return ReadPassword(file, "password file");
+}
+
+keepass::secure_string ReadPasswordStdin() { return ReadPassword(std::cin, "password from stdin"); }
+
 keepass::secure_string ResolvePassword(const Options& opt) {
   if (!opt.password.empty())
     return opt.password;
+
+  if (!opt.password_file.empty())
+    return ReadPasswordFile(opt.password_file);
+
+  if (opt.password_stdin)
+    return ReadPasswordStdin();
 
   const char* env = std::getenv("KEEPASS_PASSWORD");
   if (env != nullptr && *env != '\0')
     return {env};
 
-#ifndef _WIN32
-  if (isatty(STDIN_FILENO))
-    return {getpass("Master password: ")};
-#endif
+  if (HasTerminalInput())
+    return PromptPassword();
 
   return {};
 }
@@ -96,10 +226,22 @@ int Run(const Options& opt, const char* argv0) {
   if (opt.generate > 0 && opt.command.empty() && opt.input.empty())
     return RunGenerate(opt);
 
+  if (!opt.password.empty() && (!opt.password_file.empty() || opt.password_stdin)) {
+    std::cerr << "error: use only one of --password, --password-file and --password-stdin\n";
+    return 1;
+  }
+  if (!opt.password_file.empty() && opt.password_stdin) {
+    std::cerr << "error: use only one of --password-file and --password-stdin\n";
+    return 1;
+  }
+
   if (opt.input.empty()) {
     PrintUsage(argv0, std::cerr);
     return 1;
   }
+
+  if (opt.command == "create")
+    return RunCreate(opt);
 
   if (opt.command == "add" && (opt.title.empty() || !opt.has_title)) {
     std::cerr << "error: add requires --title <title>\n";
@@ -133,6 +275,37 @@ int Run(const Options& opt, const char* argv0) {
     return RunUpdate(opt, keeper, db.get());
   if (opt.command == "rm")
     return RunRemove(opt, keeper, db.get());
+  if (opt.command == "passwd")
+    return RunPasswd(opt, password, keeper, db.get());
+  if (opt.command == "move")
+    return RunMove(opt, keeper, db.get());
+  if (opt.command == "merge" || opt.command == "import")
+    return RunMerge(opt, password, keeper, db.get());
+  if (opt.command == "purge")
+    return RunPurge(opt, keeper, db.get());
+  if (opt.command == "history" || opt.command == "otp") {
+    std::shared_ptr<keepass::Group> start = db->root();
+    if (!opt.group.empty()) {
+      start = db->FindGroup(opt.group);
+      if (!start) {
+        std::cerr << "error: group '" << opt.group << "' not found\n";
+        return 1;
+      }
+    }
+    return opt.command == "history" ? RunHistory(opt, start) : RunOtp(opt, start);
+  }
+
+  if (opt.command == "groups") {
+    std::shared_ptr<keepass::Group> start = db->root();
+    if (!opt.group.empty()) {
+      start = db->FindGroup(opt.group);
+      if (!start) {
+        std::cerr << "error: group '" << opt.group << "' not found\n";
+        return 1;
+      }
+    }
+    return RunGroups(opt, start);
+  }
 
   if (opt.audit) {
     std::shared_ptr<keepass::Group> start = db->root();
@@ -168,14 +341,22 @@ int Run(const Options& opt, const char* argv0) {
 }
 
 int kpx_main(int argc, const char* argv[]) {
+  const bool json_errors = WantsJsonErrors(argc, argv);
   try {
     Options opt;
     if (!ParseArgs(argc, argv, opt))
-      return 1;
+      return static_cast<int>(ExitCode::kError);
     return Run(opt, argv[0]);
+  } catch (const keepass::PasswordError& e) {
+    return ReportError(json_errors, "auth", e.what(), ExitCode::kAuth);
+  } catch (const keepass::FileNotFoundError& e) {
+    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
+  } catch (const keepass::IoError& e) {
+    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
+  } catch (const keepass::FormatError& e) {
+    return ReportError(json_errors, "format", e.what(), ExitCode::kFormat);
   } catch (const std::exception& e) {
-    std::cerr << "error: " << e.what() << "\n";
-    return 1;
+    return ReportError(json_errors, "error", e.what(), ExitCode::kError);
   }
 }
 

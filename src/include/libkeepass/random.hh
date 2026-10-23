@@ -54,6 +54,7 @@ private:
   std::size_t buffer_pos_ = 64;
 
   void FillBuffer();
+  void ProcessBytes(uint8_t* data, std::size_t size);
 
 public:
   /**

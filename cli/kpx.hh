@@ -33,9 +33,27 @@ namespace kpx {
 
 extern const char* const kVersion;
 
-/// Resolves the master password: the -p value, the KEEPASS_PASSWORD
-/// environment variable or, on a terminal, an interactive prompt.
+/// Stable process exit codes. Command/usage validation failures use kError;
+/// exceptions are categorized by type in kpx_main.
+enum class ExitCode : int {
+  kSuccess = 0,
+  kError = 1,
+  kAuth = 3,
+  kFormat = 4,
+  kIo = 5,
+};
+
+/// Resolves the master password in this order: the -p value, --password-file
+/// (or "-" for stdin), --password-stdin, the KEEPASS_PASSWORD environment
+/// variable or, on a terminal, an interactive prompt.
 keepass::secure_string ResolvePassword(const Options& opt);
+
+/// Reads a master password from a file ("-" means stdin), stripping one
+/// trailing line ending. Throws FileNotFoundError/IoError on failure.
+keepass::secure_string ReadPasswordFile(const std::string& path);
+
+/// Reads a master password from stdin, stripping one trailing line ending.
+keepass::secure_string ReadPasswordStdin();
 
 /// Returns true if the path names a KDB (legacy) key database.
 bool IsKdbPath(const std::string& path);

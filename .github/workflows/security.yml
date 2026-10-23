@@ -1,0 +1,52 @@
+name: Dependency security
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  # OSV-Scanner reads lockfiles only; Conan's graph is resolved into
+  # conan.lock in a preparation job and handed to the reusable scanner
+  # workflow as an artifact.
+  prepare-conan-lock:
+    runs-on: ubuntu-latest
+    env:
+      CONAN_VERSION: "2.31.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
+
+      - name: Resolve dependency graph
+        run: conan lock create conanfile.py --lockfile-out conan.lock
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: conan-lock
+          path: conan.lock
+          retention-days: 1
+
+  osv-scan:
+    needs: prepare-conan-lock
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+    with:
+      download-artifact: conan-lock
+      scan-args: |-
+        --lockfile=conan.lock
+    permissions:
+      actions: read
+      contents: read
+      security-events: write

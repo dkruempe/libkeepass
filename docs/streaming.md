@@ -83,10 +83,13 @@ import time for each format/cipher/compression combination:
 | `kdbx4-aes-plain` | AES | none | KDBX 4 |
 | `kdbx4-chacha20-gzip` | ChaCha20 | gzip | KDBX 4 |
 
-It prints the on-disk size, wall-clock import time and a MiB/s figure. The
-result is informative only — it is **not asserted** — and is registered as a
-CI step with `continue-on-error: true` so a slow runner never fails the build.
-Run it locally with `./bin/benchmark [<entries>]`.
+It prints the on-disk size, wall-clock export and import times, the
+corresponding MiB/s figures and the process peak RSS. `--json` emits the same
+data machine-readably. `tools/benchmark_compare.py` compares a run against
+`test/benchmark_baseline.json`: absolute export/import times use a generous
+threshold on shared CI runners, while the export/import ratio catches
+directional regressions independently of the machine. Run it locally with
+`./bin/benchmark [<entries>] [--json]`.
 
 Reproducibility notes: seeds and content are fixed (no random input), and the
 AES-KDF round count is a constant `8192` so the measured time is dominated by

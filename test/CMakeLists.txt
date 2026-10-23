@@ -20,6 +20,7 @@ if (NOT TARGET kruempelmann::libkeepass)
 endif ()
 
 find_package(GTest REQUIRED)
+find_package(Threads REQUIRED)
 
 # build
 add_executable(base64 base64.cc)
@@ -113,8 +114,18 @@ target_compile_features(robustness PUBLIC cxx_std_17)
 target_link_libraries(robustness PRIVATE GTest::GTest GTest::Main kruempelmann::libkeepass)
 add_test(NAME libkeepass.robustness COMMAND robustness)
 
+add_executable(concurrency concurrency.cc)
+target_compile_features(concurrency PUBLIC cxx_std_17)
+target_link_libraries(concurrency PRIVATE GTest::GTest GTest::Main Threads::Threads
+        kruempelmann::libkeepass)
+add_test(NAME libkeepass.concurrency COMMAND concurrency)
+
 # Standalone (non-GTest) load benchmark. Not registered as a test so that it
 # never gates the build; run it explicitly or from CI to track load times.
 add_executable(benchmark benchmark.cc)
 target_compile_features(benchmark PUBLIC cxx_std_17)
-target_link_libraries(benchmark PRIVATE kruempelmann::libkeepass)
+if (WIN32)
+    target_link_libraries(benchmark PRIVATE kruempelmann::libkeepass psapi)
+else()
+    target_link_libraries(benchmark PRIVATE kruempelmann::libkeepass)
+endif()

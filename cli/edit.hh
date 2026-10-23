@@ -28,6 +28,29 @@ class KeePass;
 
 namespace kpx {
 
+/// Creates a new empty database at opt.input, refusing to overwrite an
+/// existing file unless --force is given. Returns the process exit code.
+int RunCreate(const Options& opt);
+
+/// Changes the master password and/or KDF of the database at opt.input in
+/// place. Returns the process exit code.
+int RunPasswd(const Options& opt, const keepass::secure_string& old_password,
+              keepass::KeePass& keeper, keepass::Database* db);
+
+/// Moves entries or a group to the group named by --to. Returns the process
+/// exit code.
+int RunMove(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);
+
+/// Clears entry history for the selected entries (--title/--search) or the
+/// whole database (--all). Returns the process exit code.
+int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);
+
+/// Merges the database named by --from into the target database (optionally
+/// into the --to group). Both databases use the same master credentials.
+/// Returns the process exit code.
+int RunMerge(const Options& opt, const keepass::secure_string& password, keepass::KeePass& keeper,
+             keepass::Database* db);
+
 /// Creates a new entry from the --title/--user/--pass/--url/--notes options
 /// and saves the database. Returns the process exit code.
 int RunAdd(const Options& opt, keepass::KeePass& keeper, keepass::Database* db);

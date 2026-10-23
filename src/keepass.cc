@@ -24,8 +24,10 @@
 #include <fstream>
 #include <sstream>
 
+#include "libkeepass/detail/constants.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/kdb.hh"
+#include "libkeepass/kdbx_kdf.hh"
 #include "libkeepass/metadata.hh"
 #include "libkeepass/random.hh"
 
@@ -33,10 +35,10 @@ namespace keepass {
 
 namespace {
 
-constexpr uint32_t kKdbSignature0 = 0x9aa2d903;
-constexpr uint32_t kKdbSignature1 = 0xb54bfb65;
-constexpr uint32_t kKdbxSignature0 = 0x9aa2d903;
-constexpr uint32_t kKdbxSignature1 = 0xb54bfb67;
+using detail::kKdbSignature0;
+using detail::kKdbSignature1;
+using detail::kKdbxSignature0;
+using detail::kKdbxSignature1;
 
 } // namespace
 
@@ -106,6 +108,15 @@ std::unique_ptr<Database> KeePass::Open(std::istream& src) {
   return Import(stream, format);
 }
 
+std::unique_ptr<Database> KeePass::Open(const uint8_t* data, std::size_t size) {
+  if (data == nullptr && size != 0)
+    throw FormatError("Not a KeePass database.");
+
+  const std::string bytes(reinterpret_cast<const char*>(data), size);
+  std::istringstream src(bytes);
+  return Open(src);
+}
+
 std::unique_ptr<Database> KeePass::Import(std::istream& src, Format format) {
   switch (format) {
   case Format::kKdb:
@@ -141,13 +152,20 @@ void KeePass::Save(std::ostream& dst, const Database& db) {
 
 void KeePass::Save(std::ostream& dst, const Database& db, const Key& key) {
   Key old_key = key_;
+  const bool old_use_cached_key = kdbx_file_.use_cached_key();
   key_ = key;
+  // An explicitly supplied key must take precedence over a transformed key
+  // cached on the database (for example after Create or Import); otherwise
+  // SaveAs would silently keep encrypting with the old key.
+  kdbx_file_.set_use_cached_key(false);
   try {
     Save(dst, db);
   } catch (...) {
+    kdbx_file_.set_use_cached_key(old_use_cached_key);
     key_ = old_key;
     throw;
   }
+  kdbx_file_.set_use_cached_key(old_use_cached_key);
   key_ = old_key;
 }
 
@@ -214,9 +232,6 @@ void KeePass::SaveAs(std::ostream& dst, const Database& db, const std::string& p
 
 std::unique_ptr<Database> KeePass::Create(const std::string& password, Format format,
                                           Database::Cipher cipher, Database::Kdf kdf) {
-  (void)password;
-  (void)format;
-
   std::unique_ptr<Database> db(new Database());
   db->set_meta(std::make_shared<Metadata>());
   db->set_cipher(cipher);
@@ -240,6 +255,17 @@ std::unique_ptr<Database> KeePass::Create(const std::string& password, Format fo
   db->set_inner_random_stream_key(random_array<32>());
 
   db->set_root(std::make_shared<Group>());
+
+  // Pre-derive and cache the transformed key so that a subsequent KDBX Save
+  // can use the password supplied here even when the KeePass instance doing
+  // the save was constructed without a key. KDB (1.x) export nevertheless
+  // requires an explicit key because the legacy format derives its key
+  // differently.
+  if (!password.empty() && format != Format::kKdb) {
+    const Key key(password);
+    db->set_transformed_key(KdbxKdf::Transform(key, *db, Key::SubKeyResolution::kHashSubKeys));
+  }
+
   return db;
 }
 

@@ -48,16 +48,21 @@ few hot spots dominate memory and time.
   inner header at once.
 
 ### P2 - Export benchmark and performance regression tracking
-- `test/benchmark.cc` only measures **import** and nothing asserts
-  performance. Add export timing and peak memory (or approximate resident set
-  via `getrusage`), store baselines in `test/benchmark_baseline.json`, and add
-  a CI step that fails (or files an issue) on a >X% regression vs. the
-  baseline, using a dedicated runner so numbers stay comparable.
+- [x] `test/benchmark.cc` measures export and import time for every
+  format/cipher/compression scenario, reports peak RSS (`getrusage` on POSIX,
+  `GetProcessMemoryInfo` on Windows) and emits machine-readable `--json`
+  output. `test/benchmark_baseline.json` stores the reference run and
+  `tools/benchmark_compare.py` fails on absolute or export/import-ratio
+  regressions; the Ubuntu Release CI job runs the comparison and uploads the
+  result. The absolute threshold is intentionally generous on shared runners,
+  while the ratio check is hardware-independent.
 
 ### P2 - Vectorize hot byte loops
-- The inner random-stream XOR loop in `RandomObfuscator::Process`
-  (`src/random.cc:91`) processes one byte per iteration; process whole
-  keystream blocks with word-wise XOR when the buffers are aligned.
+- [x] `RandomObfuscator::Process` (`src/random.cc`) now consumes the keystream
+  in whole 64-byte blocks and XORs 64-bit words (alignment- and endian-safe
+  via `memcpy`), with a byte tail for the remainder. The vector, string and
+  `secure_string` overloads share the same chunked implementation; tests cover
+  every length from 0 to 200 bytes and cross-check all three overloads.
 
 ### P3 - Memory-mapped reader
 - For `Open(path)`, use a memory-mapped input (`mmap`/`CreateFileMapping`)
@@ -107,19 +112,27 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   non-`secure_string` overloads once the audit is clean.
 
 ### P2 - CLI credential hygiene
-- `kpx -p <password>` and `KEEPASS_PASSWORD` leak the secret into `argv`/the
-  environment (visible in `ps`/`/proc`). Add `--password-file`/`--stdin`
-  (and a `getpass`-based prompt on Windows), and document the trade-off.
+- [x] `kpx` accepts `--password-file <path>` (including `-` for stdin) and
+  `--password-stdin`, so scripts no longer have to expose the master password
+  in `argv` or the environment. Conflicting password sources are rejected,
+  the interactive prompt now also works on Windows consoles, and `--help`
+  documents the trade-off between the convenience sources and the safe ones.
 
 ### P2 - Keyfile hardening
-- Add fuzz coverage and size limits for keyfile parsing (XML/hex/raw modes),
-  reject absurd keyfile sizes, and wipe keyfile-derived buffers on all error
-  paths.
+- [x] Key-file parsing enforces `Key::kMaxKeyFileBytes` (1 MiB) before
+  buffering, wipes every transient buffer on all paths (including malformed
+  XML/base64 and I/O errors), and no longer leaves the decoded XML key in an
+  unwiped `std::string` when the size check fails. `Key::FromBytes`/
+  `Key::FromStream` add in-memory key-file support, and `fuzz/fuzz_keyfile.cc`
+  covers the XML, hex and raw modes from both memory and streams.
 
 ### P2 - Automated dependency vulnerability scanning
-- Add OSV-Scanner/`conan audit` for the dependency graph and enable
-  Dependabot for Conan/CMake/CI files. Keep the existing CodeQL workflow, and
-  make sure the nightly security scan covers the CLI and tests.
+- [x] `.github/workflows/security.yml` resolves the Conan graph to
+  `conan.lock` and feeds it to the OSV-Scanner reusable workflow on pushes,
+  pull requests and a weekly schedule; results are uploaded to code scanning.
+  Dependabot (`.github/dependabot.yml`) keeps the GitHub Actions used by the
+  build, fuzz, sanitizer, release and security workflows current. The existing
+  CodeQL workflow continues to analyze the library, CLI and tests.
 
 ---
 
@@ -214,9 +227,10 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   `Kdb` can evolve and be tested independently.
 
 ### P2 - Centralize format constants
-- Signatures, cipher/KDF UUIDs, version constants and size limits are
-  scattered across `kdbx_header.cc`, `kdbx_kdf.cc`, `kdb.cc` and `keepass.cc`.
-  Move them into a single `detail/constants.hh`.
+- [x] `libkeepass/detail/constants.hh` now owns the KDB/KDBX signatures,
+  KDBX version constants, cipher UUIDs, KDF UUIDs, the inner-random-stream IV
+  and the outer-header field cap. The codecs and `KdbxHeader`'s public
+  constants alias these definitions instead of duplicating the magic values.
 
 ### P3 - Independent CMake components
 - If consumer demand grows, expose `libkeepass` as optional components
@@ -237,43 +251,63 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   paths (:146, :169), so re-encrypting to a stream is possible.
 
 ### P2 - Clarify `KeePass::Create` semantics
-- `KeePass::Create` takes a `password` argument that is ignored
-  (`src/keepass.cc:174`). Either drop the parameter or make the returned
-  database carry the key so a subsequent `Save` uses it (keeping the current
-  behavior on the stream-based path).
+- [x] `KeePass::Create` now derives and caches the transformed key for the
+  supplied password (except for KDB output), so a subsequent KDBX `Save` can
+  use the password even when the saving `KeePass` instance has no key. Saving
+  with an explicit key now also overrides an imported/created cached key, so
+  `SaveAs` re-encryption actually changes the password.
 
 ### P2 - Extend the `kpx` command set
 Most-wanted commands that users of a KeePass tool expect:
-- `kpx create <file>` - create a brand-new empty database,
-- `kpx passwd` - change the master password and/or KDF parameters in place,
-- `kpx groups`/`--list-groups` - list groups without entries,
-- `kpx move` - move entries/groups between groups,
-- `kpx merge` / `kpx import` - merge a second database into the current one,
-- `kpx history`/`purge` - manage and clear entry history,
-- `kpx otp` - display/export TOTP seeds stored in custom fields.
+- [x] `kpx create <file>` - create a brand-new empty database (`--force` to
+  overwrite, `--kdf` to choose the KDF),
+- [x] `kpx passwd` - change the master password and/or KDF parameters in place
+  (atomic temp-file replacement; `--new-password*`, `--kdf`),
+- [x] `kpx groups`/`--list-groups` - list groups without entries
+  (text/JSON/CSV, honours `--group`),
+- [x] `kpx move` - move entries (`--title`/`--search`) or groups (`--group`)
+  to `--to <group>`,
+- [x] `kpx merge`/`kpx import` - merge another database (`--from <path>`,
+  both using the same credentials) into the target root or `--to <group>`.
+  Groups/entries (and history) receive fresh UUIDs so they cannot collide with
+  existing objects.
+- [x] `kpx history`/`purge` - list history versions (text/JSON/CSV) and clear
+  history by `--title`/`--search`/`--group` or `--all`,
+- [x] `kpx otp` - display TOTP seeds and settings stored in the `otp`/
+  `TOTP Seed`/`TOTP Settings` custom fields (text/JSON/CSV; code generation is
+  still out of scope).
 
 ### P2 - CLI output improvements
-- CSV escaping is already RFC 4180-quoted (`CsvField`, `cli/kpx.cc:506`).
-  Remaining: document the JSON/CSV field schema explicitly, support
-  `--include-attachments`/base64 and a machine-readable `--format json` error
-  output (structured errors).
+- [x] `docs/cli-output.md` documents the stable text/JSON/CSV schemas for
+  print, `groups`, `history`, `otp` and `--audit`, and errors are emitted as
+  structured JSON (`{"error":{"category":...,"message":...}}`) when
+  `--format json` is selected. CSV remains RFC 4180-quoted. Print JSON lists
+  attachment names by default and embeds payloads as base64 with
+  `--include-attachments`.
 
 ### P2 - Better diagnostics and consistent exit codes
-- Print context ("while parsing group X", "offset 0x1234") on failures and
-  document a stable exit-code mapping per error category.
+- [x] `kpx` maps exceptions to stable exit codes (0 success, 1
+  command/usage, 3 auth, 4 format, 5 I/O) and emits structured JSON errors;
+  the mapping is documented in `kpx --help`, the README and
+  `docs/cli-output.md`. Library exceptions already carry contextual messages
+  (`FormatError`, `IoError`) without key material.
+- Remaining: richer "while parsing group X"/offset context in every parser
+  error path.
 
 ### P2 - API ergonomics
-- Automatic invalidation of the cached transformed key on KDF parameter
-  mutation is already implemented (`src/include/libkeepass/database.hh`).
-  Remaining: `Key::FromStream`/`FromBytes` for in-memory keyfiles, a
-  `KeePass::Open` overload taking a `const uint8_t*`/size pair and typed
-  attachment accessors.
+- [x] KDF parameter mutation invalidates the cached transformed key,
+  `Key::FromStream`/`FromBytes` accept in-memory key files, `KeePass::Open`
+  has `const uint8_t*`/size and `std::vector<uint8_t>` overloads, and
+  `Entry::FindAttachment`/`HasAttachment(name)`/`attachment_names` provide
+  typed attachment access that distinguishes an empty attachment from a
+  missing one.
 
 ### P2 - Documentation and migration guides
-- Format × feature support matrix (KDB / KDBX3 / KDBX4 × ciphers/KDFs/
-  features), a 0.2 → 0.3 `secure_string` migration guide, worked examples for
-  attachments, tags, recycle bin and stream round-trips, and a TOC for
-  `CONTRIBUTING.md`.
+- [x] `docs/support-matrix.md` documents format × cipher/KDF × feature
+  support, `docs/migration-0.2-to-0.3.md` covers the `secure_string`/C++17
+  migration, and `docs/examples.md` contains worked examples for streams,
+  attachments, tags, recycle bin, history and resource limits. The architecture
+  index links all three and `CONTRIBUTING.md` now has a table of contents.
 
 ### P3 - Language bindings
 - Start with a C ABI (`libkeepass-c`) so Python/Go/Rust bindings and
@@ -294,28 +328,36 @@ Most-wanted commands that users of a KeePass tool expect:
   option once the toolchain for dependencies is available.
 
 ### P2 - Broaden fuzzing
-- Current targets cover KDB and KDBX **import** only. Add:
-  - XML/protected-field mutation target (including inner-header and
-    variant-dictionary fuzzing),
-  - keyfile parsing,
-  - export/save path (fuzz the model feeding `Export`),
-  - KDB header field fuzzing (many paths are only covered by static seeds).
-- Integrate with OSS-Fuzz for continuous corpus growth and coverage
-  reporting; keep the in-repo corpus in sync.
+- [x] `fuzz_xml` parses arbitrary KDBX XML bodies directly (groups, entries,
+  protected fields, custom icons, binary references) and writes the resulting
+  model back. `fuzz_keyfile` covers XML/hex/raw key files from memory and
+  streams, `fuzz_export` builds a model from input bytes and exercises the
+  export/save path for KDBX 3 and 4, and `fuzz_kdb`/`fuzz_kdbx` continue to
+  mutate whole KDB/KDBX files (including their headers). The CI fuzz workflow
+  now builds and runs every target through a matrix with format-specific seed
+  corpora.
+- Remaining: submit the targets to OSS-Fuzz for continuous corpus growth and
+  coverage reporting, and sync the in-repo corpus with the OSS-Fuzz corpus.
 
 ### P2 - Adversarial fixtures
-- Extend `test/robustness.cc` with a generated fixture set: truncated,
-  oversized, unknown field ids, duplicate header fields, deep nesting, huge
-  declared sizes, zip bombs, HMAC tampering and CBC bit-flips.
+- [x] `test/robustness.cc` covers truncated payloads, oversized header fields
+  and variant-dictionary values, unknown KDB/KDBX header field ids, oversized
+  KDF parameters, deep XML nesting, group/entry/history/string/binary budgets,
+  zip bombs, HMAC block size/count limits, HMAC tampering and CBC bit flips.
 
 ### P3 - Concurrency & resource tests
-- Concurrent open of the same file, no leakage of the cached transformed key
-  across `KeePass` instances, and `secure_alloc`/`secure_free` behavior under
-  allocation failure.
+- [x] `test/concurrency.cc` opens the same database from eight threads
+  concurrently and compares canonical snapshots, verifies that a failed or
+  successful import does not leak the cached transformed key into other
+  `KeePass` instances, and exercises `secure_alloc`/`secure_free` edge sizes
+  and null/zero-sized frees under the sanitizer job.
 
 ### P2 - CodeQL/security triage loop
-- Add a scheduled triage of CodeQL and nightly security scan findings into
-  the repo (report file autogenerated on run).
+- [x] `.github/workflows/security-triage.yml` runs weekly and on demand,
+  fetches open code-scanning alerts (CodeQL plus SARIF-producing workflows
+  such as OSV-Scanner), renders a severity-grouped Markdown report with
+  `tools/security_triage.py`, writes it to the job summary and uploads it as
+  an artifact.
 
 ---
 
@@ -326,9 +368,11 @@ Most-wanted commands that users of a KeePass tool expect:
   submission so `libkeepass/0.3.x` becomes installable via `conan install`.
 
 ### P2 - Expand package coverage
-- Add a vcpkg port, optional Homebrew formula and prebuilt binaries in GitHub
-  Releases (TGZ/ZIP/DEB/RPM already produced by CPack). Ship checksums and an
-  SBOM with each release and sign the artifacts where feasible.
+- [x] GitHub Releases now include an SPDX SBOM generated by Syft
+  (`anchore/sbom-action`) alongside the CPack TGZ/ZIP/DEB/RPM artifacts and
+  `SHA256SUMS.txt`, so checksums cover the SBOM too.
+- Remaining: add a vcpkg port and an optional Homebrew formula, and sign the
+  release artifacts where feasible.
 
 ### P1 - Release automation
 - [x] `.github/workflows/release.yml` is a tag-driven workflow (on `v*`) that
@@ -337,9 +381,13 @@ Most-wanted commands that users of a KeePass tool expect:
   publishing.
 
 ### P2 - CI hygiene
-- Reduce matrix duplication across `cmake.yml`/`fuzz.yml` (shared composite
-  action), cache Conan in one place, and make lint run clang-tidy on Windows
-  too (currently Linux-only).
+- [x] Conan installation/profile setup now lives in the shared composite
+  action `.github/actions/setup-conan`, used by the build, fuzz, sanitizer,
+  lint, CodeQL, release and security workflows. Conan cache keys hash
+  `conanfile.py` instead of the non-existent `conanfile.txt`, so dependency
+  changes invalidate the cache correctly.
+- Remaining: fold the restore/save cache steps into the composite action and
+  run clang-tidy on Windows as well (currently Linux-only).
 
 ### P3 - WebAssembly demo
 - Build the library (and optionally `kpx`) for WASM so databases can be

@@ -30,10 +30,13 @@
 #include <cstdint>
 #include <ctime>
 
+#include "libkeepass/detail/constants.hh"
+
 namespace keepass {
 
-const uint32_t kKdbSignature0 = 0x9aa2d903;
-const uint32_t kKdbSignature1 = 0xb54bfb65;
+using detail::kKdbSignature0;
+using detail::kKdbSignature1;
+
 // The legacy KDB header flags also reserve bits for SHA-256 (0x00000001) and
 // ARC FOUR (0x00000004), which this library does not implement.
 const uint32_t kKdbFlagRijndael = 0x00000002;

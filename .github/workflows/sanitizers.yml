@@ -23,10 +23,10 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4

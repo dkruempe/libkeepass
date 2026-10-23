@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `kpx` now returns stable exit codes by error category (1 command/usage,
+  3 auth, 4 format, 5 I/O) and emits structured JSON errors when `--format
+  json` is selected. The schemas for every output format are documented in
+  `docs/cli-output.md`.
+- `kpx --password-file <path>` (with `-` for stdin) and `--password-stdin`
+  read the master password without exposing it in `argv` or the environment;
+  conflicting password sources are rejected. The interactive password prompt
+  now also works on Windows consoles.
+- New `kpx` commands: `create` (empty database, `--force`, `--kdf`), `groups`
+  (text/JSON/CSV group listing), `passwd` (change the master password and/or
+  KDF in place using an atomic temp-file replacement), `move` (move entries
+  or groups to `--to <group>`), `history` (list history versions),
+  `purge` (`--title`/`--search`/`--group`/`--all`), `otp` (display TOTP
+  seeds/settings from custom fields) and `merge`/`import` (merge another
+  database with fresh UUIDs for all imported objects).
+- `KeePass::Create` now derives and caches the transformed key for its
+  password, so the returned database can be saved through a keyless
+  `KeePass` instance. KDB output still needs an explicit key.
+- `KeePass::Open` accepts an in-memory `const uint8_t*`/size pair or byte
+  vector, and `Entry::FindAttachment`/`HasAttachment(name)`/`attachment_names`
+  add typed attachment access that distinguishes empty from missing payloads.
+- `kpx --include-attachments` embeds attachment payloads as base64 in the print
+  JSON. `Entry`/`Group`/`Database::ToJson(bool include_attachments = false)`
+  expose the same behaviour; attachment data is emitted as `data_base64`
+  instead of raw, unescaped bytes.
+- `Key::FromBytes`/`Key::FromStream` construct composite keys from in-memory
+  key files, and `Key::SetKeyFile(std::istream&)`/`SetKeyFileData` parse
+  key-file streams directly.
+- New libFuzzer targets: `fuzz_keyfile` (XML/hex/raw key files from memory and
+  streams), `fuzz_xml` (arbitrary KDBX XML bodies parsed and written back) and
+  `fuzz_export` (export/save path driven by an arbitrary model). The fuzz CI
+  workflow now builds and runs all five targets as a matrix with dedicated
+  seed corpora.
 - Third-party interoperability for KeePassXC: real KeePassXC test-corpus
   fixtures are imported in the new `libkeepass.compat` test binary
   (`test/compat.cc`, fixtures under `test/data/compat/`) covering KDBX 4.0
@@ -28,8 +61,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (random-obfuscator stream processing) raise the line coverage of `key.cc`
   and `random.cc` from 76%/72% to 82%/95%.
 
+### Performance
+
+- The benchmark now measures export and import round-trips, reports peak RSS
+  and supports `--json`; `tools/benchmark_compare.py` gates the CI Release job
+  against `test/benchmark_baseline.json` (absolute and export/import-ratio
+  thresholds).
+- `RandomObfuscator::Process` XORs the inner random stream word-wise in
+  64-byte keystream blocks instead of one byte per iteration. All three
+  overloads (byte vector, string and `secure_string`) share the chunked
+  implementation, and the new tests cover every length across block
+  boundaries.
+
+### Tests
+
+- New `test/concurrency.cc` covers concurrent imports of the same file (eight
+  threads), transformed-key isolation between `KeePass` instances, and
+  `secure_alloc`/`secure_free` edge cases.
+- `test/robustness.cc` gained explicit unknown-header-field, HMAC-tampering
+  and CBC-bit-flip cases on top of the existing truncation, oversized-field,
+  zip-bomb and resource-budget fixtures.
+
 ### Fixed
 
+- `SaveAs`/`Save(..., key)` now ignore a transformed key cached on an imported
+  or freshly created `Database`. Previously such a cache silently kept the old
+  password, so changing the master password had no effect.
+- Key-file parsing rejects inputs larger than `Key::kMaxKeyFileBytes` (1 MiB)
+  before buffering and wipes all transient file/key buffers on error paths,
+  including malformed XML/base64 data that previously leaked an unwiped copy.
 - The recycle-bin metadata now points to the group that actually holds the
   recycled entries. Because `Meta` (parsed before the group tree) could
   resolve `RecycleBinUUID`/`EntryTemplatesGroup` to a placeholder instance,
@@ -41,6 +101,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Format signatures, KDBX version constants, cipher/KDF UUIDs and the
+  outer-header field cap are centralized in
+  `libkeepass/detail/constants.hh`; the codecs and the public `KdbxHeader`
+  constants alias them instead of carrying duplicate magic values.
 - **Breaking:** the language standard baseline is now C++17 (previously the
   library still declared C++11 as its minimum while CI and the documentation
   already built with C++17). The CMake targets enforce this via
@@ -73,6 +137,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Infrastructure
 
+- CI workflows share a single `setup-conan` composite action and key their
+  Conan caches on `conanfile.py` (the old key hashed a non-existent
+  `conanfile.txt`, so dependency changes never invalidated the cache).
+- Releases now publish an SPDX SBOM generated by Syft in addition to the
+  CPack packages and `SHA256SUMS.txt`.
+- Added a weekly security-triage workflow that renders open CodeQL and
+  dependency-scanning alerts into a Markdown report (job summary and artifact)
+  via `tools/security_triage.py`.
+- Added a dependency security workflow that resolves the Conan graph to
+  `conan.lock` and scans it with OSV-Scanner on pushes, pull requests and a
+  weekly schedule, uploading SARIF results to code scanning. Dependabot now
+  updates the GitHub Actions used by the CI workflows.
 - ConanCenter recipe raised to the CCI-v2 conventions (`test_package` instead
   of `test_v1_package`, `implements = ["auto_shared_fpic"]`, `check_min_cppstd`,
   SPDX license `GPL-3.0-only`); `conan create` verified locally for both static
@@ -80,6 +156,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Docs
 
+- New `docs/support-matrix.md` (format × cipher/KDF × feature support),
+  `docs/migration-0.2-to-0.3.md` (`secure_string`, C++17 and other breaking
+  changes) and `docs/examples.md` (stream round-trips, attachments, tags,
+  recycle bin, history, resource limits). `CONTRIBUTING.md` gained a table of
+  contents.
 - `docs/kdbx-parsing.md` folded into the modular architecture (`KdbxHeader`,
   `KdbxKdf`, `KdbxXml` instead of the monolithic `KdbxFile`)
 

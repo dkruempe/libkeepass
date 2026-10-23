@@ -20,6 +20,7 @@
 #include <array>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@
 #include <gtest/gtest.h>
 
 #include "config.hh"
+#include "libkeepass/base64.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/key.hh"
 #include "libkeepass/secure.hh"
@@ -77,6 +79,18 @@ std::vector<uint8_t> DeterministicKeyBytes() {
   for (std::size_t i = 0; i < 32; ++i)
     bytes.push_back(static_cast<uint8_t>(0x80 + i));
   return bytes;
+}
+
+std::string HexKeyBytes() {
+  static constexpr const char* kHex = "0123456789abcdef";
+  std::string content;
+  content.reserve(64);
+  for (int i = 0; i < 32; ++i) {
+    const int byte = (i * 37 + 11) & 0xff;
+    content.push_back(kHex[byte >> 4]);
+    content.push_back(kHex[byte & 0x0f]);
+  }
+  return content;
 }
 
 void WriteHexKeyfile(const std::string& path, bool uppercase) {
@@ -184,6 +198,56 @@ TEST(KeyTest, UppercaseHexKeyfileMatchesLowercase) {
   const SecureBuffer<32> upper_out = key_upper.Transform(
       TransformSeed(), 10, Key::SubKeyResolution::kHashSubKeysOnlyIfCompositeKey);
   EXPECT_TRUE(std::equal(lower_out.begin(), lower_out.end(), upper_out.begin()));
+}
+
+TEST(KeyTest, FromBytesMatchesPathKeyfile) {
+  const std::string path = GetTmpPath("key-test-from-bytes.key");
+  WriteFile(path, HexKeyBytes());
+  const std::string hex = HexKeyBytes();
+  const std::vector<uint8_t> bytes(hex.begin(), hex.end());
+
+  Key from_path("password", path);
+  Key from_bytes = Key::FromBytes("password", bytes);
+
+  const SecureBuffer<32> path_out =
+      from_path.Transform(TransformSeed(), 10, Key::SubKeyResolution::kHashSubKeys);
+  const SecureBuffer<32> bytes_out =
+      from_bytes.Transform(TransformSeed(), 10, Key::SubKeyResolution::kHashSubKeys);
+  EXPECT_TRUE(std::equal(path_out.begin(), path_out.end(), bytes_out.begin()));
+}
+
+TEST(KeyTest, FromStreamParsesXmlKeyfile) {
+  const std::vector<uint8_t> key_bytes = DeterministicKeyBytes();
+  const std::string encoded = base64_encode(key_bytes.begin(), key_bytes.end());
+  std::stringstream stream("<?xml version=\"1.0\"?><KeyFile><Key><Data>" + encoded +
+                           "</Data></Key></KeyFile>");
+
+  Key key = Key::FromStream("password", stream);
+  const std::string path = GetTmpPath("key-test-from-stream.key");
+  WriteFile(path, stream.str());
+  Key from_path("password", path);
+
+  const SecureBuffer<32> stream_out =
+      key.Transform(TransformSeed(), 10, Key::SubKeyResolution::kHashSubKeys);
+  const SecureBuffer<32> path_out =
+      from_path.Transform(TransformSeed(), 10, Key::SubKeyResolution::kHashSubKeys);
+  EXPECT_TRUE(std::equal(stream_out.begin(), stream_out.end(), path_out.begin()));
+}
+
+TEST(KeyTest, RejectsOversizedKeyfile) {
+  std::vector<uint8_t> bytes(Key::kMaxKeyFileBytes + 1, 'a');
+  EXPECT_THROW(Key::FromBytes("password", bytes), FormatError);
+
+  const std::string path = GetTmpPath("key-test-too-large.key");
+  WriteFile(path, std::string(bytes.begin(), bytes.end()));
+  Key key("password");
+  EXPECT_THROW(key.SetKeyFile(path), FormatError);
+}
+
+TEST(KeyTest, RejectsEmptyAndMalformedInMemoryKeyfile) {
+  EXPECT_THROW(Key::FromBytes("password", {}), FormatError);
+  EXPECT_THROW(Key::FromBytes("password", std::vector<uint8_t>(64, 'x')), FormatError);
+  EXPECT_THROW(Key::FromBytes("password", std::vector<uint8_t>(32, 'x')), FormatError);
 }
 
 TEST(KeyTest, Argon2InvalidParametersThrow) {

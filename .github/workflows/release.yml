@@ -20,10 +20,10 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       # CPack builds the RPM package with rpmbuild, which is not installed on
       # the default Ubuntu runner image.
@@ -94,10 +94,10 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
@@ -149,10 +149,10 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Conan
-        run: |
-          pip install "conan==${{ env.CONAN_VERSION }}"
-          conan profile detect --force
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
 
       - name: Cache Conan packages (restore)
         uses: actions/cache/restore@v4
@@ -218,11 +218,21 @@ jobs:
       actions: read
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: packages-*
           path: release-assets
           merge-multiple: true
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: release-assets/libkeepass-${{ github.ref_name }}.spdx.json
+          upload-artifact: false
 
       - name: Compute SHA-256 checksums
         working-directory: release-assets
