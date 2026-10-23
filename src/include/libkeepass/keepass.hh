@@ -216,8 +216,8 @@ public:
 private:
   std::unique_ptr<Database> Import(std::istream& src, Format format);
   void Save(std::ostream& dst, const Database& db, Format format);
-  void SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
-                       bool use_cached_key);
+  static void SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
+                              bool use_cached_key);
   Format ResolveOutputFormat(const std::string& path, const Database& db) const;
   Format ResolveStreamFormat(const Database& db) const;
 

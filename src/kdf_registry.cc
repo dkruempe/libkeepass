@@ -50,7 +50,7 @@ KdfRegistry::KdfRegistry() {
 }
 
 void KdfRegistry::Register(Database::Kdf kdf, Factory factory) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   factories_[kdf] = std::move(factory);
 }
 
@@ -58,7 +58,7 @@ SecureBuffer<32> KdfRegistry::Transform(Database::Kdf kdf, const Key& key, const
                                         Key::SubKeyResolution resolution) const {
   Factory factory;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
     const auto it = factories_.find(kdf);
     if (it == factories_.end())
       throw UnsupportedFeatureError("No KDF implementation registered.");
@@ -68,7 +68,7 @@ SecureBuffer<32> KdfRegistry::Transform(Database::Kdf kdf, const Key& key, const
 }
 
 bool KdfRegistry::Contains(Database::Kdf kdf) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   return factories_.find(kdf) != factories_.end();
 }
 

@@ -38,7 +38,7 @@ Binary::Binary(std::shared_ptr<const detail::BinarySource> source, bool protecte
 }
 
 Binary::Binary(const Binary& other) {
-  std::lock_guard<std::mutex> lock(other.mutex_);
+  std::scoped_lock lock(other.mutex_);
   data_ = other.data_;
   loaded_ = other.loaded_;
   protected_ = other.protected_;
@@ -74,7 +74,7 @@ const protect<secure_string>& Binary::data() const {
 }
 
 void Binary::load() const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (loaded_)
     return;
   if (!source_) {
@@ -95,7 +95,7 @@ void Binary::load() const {
 }
 
 void Binary::set_data(const protect<secure_string>& data) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   data_ = data;
   protected_ = data.is_protected();
   size_ = data->size();
@@ -106,7 +106,7 @@ void Binary::set_data(const protect<secure_string>& data) {
 void Binary::WriteTo(std::ostream& dst) const {
   std::shared_ptr<const detail::BinarySource> source;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
     if (!loaded_)
       source = source_;
   }

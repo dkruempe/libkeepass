@@ -40,7 +40,7 @@ CipherRegistry::CipherRegistry() {
 }
 
 void CipherRegistry::Register(Database::Cipher cipher, Factory factory) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   factories_[cipher] = std::move(factory);
 }
 
@@ -49,7 +49,7 @@ CipherRegistry::Create(Database::Cipher cipher, const uint8_t* key,
                        const std::array<uint8_t, 16>& init_vector) const {
   Factory factory;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
     const auto it = factories_.find(cipher);
     if (it == factories_.end())
       throw UnsupportedFeatureError("No block-cipher implementation registered.");
@@ -59,7 +59,7 @@ CipherRegistry::Create(Database::Cipher cipher, const uint8_t* key,
 }
 
 bool CipherRegistry::Contains(Database::Cipher cipher) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   return factories_.find(cipher) != factories_.end();
 }
 

@@ -24,8 +24,7 @@
 
 #include "libkeepass/exception.hh"
 
-namespace keepass {
-namespace detail {
+namespace keepass::detail {
 
 BufferBinarySource::BufferBinarySource(std::shared_ptr<const SecureBytes> buffer,
                                        std::size_t offset, std::size_t size)
@@ -51,5 +50,4 @@ void BufferBinarySource::WriteTo(std::ostream& dst) const {
     throw IoError("Write error.");
 }
 
-} // namespace detail
-} // namespace keepass
+} // namespace keepass::detail

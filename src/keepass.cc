@@ -65,9 +65,10 @@ std::unique_ptr<Database> KeePass::Open(const std::string& path) {
     }
   } catch (const FileNotFoundError&) {
     throw;
-  } catch (const IoError&) {
+  } catch (const IoError& error) {
     // Mapping can be unavailable (32-bit address space, restrictive
     // sandboxes, special files). Fall back to a regular buffered stream.
+    (void)error;
   }
 
   std::ifstream src(path, std::ios::in | std::ios::binary);

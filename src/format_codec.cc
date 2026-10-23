@@ -31,8 +31,7 @@
 #include "libkeepass/kdbx.hh"
 #endif
 
-namespace keepass {
-namespace detail {
+namespace keepass::detail {
 
 namespace {
 
@@ -98,7 +97,7 @@ FormatCodecRegistry::FormatCodecRegistry() {
 }
 
 void FormatCodecRegistry::Register(int format, FormatCodecFactory factory) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   factories_[format] = std::move(factory);
 }
 
@@ -106,7 +105,7 @@ std::unique_ptr<FormatCodec> FormatCodecRegistry::Create(int format,
                                                          const FormatCodecOptions& options) const {
   FormatCodecFactory factory;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock lock(mutex_);
     const auto it = factories_.find(format);
     if (it == factories_.end())
       throw UnsupportedFeatureError("No codec registered for this database format.");
@@ -116,9 +115,8 @@ std::unique_ptr<FormatCodec> FormatCodecRegistry::Create(int format,
 }
 
 bool FormatCodecRegistry::Contains(int format) const {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock lock(mutex_);
   return factories_.find(format) != factories_.end();
 }
 
-} // namespace detail
-} // namespace keepass
+} // namespace keepass::detail

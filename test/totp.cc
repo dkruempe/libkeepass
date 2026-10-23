@@ -65,22 +65,28 @@ TEST(Totp, ParsesUriAndSettings) {
   const auto uri = TotpConfig::Parse(
       "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&period=60&digits=7"
       "&algorithm=SHA256");
-  ASSERT_TRUE(uri);
-  EXPECT_EQ("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", uri->secret().str());
-  EXPECT_EQ(60U, uri->period());
-  EXPECT_EQ(7U, uri->digits());
-  EXPECT_EQ(TotpConfig::Algorithm::kSha256, uri->algorithm());
+  ASSERT_TRUE(uri.has_value());
+  if (uri.has_value()) {
+    EXPECT_EQ("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", uri->secret().str());
+    EXPECT_EQ(60U, uri->period());
+    EXPECT_EQ(7U, uri->digits());
+    EXPECT_EQ(TotpConfig::Algorithm::kSha256, uri->algorithm());
+  }
 
   const auto positional = TotpConfig::Parse(kSha1Secret, "30;8");
-  ASSERT_TRUE(positional);
-  EXPECT_EQ(30U, positional->period());
-  EXPECT_EQ(8U, positional->digits());
+  ASSERT_TRUE(positional.has_value());
+  if (positional.has_value()) {
+    EXPECT_EQ(30U, positional->period());
+    EXPECT_EQ(8U, positional->digits());
+  }
 
   const auto named = TotpConfig::Parse(kSha1Secret, "period=60&digits=8&algorithm=SHA512");
-  ASSERT_TRUE(named);
-  EXPECT_EQ(60U, named->period());
-  EXPECT_EQ(8U, named->digits());
-  EXPECT_EQ(TotpConfig::Algorithm::kSha512, named->algorithm());
+  ASSERT_TRUE(named.has_value());
+  if (named.has_value()) {
+    EXPECT_EQ(60U, named->period());
+    EXPECT_EQ(8U, named->digits());
+    EXPECT_EQ(TotpConfig::Algorithm::kSha512, named->algorithm());
+  }
 
   EXPECT_FALSE(TotpConfig::Parse(""));
   EXPECT_FALSE(TotpConfig::Parse("not base32!"));
@@ -95,12 +101,13 @@ TEST(Totp, EntryHelpersAndRemainingSeconds) {
   entry.set_custom_property("otp", kSha1Secret);
   entry.set_custom_property("TOTP Settings", "30;8;SHA1");
   const auto config = entry.totp();
-  ASSERT_TRUE(config);
-  EXPECT_EQ(8U, config->digits());
-  EXPECT_EQ("94287082", entry.totp_code(59));
-
-  EXPECT_EQ(1U, Totp::SecondsRemaining(*config, 59));
-  EXPECT_EQ(30U, Totp::SecondsRemaining(*config, 60));
+  ASSERT_TRUE(config.has_value());
+  if (config.has_value()) {
+    EXPECT_EQ(8U, config->digits());
+    EXPECT_EQ("94287082", entry.totp_code(59));
+    EXPECT_EQ(1U, Totp::SecondsRemaining(*config, 59));
+    EXPECT_EQ(30U, Totp::SecondsRemaining(*config, 60));
+  }
 }
 
 } // namespace

@@ -39,8 +39,7 @@
 #include <unistd.h>
 #endif
 
-namespace keepass {
-namespace detail {
+namespace keepass::detail {
 
 MappedFile::MappedFile(const std::string& path) {
 #ifdef _WIN32
@@ -137,7 +136,7 @@ MappedFile::~MappedFile() {
 std::streampos mapped_istreambuf::seekoff(std::streamoff off, std::ios_base::seekdir way,
                                           std::ios_base::openmode which) {
   if ((which & std::ios_base::in) == 0)
-    return std::streampos(std::streamoff(-1));
+    return {std::streamoff{-1}};
 
   std::streamoff base = 0;
   switch (way) {
@@ -151,24 +150,23 @@ std::streampos mapped_istreambuf::seekoff(std::streamoff off, std::ios_base::see
     base = end_ - begin_;
     break;
   default:
-    return std::streampos(std::streamoff(-1));
+    return {std::streamoff{-1}};
   }
 
   const std::streamoff position = base + off;
   if (position < 0 || position > end_ - begin_)
-    return std::streampos(std::streamoff(-1));
+    return {std::streamoff{-1}};
 
   setg(begin_, begin_ + position, end_);
-  return std::streampos(position);
+  return {position};
 }
 
 std::streampos mapped_istreambuf::seekpos(std::streampos sp, std::ios_base::openmode which) {
   if ((which & std::ios_base::in) == 0 || sp < 0 || sp > end_ - begin_)
-    return std::streampos(std::streamoff(-1));
+    return {std::streamoff{-1}};
 
   setg(begin_, begin_ + static_cast<std::streamoff>(sp), end_);
   return sp;
 }
 
-} // namespace detail
-} // namespace keepass
+} // namespace keepass::detail

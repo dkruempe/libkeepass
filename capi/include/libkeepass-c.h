@@ -35,6 +35,18 @@ extern "C" {
 #endif
 
 /// Status codes returned by the C API.
+#ifdef __cplusplus
+enum kp_status {
+  KP_STATUS_OK = 0,
+  KP_STATUS_INVALID_ARGUMENT = 1,
+  KP_STATUS_AUTHENTICATION = 2,
+  KP_STATUS_FORMAT = 3,
+  KP_STATUS_IO = 4,
+  KP_STATUS_UNSUPPORTED = 5,
+  KP_STATUS_RESOURCE_LIMIT = 6,
+  KP_STATUS_INTERNAL = 7
+};
+#else
 typedef enum kp_status {
   KP_STATUS_OK = 0,
   KP_STATUS_INVALID_ARGUMENT = 1,
@@ -45,12 +57,21 @@ typedef enum kp_status {
   KP_STATUS_RESOURCE_LIMIT = 6,
   KP_STATUS_INTERNAL = 7
 } kp_status;
+#endif
 
 /// Opaque handle for a KeePass importer/exporter.
+#ifdef __cplusplus
+struct kp_keepass;
+#else
 typedef struct kp_keepass kp_keepass;
+#endif
 
 /// Opaque handle for an imported or created database.
+#ifdef __cplusplus
+struct kp_database;
+#else
 typedef struct kp_database kp_database;
+#endif
 
 /// Returns the library version string.
 const char* kp_version(void);

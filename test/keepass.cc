@@ -270,8 +270,9 @@ TEST_F(KeePassTest, ErrorCategoriesAndOffsets) {
   EXPECT_FALSE(corrupt.offset());
 
   const FormatError located("corrupt", 42);
-  ASSERT_TRUE(located.offset());
-  EXPECT_EQ(42U, *located.offset());
+  ASSERT_TRUE(located.offset().has_value());
+  if (located.offset().has_value())
+    EXPECT_EQ(42U, *located.offset());
 
   const UnsupportedFeatureError unsupported("unsupported");
   EXPECT_EQ(ErrorCategory::kUnsupported, unsupported.category());
