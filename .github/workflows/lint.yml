@@ -91,7 +91,9 @@ jobs:
           cache-suffix: "windows-lint"
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_STANDARD=17 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Save Conan packages
         uses: ./.github/actions/setup-conan
