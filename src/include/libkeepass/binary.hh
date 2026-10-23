@@ -42,7 +42,7 @@ namespace keepass {
  * inner-header attachments) only copy their payload into secure memory when
  * @ref data is first accessed; @ref WriteTo streams directly from the source.
  */
-class Binary final {
+class LIBKEEPASS_API Binary final {
 private:
   mutable std::mutex mutex_;
   mutable protect<secure_string> data_;

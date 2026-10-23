@@ -97,7 +97,7 @@ MappedFile::MappedFile(const std::string& path) {
     throw IoError("Unable to open database file.");
   }
 
-  struct stat status {};
+  struct stat status{};
   if (::fstat(fd, &status) != 0) {
     ::close(fd);
     throw IoError("Unable to determine database file size.");

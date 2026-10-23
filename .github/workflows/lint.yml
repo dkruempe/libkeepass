@@ -105,6 +105,9 @@ jobs:
         shell: pwsh
         run: |
           $env:Path = "C:\Program Files\LLVM\bin;$env:Path"
-          python "C:\Program Files\LLVM\bin\run-clang-tidy.py" `
-            -p build -j $env:NUMBER_OF_PROCESSORS `
+          $script = Join-Path $env:RUNNER_TEMP "run-clang-tidy.py"
+          Invoke-WebRequest `
+            -Uri "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/clang-tools-extra/clang-tidy/tool/run-clang-tidy.py" `
+            -OutFile $script
+          python $script -p build -j $env:NUMBER_OF_PROCESSORS `
             -extra-arg=-Wno-unknown-warning-option src cli test
