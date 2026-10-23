@@ -25,17 +25,31 @@
 
 namespace keepass {
 
+namespace {
+
+/// Throws a FormatError annotated with the current stream offset when the
+/// stream can report one. The offset is diagnostic only and never contains
+/// key material.
+[[noreturn]] void ThrowFormatAt(std::istream& src, std::string message) {
+  const std::streampos position = src.tellg();
+  if (position >= 0)
+    throw FormatError(std::move(message), static_cast<uint64_t>(position));
+  throw FormatError(std::move(message));
+}
+
+} // namespace
+
 void VariantDictionary::Parse(std::istream& src) {
   uint16_t version = 0;
   src.read(reinterpret_cast<char*>(&version), sizeof(version));
   if (src.gcount() != sizeof(version))
-    throw FormatError("Corrupt variant dictionary header.");
+    ThrowFormatAt(src, "Corrupt variant dictionary header.");
 
   // Only accept versions that we understand. The critical version mask
   // extracts the most significant nibble (format: 1.0 => 0x0100).
   constexpr uint16_t kMaxVersion = 0x0100;
   if ((version & 0xff00) > kMaxVersion)
-    throw FormatError("Unsupported variant dictionary version.");
+    throw UnsupportedFeatureError("Unsupported variant dictionary version.");
 
   entries_.clear();
 
@@ -48,7 +62,7 @@ void VariantDictionary::Parse(std::istream& src) {
     uint8_t type_byte = 0;
     src.read(reinterpret_cast<char*>(&type_byte), 1);
     if (src.gcount() != 1)
-      throw FormatError("Corrupt variant dictionary entry.");
+      ThrowFormatAt(src, "Corrupt variant dictionary entry.");
 
     if (type_byte == static_cast<uint8_t>(Type::kEnd))
       return;
@@ -56,29 +70,29 @@ void VariantDictionary::Parse(std::istream& src) {
     uint32_t key_len = 0;
     src.read(reinterpret_cast<char*>(&key_len), sizeof(key_len));
     if (src.gcount() != sizeof(key_len))
-      throw FormatError("Corrupt variant dictionary key length.");
+      ThrowFormatAt(src, "Corrupt variant dictionary key length.");
     if (key_len > kMaxKeyLength || key_len > kMaxTotalLength - total_length)
-      throw FormatError("Excessive variant dictionary key length.");
+      ThrowFormatAt(src, "Excessive variant dictionary key length.");
 
     std::string key(key_len, '\0');
     if (key_len > 0)
       src.read(key.data(), key_len);
     if (src.gcount() != static_cast<std::streamsize>(key_len))
-      throw FormatError("Corrupt variant dictionary key.");
+      ThrowFormatAt(src, "Corrupt variant dictionary key.");
     total_length += key_len;
 
     uint32_t value_len = 0;
     src.read(reinterpret_cast<char*>(&value_len), sizeof(value_len));
     if (src.gcount() != sizeof(value_len))
-      throw FormatError("Corrupt variant dictionary value length.");
+      ThrowFormatAt(src, "Corrupt variant dictionary value length.");
     if (value_len > kMaxValueLength || value_len > kMaxTotalLength - total_length)
-      throw FormatError("Excessive variant dictionary value length.");
+      ThrowFormatAt(src, "Excessive variant dictionary value length.");
 
     std::vector<uint8_t> value(value_len, 0);
     if (value_len > 0)
       src.read(reinterpret_cast<char*>(value.data()), value_len);
     if (src.gcount() != static_cast<std::streamsize>(value_len))
-      throw FormatError("Corrupt variant dictionary value.");
+      ThrowFormatAt(src, "Corrupt variant dictionary value.");
     total_length += value_len;
 
     Entry entry;
@@ -87,7 +101,7 @@ void VariantDictionary::Parse(std::istream& src) {
     entries_[key] = std::move(entry);
   }
 
-  throw FormatError("Unterminated variant dictionary.");
+  ThrowFormatAt(src, "Unterminated variant dictionary.");
 }
 
 void VariantDictionary::Write(std::ostream& dst) const {

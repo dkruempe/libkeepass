@@ -31,6 +31,8 @@
 
 #include "kdbx_internal.hh"
 #include "libkeepass/cipher.hh"
+#include "libkeepass/cipher_registry.hh"
+#include "libkeepass/detail/binary_source.hh"
 #include "libkeepass/detail/constant_time.hh"
 #include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/exception.hh"
@@ -85,7 +87,8 @@ std::unique_ptr<Database> KdbxFile::Import(std::istream& src, const Key& key) {
     return Import3(src, key);
   }
 
-  throw FormatError(std::string(Format() << "KDBX version " << version << " is not supported."));
+  throw UnsupportedFeatureError(
+      std::string(Format() << "KDBX version " << version << " is not supported."));
 }
 
 std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
@@ -124,18 +127,8 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   EVP_MD_CTX_free(mdctx);
   secure_zero(transformed_key.data(), transformed_key.size());
 
-  std::unique_ptr<Cipher<16>> cipher;
-  switch (db->cipher()) {
-  case Database::Cipher::kAes:
-    cipher = std::make_unique<AesCipher>(final_key.data(), db->init_vector());
-    break;
-  case Database::Cipher::kTwofish:
-    cipher = std::make_unique<TwofishCipher>(final_key.data(), db->init_vector());
-    break;
-  default:
-    assert(false);
-    break;
-  }
+  std::unique_ptr<Cipher<16>> cipher =
+      CipherRegistry::Instance().Create(db->cipher(), final_key.data(), db->init_vector());
   secure_zero(final_key.data(), final_key.size());
 
   // Decrypt the content.
@@ -175,13 +168,13 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
 
     xml_.Parse(gzip_stream, obfuscator, *db);
     if (gzip_streambuf.BudgetExceeded())
-      throw FormatError("Decompressed payload exceeds the configured size limit.");
+      throw ResourceLimitError("Decompressed payload exceeds the configured size limit.");
   } else {
     xml_.Parse(hashed_stream, obfuscator, *db);
   }
 
   if (hashed_streambuf.BudgetExceeded())
-    throw FormatError("Hashed block framing exceeds the configured resource budget.");
+    throw ResourceLimitError("Hashed block framing exceeds the configured resource budget.");
 
   // The content stream still holds the decrypted payload.
   WipeStream(content);
@@ -279,14 +272,12 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
-  if (db->cipher() == Database::Cipher::kAes) {
-    cipher = std::make_unique<AesCipher>(final_key.data(), db->init_vector());
-  } else if (db->cipher() == Database::Cipher::kTwofish) {
-    cipher = std::make_unique<TwofishCipher>(final_key.data(), db->init_vector());
-  } else if (db->cipher() == Database::Cipher::kChaCha20) {
+  if (db->cipher() == Database::Cipher::kChaCha20) {
     std::array<uint8_t, 12> iv{};
     std::copy(db->init_vector().begin(), db->init_vector().begin() + 12, iv.begin());
     chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key.data(), iv);
+  } else {
+    cipher = CipherRegistry::Instance().Create(db->cipher(), final_key.data(), db->init_vector());
   }
   secure_zero(final_key.data(), final_key.size());
 
@@ -351,20 +342,20 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
       secure_zero(keystream.data(), keystream.size());
       secure_zero(data.data(), data.size());
     } else {
-      throw FormatError("Unknown cipher in KDBX 4 database.");
+      throw UnsupportedFeatureError("Unknown cipher in KDBX 4 database.");
     }
   } catch (const IoError&) {
     // A failed HMAC verification or a truncated block signals corruption (not
     // a wrong password), so it must not be masked as a password error.
     if (hmac_streambuf.BudgetExceeded())
-      throw FormatError("HMAC block framing exceeds the configured resource budget.");
+      throw ResourceLimitError("HMAC block framing exceeds the configured resource budget.");
     throw;
   } catch (std::exception&) {
     throw PasswordError();
   }
 
   if (hmac_streambuf.BudgetExceeded())
-    throw FormatError("HMAC block framing exceeds the configured resource budget.");
+    throw ResourceLimitError("HMAC block framing exceeds the configured resource budget.");
 
   // In KDBX 4 the inner header and the XML document are both part of the same
   // (compressed) payload, so decompress the entire decrypted content first.
@@ -375,7 +366,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
     std::copy(std::istreambuf_iterator<char>(gzip_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain));
     if (gzip_streambuf.BudgetExceeded())
-      throw FormatError("Decompressed payload exceeds the configured size limit.");
+      throw ResourceLimitError("Decompressed payload exceeds the configured size limit.");
   } else {
     // Move the data instead of copying through str(), which would leave an
     // un-wipeable temporary copy of the decrypted payload behind.
@@ -390,63 +381,98 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   std::vector<uint8_t> inner_random_stream_key;
   std::vector<std::shared_ptr<Binary>> inner_binaries;
 
+  // KDBX 4 binaries are collected into one shared, zeroized buffer. Each
+  // attachment only stores a (offset, size) view, so a database with many
+  // large attachments no longer materializes one secure_string per binary
+  // during import. The payload is copied into the requesting Binary on first
+  // data() access and streamed directly by Binary::WriteTo on export.
+  struct InnerBinary {
+    std::size_t offset = 0;
+    std::size_t size = 0;
+    bool protected_data = false;
+  };
+  std::vector<uint8_t> binary_data;
+  std::vector<InnerBinary> binary_descriptors;
+
   bool inner_done = false;
-  while (!inner_done && xml_source.good()) {
-    auto inner_id = static_cast<kKdbxInnerHeader>(consume<uint8_t>(xml_source));
-    uint32_t inner_size = consume<uint32_t>(xml_source);
+  try {
+    while (!inner_done && xml_source.good()) {
+      auto inner_id = static_cast<kKdbxInnerHeader>(consume<uint8_t>(xml_source));
+      uint32_t inner_size = consume<uint32_t>(xml_source);
 
-    // Reject field sizes that cannot possibly fit into the remaining payload
-    // instead of looping/allocating up to the declared length.
-    if (static_cast<uint64_t>(inner_size) >
-        static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(xml_source))))
-      throw FormatError("Corrupt inner header field size in KDBX 4 database.");
+      // Reject field sizes that cannot possibly fit into the remaining payload
+      // instead of looping/allocating up to the declared length.
+      if (static_cast<uint64_t>(inner_size) >
+          static_cast<uint64_t>(std::max<std::streamsize>(0, RemainingBytes(xml_source))))
+        throw FormatError("Corrupt inner header field size in KDBX 4 database.");
 
-    // A single attachment is budgeted like the XML binaries and custom icons.
-    if (inner_id == kKdbxInnerHeader::kBinaries &&
-        static_cast<uint64_t>(inner_size) > xml_.resource_limits().max_binary_bytes)
-      throw FormatError("Inner header binary exceeds the configured size limit.");
+      // A single attachment is budgeted like the XML binaries and custom icons.
+      if (inner_id == kKdbxInnerHeader::kBinaries &&
+          static_cast<uint64_t>(inner_size) > xml_.resource_limits().max_binary_bytes)
+        throw ResourceLimitError("Inner header binary exceeds the configured size limit.");
 
-    switch (inner_id) {
-    case kKdbxInnerHeader::kEnd:
-      inner_done = true;
-      break;
-    case kKdbxInnerHeader::kInnerRandomStreamId:
-      if (inner_size != 4)
-        throw FormatError("Illegal inner random stream ID size in KDBX.");
-      inner_random_stream_id = consume<uint32_t>(xml_source);
-      break;
-    case kKdbxInnerHeader::kInnerRandomStreamKey:
-      if (inner_size != 32 && inner_size != 64)
-        throw FormatError("Illegal inner random stream key size in KDBX.");
-      inner_random_stream_key.resize(inner_size);
-      xml_source.read(reinterpret_cast<char*>(inner_random_stream_key.data()),
-                      static_cast<std::streamsize>(inner_size));
-      if (!xml_source)
-        throw IoError("Read error.");
-      break;
-    case kKdbxInnerHeader::kBinaries: {
-      std::stringstream raw_stream;
-      std::generate_n(std::ostreambuf_iterator<char>(raw_stream), inner_size,
-                      [&xml_source]() { return static_cast<char>(xml_source.get()); });
+      switch (inner_id) {
+      case kKdbxInnerHeader::kEnd:
+        inner_done = true;
+        break;
+      case kKdbxInnerHeader::kInnerRandomStreamId:
+        if (inner_size != 4)
+          throw FormatError("Illegal inner random stream ID size in KDBX.");
+        inner_random_stream_id = consume<uint32_t>(xml_source);
+        break;
+      case kKdbxInnerHeader::kInnerRandomStreamKey:
+        if (inner_size != 32 && inner_size != 64)
+          throw FormatError("Illegal inner random stream key size in KDBX.");
+        inner_random_stream_key.resize(inner_size);
+        xml_source.read(reinterpret_cast<char*>(inner_random_stream_key.data()),
+                        static_cast<std::streamsize>(inner_size));
+        if (!xml_source)
+          throw IoError("Read error.");
+        break;
+      case kKdbxInnerHeader::kBinaries: {
+        // The first byte holds the flags, the remaining bytes are the data.
+        uint8_t flags = 0;
+        if (inner_size > 0)
+          flags = consume<uint8_t>(xml_source);
+        const std::size_t data_size = inner_size > 0 ? inner_size - 1 : 0;
 
-      // The first byte holds the flags, the remaining bytes are the data.
-      uint8_t flags = static_cast<uint8_t>(raw_stream.get());
-      std::string data((std::istreambuf_iterator<char>(raw_stream)),
-                       std::istreambuf_iterator<char>());
+        InnerBinary descriptor;
+        descriptor.offset = binary_data.size();
+        descriptor.size = data_size;
+        descriptor.protected_data = (flags & 0x01) != 0;
+        binary_descriptors.push_back(descriptor);
 
-      std::shared_ptr<Binary> binary =
-          std::make_shared<Binary>(protect<secure_string>(secure_string(data), (flags & 0x01)));
-      inner_binaries.push_back(binary);
-
-      secure_zero(data.data(), data.size());
-      // The stream buffer transiently holds the raw attachment payload.
-      WipeStream(raw_stream);
-
-      xml_.binary_pool().insert(std::make_pair(std::to_string(xml_.binary_pool().size()), binary));
-      break;
+        binary_data.resize(binary_data.size() + data_size);
+        if (data_size > 0) {
+          xml_source.read(reinterpret_cast<char*>(binary_data.data() + descriptor.offset),
+                          static_cast<std::streamsize>(data_size));
+          if (!xml_source)
+            throw IoError("Read error.");
+        }
+        break;
+      }
+      default:
+        throw FormatError("Illegal inner header field in KDBX 4 database.");
+      }
     }
-    default:
-      throw FormatError("Illegal inner header field in KDBX 4 database.");
+  } catch (...) {
+    // Never leave decrypted attachment bytes behind on a parse error.
+    WipeBuffer(&binary_data);
+    throw;
+  }
+
+  // Move the collected payload into one secure, shared buffer and give each
+  // attachment a lazy view of its range.
+  if (!binary_descriptors.empty()) {
+    auto pool = std::make_shared<SecureBytes>(binary_data);
+    WipeBuffer(&binary_data);
+    for (std::size_t i = 0; i < binary_descriptors.size(); ++i) {
+      const InnerBinary& descriptor = binary_descriptors[i];
+      auto source =
+          std::make_shared<detail::BufferBinarySource>(pool, descriptor.offset, descriptor.size);
+      auto binary = std::make_shared<Binary>(source, descriptor.protected_data);
+      inner_binaries.push_back(binary);
+      xml_.binary_pool().insert(std::make_pair(std::to_string(i), binary));
     }
   }
 
@@ -461,7 +487,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
       obfuscator = RandomObfuscator(RandomObfuscator::Type::kChaCha20, inner_random_stream_key);
       break;
     default:
-      throw FormatError("Unknown inner random stream in KDBX 4 database.");
+      throw UnsupportedFeatureError("Unknown inner random stream in KDBX 4 database.");
     }
   } catch (...) {
     // Unknown stream type or a failed obfuscator construction must not leave

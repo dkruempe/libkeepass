@@ -31,6 +31,7 @@
 
 #include "kdbx_internal.hh"
 #include "libkeepass/cipher.hh"
+#include "libkeepass/cipher_registry.hh"
 #include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/format.hh"
@@ -139,7 +140,8 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   secure_zero(transformed_key.data(), transformed_key.size());
 
   assert(db.cipher() == Database::Cipher::kAes);
-  std::unique_ptr<Cipher<16>> cipher(new AesCipher(final_key.data(), db.init_vector()));
+  std::unique_ptr<Cipher<16>> cipher =
+      CipherRegistry::Instance().Create(db.cipher(), final_key.data(), db.init_vector());
   secure_zero(final_key.data(), final_key.size());
 
   // Write header to a temporary buffer so that we can compute the hash of it.
@@ -224,14 +226,12 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
 
   std::unique_ptr<Cipher<16>> cipher;
   std::unique_ptr<ChaCha20Cipher> chacha_cipher;
-  if (db.cipher() == Database::Cipher::kAes) {
-    cipher = std::make_unique<AesCipher>(final_key.data(), db.init_vector());
-  } else if (db.cipher() == Database::Cipher::kTwofish) {
-    cipher = std::make_unique<TwofishCipher>(final_key.data(), db.init_vector());
-  } else if (db.cipher() == Database::Cipher::kChaCha20) {
+  if (db.cipher() == Database::Cipher::kChaCha20) {
     std::array<uint8_t, 12> iv{};
     std::copy(db.init_vector().begin(), db.init_vector().begin() + 12, iv.begin());
     chacha_cipher = std::make_unique<ChaCha20Cipher>(final_key.data(), iv);
+  } else {
+    cipher = CipherRegistry::Instance().Create(db.cipher(), final_key.data(), db.init_vector());
   }
   secure_zero(final_key.data(), final_key.size());
 
@@ -346,26 +346,14 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
     secure_zero(inner_random_stream_key.data(), inner_random_stream_key.size());
 
     for (const auto& binary : ordered_binaries) {
-      std::stringstream bin_stream;
-      uint8_t flags = binary->data().is_protected() ? 0x01 : 0x00;
-      conserve<uint8_t>(bin_stream, flags);
-      const secure_string& raw = binary->data().value();
-      if (!raw.empty()) {
-        bin_stream.write(raw.data(), static_cast<std::streamsize>(raw.size()));
-      }
-
-      // Build the payload copy incrementally so that every copy that exists is
-      // reachable for wiping later on.
-      std::string bin_data;
-      std::copy(std::istreambuf_iterator<char>(bin_stream), std::istreambuf_iterator<char>(),
-                std::back_inserter(bin_data));
+      // Write the flags byte and payload directly into the payload pipeline.
+      // WriteTo streams a not-yet-materialized lazy attachment from its shared
+      // backing buffer, so exporting does not load every payload into a
+      // per-attachment secure_string. The field size includes the flags byte.
       conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kBinaries));
-      conserve<uint32_t>(inner_target, static_cast<uint32_t>(bin_data.size()));
-      std::copy(bin_data.begin(), bin_data.end(), std::ostreambuf_iterator<char>(inner_target));
-
-      // Attachment data is sensitive; wipe the transient copies.
-      WipeBuffer(&bin_data);
-      WipeStream(bin_stream);
+      conserve<uint32_t>(inner_target, static_cast<uint32_t>(binary->Size() + 1));
+      conserve<uint8_t>(inner_target, binary->is_protected() ? 0x01 : 0x00);
+      binary->WriteTo(inner_target);
     }
 
     conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kEnd));

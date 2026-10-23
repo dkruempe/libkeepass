@@ -122,6 +122,18 @@ target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
 
 > **Note:** `add_subdirectory` requires the same dependencies (OpenSSL, zlib, pugixml, Argon2) to be resolvable in your build tree, e.g. via [Conan](https://conan.io/), as described under [Prerequisites](#prerequisites).
 
+### CMake components
+
+The KDB and KDBX codecs are optional (`LIBKEEPASS_COMPONENT_KDB`,
+`LIBKEEPASS_COMPONENT_KDBX`). The installed package reports
+`libkeepass_<component>_FOUND` and provides
+`kruempelmann::libkeepass::model/kdb/kdbx/capi` interface targets:
+
+```cmake
+find_package(libkeepass REQUIRED COMPONENTS kdbx)
+target_link_libraries(my_app PRIVATE kruempelmann::libkeepass::kdbx)
+```
+
 ### Using it as a Conan package
 
 The repository ships a Conan 2 recipe (`conanfile.py`) that builds and packages the library. To create the package from the current sources:
@@ -148,6 +160,14 @@ target_link_libraries(my_app PRIVATE kruempelmann::libkeepass)
 
 ## Packaging
 
+An in-tree [vcpkg](https://vcpkg.io/) port is available under
+`ports/libkeepass/`, and an optional Homebrew formula is in
+`Formula/libkeepass.rb`:
+
+```sh
+vcpkg install libkeepass --overlay-ports=ports
+```
+
 CPack generates installable packages from the [install rules](#integration). After building the project, run:
 
 ```sh
@@ -168,6 +188,24 @@ cmake --build build --target package
 ```
 
 > **Note:** The DEB/RPM dependency lists (`libssl3`, `zlib1g`, `libpugixml1.12`, `libargon2-1` / `openssl-libs`, `zlib`, `libpugixml`, `argon2-libs`) are defaults and may need adjusting for your target distribution. Override them as needed, e.g. `-DCPACK_DEBIAN_PACKAGE_DEPENDS="..."`.
+
+Release assets are signed keylessly with Sigstore. Verify an artifact with:
+
+```sh
+cosign verify-blob \
+  --certificate artifact.pem \
+  --signature artifact.sig \
+  --certificate-identity-regexp 'https://github.com/dkruempe/libkeepass/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  artifact
+```
+
+## WebAssembly demo
+
+`wasm/` contains an Emscripten build of the C ABI and a client-side-only demo
+page. Decryption happens in the browser tab; no database bytes leave the
+machine. See [`wasm/README.md`](wasm/README.md) for the dependency/toolchain
+notes.
 
 ## Command Line Interface
 
@@ -213,6 +251,13 @@ kpx -p password -e output.kdbx database.kdb
 kpx -p password --audit database.kdbx
 kpx -p password --audit --group Internet database.kdbx
 kpx -p password --audit -f json --with-passwords database.kdbx
+
+# Show stored TOTP seeds, or generate the current codes
+kpx -p password otp database.kdbx
+kpx -p password --code otp database.kdbx
+
+# Trim history to the newest N versions instead of clearing it
+kpx -p password --all --keep 10 purge database.kdbx
 
 # Keep the password out of argv and the environment
 printf '%s\n' "$SECRET" | kpx --password-stdin database.kdbx
@@ -316,6 +361,31 @@ class CountingVisitor : public keepass::Visitor {
 CountingVisitor visitor;
 db->Visit(visitor);
 ```
+
+### C ABI / language bindings
+
+`libkeepass-c` is a stable C surface for FFI consumers
+(`capi/include/libkeepass-c.h`). It exposes opaque handles, open/save,
+JSON/CSV export, entry lookup and simple editing:
+
+```c
+#include <libkeepass-c.h>
+
+kp_keepass* kp = kp_keepass_create("password", NULL);
+kp_database* db = NULL;
+if (kp_keepass_open(kp, "database.kdbx", &db) == KP_STATUS_OK) {
+    char* json = NULL;
+    kp_database_to_json(db, 0, &json);
+    puts(json);
+    kp_free_string(json);
+}
+kp_database_destroy(db);
+kp_keepass_destroy(kp);
+```
+
+The wrapper is built by default; disable it with
+`-DLIBKEEPASS_BUILD_C_API=OFF`. Errors use the categories from the C++ API and
+are also available through `kp_last_error()`.
 
 ### Low-level format classes
 

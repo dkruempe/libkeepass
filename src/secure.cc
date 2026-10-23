@@ -214,6 +214,13 @@ void secure_string::assign(const char* str) {
 
 void secure_string::assign(const std::string& str) { Allocate(str.data(), str.size()); }
 
+void secure_string::assign(const char* data, std::size_t size) {
+  if (data == nullptr)
+    Allocate("", 0);
+  else
+    Allocate(data, size);
+}
+
 void secure_string::Allocate(const char* data, std::size_t size) {
   char* new_data = static_cast<char*>(secure_alloc(size + 1));
   if (new_data == nullptr)

@@ -26,9 +26,13 @@
 #include <iostream>
 #include <memory>
 
-#include <openssl/evp.h>
-
 #include "libkeepass/export.hh"
+
+// Keep the public header independent of OpenSSL. The implementation files
+// include <openssl/evp.h> and use the complete type; consumers only need the
+// forward declaration to hold an AesCipher by value.
+struct evp_cipher_ctx_st;
+typedef struct evp_cipher_ctx_st EVP_CIPHER_CTX;
 
 namespace keepass {
 

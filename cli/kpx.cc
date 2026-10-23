@@ -347,14 +347,20 @@ int kpx_main(int argc, const char* argv[]) {
     if (!ParseArgs(argc, argv, opt))
       return static_cast<int>(ExitCode::kError);
     return Run(opt, argv[0]);
-  } catch (const keepass::PasswordError& e) {
-    return ReportError(json_errors, "auth", e.what(), ExitCode::kAuth);
-  } catch (const keepass::FileNotFoundError& e) {
-    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
-  } catch (const keepass::IoError& e) {
-    return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
-  } catch (const keepass::FormatError& e) {
-    return ReportError(json_errors, "format", e.what(), ExitCode::kFormat);
+  } catch (const keepass::Error& e) {
+    switch (e.category()) {
+    case keepass::ErrorCategory::kAuthentication:
+      return ReportError(json_errors, "auth", e.what(), ExitCode::kAuth);
+    case keepass::ErrorCategory::kIo:
+      return ReportError(json_errors, "io", e.what(), ExitCode::kIo);
+    case keepass::ErrorCategory::kFormat:
+    case keepass::ErrorCategory::kUnsupported:
+    case keepass::ErrorCategory::kResourceLimit:
+      return ReportError(json_errors, "format", e.what(), ExitCode::kFormat);
+    case keepass::ErrorCategory::kInternal:
+      break;
+    }
+    return ReportError(json_errors, "error", e.what(), ExitCode::kError);
   } catch (const std::exception& e) {
     return ReportError(json_errors, "error", e.what(), ExitCode::kError);
   }

@@ -32,14 +32,13 @@ jobs:
           pip install "clang-format==${{ env.CLANG_FORMAT_VERSION }}" \
                       "clang-tidy==${{ env.CLANG_TIDY_VERSION }}"
 
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-
-            conan-${{ runner.os }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "default"
 
       # Configure the Debug build only to generate compile_commands.json, which
       # run-clang-tidy needs to resolve the include paths and flags.
@@ -48,11 +47,13 @@ jobs:
 
       # Save the cache immediately after dependency provisioning but before
       # any linting, so that a later failure does not lose the dependencies.
-      - name: Cache Conan packages (save before lint)
-        uses: actions/cache/save@v4
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-lint-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "default"
 
       - name: Check formatting
         run: clang-format --dry-run --Werror $(git ls-files '*.cc' '*.hh')
@@ -61,3 +62,49 @@ jobs:
       # GCC-only -W* flags that CMake injects for the default GCC toolchain.
       - name: Run clang-tidy
         run: run-clang-tidy.py -p build -j $(nproc) -extra-arg=-Wno-unknown-warning-option src cli test
+
+  windows-lint:
+    runs-on: windows-latest
+
+    env:
+      CONAN_VERSION: "2.31.2"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Set up Conan
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
+
+      - name: Install LLVM (clang-tidy)
+        run: choco install llvm --yes --no-progress
+
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "windows-lint"
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_STANDARD=17
+
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "windows-lint"
+
+      - name: Run clang-tidy
+        shell: pwsh
+        run: |
+          $env:Path = "C:\Program Files\LLVM\bin;$env:Path"
+          python "C:\Program Files\LLVM\bin\run-clang-tidy.py" `
+            -p build -j $env:NUMBER_OF_PROCESSORS `
+            -extra-arg=-Wno-unknown-warning-option src cli test

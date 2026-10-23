@@ -38,6 +38,17 @@ work in P2, the KDBX 4 importer copied the *entire ciphertext* into a
 *   **Bounded buffers**: the only ciphertext held at any time is a 64-byte read
     chunk plus a sub-block remainder; the only plaintext is one pending block
     plus the downstream (decompression / parse) buffers.
+*   **No input copy for `Open(path)`**: the file is mapped read-only
+    (`detail::MappedFile`, `mmap`/`CreateFileMapping`) and imported through a
+    seekable `mapped_istreambuf`, so signature sniffing and the header rewind
+    do not copy the file. Stream callers keep the existing behaviour.
+*   **Attachments on export**: KDBX 4 inner-header binaries are written as a
+    flags byte, length prefix and raw payload directly into the encryption
+    pipeline; no per-attachment `std::stringstream`/`std::string` copy is made.
+*   **Lazy attachment payloads**: the importer stores all inner-header bytes in
+    one shared, zeroized buffer and gives each `Binary` a
+    `detail::BufferBinarySource` range. `Binary::data()` materializes only the
+    requested payload; `Binary::WriteTo()` streams it during export.
 
 The recorded exceptions behave exactly as before: a failed per-block HMAC or a
 truncated block throws `IoError` (corruption, not a password problem); nothing

@@ -7,6 +7,7 @@ if (NOT LIBKEEPASS_CONAN_CREATE)
     list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/conan_provider.cmake)
 endif()
 project(libkeepass VERSION 0.3.0)
+set(LIBKEEPASS_VERSION ${PROJECT_VERSION})
 # Propagate the project version to the CLI (and anything else that needs it)
 # as a compile-time definition, so it cannot drift from the library version.
 add_compile_definitions(KPX_VERSION="${PROJECT_VERSION}")
@@ -23,14 +24,39 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
+# Optional format components. The unified API/model is always built; the KDB
+# and KDBX codecs (and the CLI/test suite that exercise both) can be omitted for
+# embedders that only need one dialect. find_package() reports the selected
+# components through libkeepass_<component>_FOUND.
+option(LIBKEEPASS_COMPONENT_KDB "Build the legacy KDB 1.x codec" ON)
+option(LIBKEEPASS_COMPONENT_KDBX "Build the KDBX 3/4 codec" ON)
+option(LIBKEEPASS_BUILD_C_API "Build the stable C ABI wrapper (libkeepass-c)" ON)
+
+if (LIBKEEPASS_COMPONENT_KDB AND LIBKEEPASS_COMPONENT_KDBX)
+    set(LIBKEEPASS_BUILD_CLI ON)
+else()
+    set(LIBKEEPASS_BUILD_CLI OFF)
+endif()
+
 # Library
 ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(cli)
+
+if (LIBKEEPASS_BUILD_C_API)
+    ADD_SUBDIRECTORY(capi)
+endif()
+
+if (LIBKEEPASS_BUILD_CLI)
+    ADD_SUBDIRECTORY(cli)
+endif()
 
 # Tests
 include(CTest)
 if (BUILD_TESTING)
-    ADD_SUBDIRECTORY(test)
+    if (LIBKEEPASS_COMPONENT_KDB AND LIBKEEPASS_COMPONENT_KDBX)
+        ADD_SUBDIRECTORY(test)
+    else()
+        message(STATUS "libkeepass: skipping tests because a format component is disabled")
+    endif()
 endif()
 
 # Fuzzing (libFuzzer targets). Requires Clang; see fuzz/CMakeLists.txt.

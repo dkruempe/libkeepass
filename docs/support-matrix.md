@@ -42,17 +42,20 @@ combination through the unified API automatically selects KDBX 4.
 | Groups/entries, standard fields | R/W | R/W | R/W | `Group`, `Entry` |
 | Custom string fields | — | R/W | R/W | `Entry::custom_properties` |
 | Protected (in-memory encrypted) strings | — | R/W | R/W | `Entry::password`, `protect<secure_string>` |
-| Entry history | — | R/W | R/W | `Entry::history` |
+| Entry history | — | R/W | R/W | `Entry::history`, `Entry::delete_old_history` |
 | Attachments / binaries | — | R/W | R/W | `Entry::attachments`, `Binary` |
 | Custom icons | — | R/W | R/W | `Metadata::custom_icons` |
 | Tags | — | — | R/W | `Entry`/`Group::tags` |
 | Recycle bin | — | R/W | R/W | `Database::Trash*`, `EmptyRecycleBin` |
 | Custom data | — | — | R/W | `Metadata::custom_data` |
 | Deletion tombstones | — | — | R/W | `Metadata::deleted_objects` |
-| TOTP seed fields | — | R/W* | R/W* | custom fields (no OTP generator yet) |
+| TOTP seed fields | — | R/W* | R/W* | `TotpConfig`, `Totp`, `Entry::totp` |
 
-\* TOTP seeds are preserved as ordinary custom string fields; the CLI does not
-decode or generate one-time passwords yet (see `ROADMAP.md`).
+\* TOTP seeds are preserved as ordinary custom string fields. `TotpConfig`
+parses the `otp`/`TOTP Seed`/`TOTP Settings` variants and complete
+`otpauth://totp/...` URIs; `Totp::Generate` produces RFC 6238 codes, and
+`kpx otp --code` prints them. HOTP and Steam-specific alphabets are not
+generated.
 
 ## Unified API behaviour
 

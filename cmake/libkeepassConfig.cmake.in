@@ -8,4 +8,39 @@ find_dependency(argon2)
 
 include("${CMAKE_CURRENT_LIST_DIR}/libkeepass_targets.cmake")
 
+# Component metadata for find_package(libkeepass COMPONENTS model kdb kdbx ...).
+# All components are provided by the same library; the flags reflect which
+# optional codecs were compiled in.
+set(libkeepass_model_FOUND TRUE)
+set(libkeepass_kdb_FOUND @LIBKEEPASS_COMPONENT_KDB@)
+set(libkeepass_kdbx_FOUND @LIBKEEPASS_COMPONENT_KDBX@)
+set(libkeepass_capi_FOUND @LIBKEEPASS_BUILD_C_API@)
+set(libkeepass_cli_FOUND @LIBKEEPASS_BUILD_CLI@)
+
+if (libkeepass_model_FOUND AND NOT TARGET kruempelmann::libkeepass::model)
+    add_library(kruempelmann::libkeepass::model INTERFACE IMPORTED)
+    set_target_properties(kruempelmann::libkeepass::model PROPERTIES
+        INTERFACE_LINK_LIBRARIES kruempelmann::libkeepass)
+endif()
+if (libkeepass_kdb_FOUND AND NOT TARGET kruempelmann::libkeepass::kdb)
+    add_library(kruempelmann::libkeepass::kdb INTERFACE IMPORTED)
+    set_target_properties(kruempelmann::libkeepass::kdb PROPERTIES
+        INTERFACE_LINK_LIBRARIES kruempelmann::libkeepass)
+endif()
+if (libkeepass_kdbx_FOUND AND NOT TARGET kruempelmann::libkeepass::kdbx)
+    add_library(kruempelmann::libkeepass::kdbx INTERFACE IMPORTED)
+    set_target_properties(kruempelmann::libkeepass::kdbx PROPERTIES
+        INTERFACE_LINK_LIBRARIES kruempelmann::libkeepass)
+endif()
+if (libkeepass_capi_FOUND AND NOT TARGET kruempelmann::libkeepass::capi)
+    add_library(kruempelmann::libkeepass::capi INTERFACE IMPORTED)
+    set_target_properties(kruempelmann::libkeepass::capi PROPERTIES
+        INTERFACE_LINK_LIBRARIES kruempelmann::libkeepass-c)
+endif()
+if (libkeepass_cli_FOUND AND NOT TARGET kruempelmann::libkeepass::cli)
+    add_library(kruempelmann::libkeepass::cli INTERFACE IMPORTED)
+    set_target_properties(kruempelmann::libkeepass::cli PROPERTIES
+        INTERFACE_LINK_LIBRARIES kruempelmann::libkeepass)
+endif()
+
 check_required_components(libkeepass)

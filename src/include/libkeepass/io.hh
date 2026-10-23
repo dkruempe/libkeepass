@@ -29,6 +29,7 @@
 
 #include "exception.hh"
 #include "libkeepass/export.hh"
+#include "libkeepass/stream.hh"
 
 namespace keepass {
 
@@ -92,5 +93,26 @@ LIBKEEPASS_API void conserve<std::vector<char>>(std::ostream& dst, const std::ve
 template <>
 LIBKEEPASS_API void conserve<std::vector<uint8_t>>(std::ostream& dst,
                                                    const std::vector<uint8_t>& val);
+
+/**
+ * @brief Stable names for the reusable stream adapters.
+ *
+ * The framing/compression adapters are implemented in @c stream.cc and remain
+ * available under their historical names in @c keepass. The @c keepass::io
+ * namespace is the documented module boundary for new code and groups the
+ * adapters by purpose (hashed/hmac/gzip/cipher streams).
+ */
+namespace io {
+
+using ::keepass::array_iostreambuf;
+using ::keepass::encrypt_ostreambuf;
+using ::keepass::gzip_istreambuf;
+using ::keepass::gzip_ostreambuf;
+using ::keepass::hashed_istreambuf;
+using ::keepass::hashed_ostreambuf;
+using ::keepass::hmac_istreambuf;
+using ::keepass::hmac_ostreambuf;
+
+} // namespace io
 
 } // namespace keepass

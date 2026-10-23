@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <sstream>
 
 #include "libkeepass/base64.hh"
@@ -194,6 +195,38 @@ void Entry::save_history() {
 }
 
 void Entry::delete_history() { history_.clear(); }
+
+void Entry::delete_old_history(std::size_t max_items) {
+  delete_old_history(max_items, std::numeric_limits<std::size_t>::max());
+}
+
+void Entry::delete_old_history(std::size_t max_items, std::size_t max_bytes) {
+  if (history_.empty())
+    return;
+
+  if (max_items == 0) {
+    history_.clear();
+    return;
+  }
+
+  // History is stored oldest first. Walk from the newest entry backwards so
+  // that both limits retain the most recent versions.
+  std::size_t keep_from = history_.size();
+  std::size_t total_bytes = 0;
+  const std::size_t count_limit_from =
+      history_.size() > max_items ? history_.size() - max_items : 0;
+
+  for (std::size_t i = history_.size(); i > count_limit_from; --i) {
+    const std::size_t item_bytes = history_[i - 1]->ToJson().size();
+    if (keep_from < history_.size() && total_bytes + item_bytes > max_bytes)
+      break;
+    total_bytes += item_bytes;
+    keep_from = i - 1;
+  }
+
+  if (keep_from > 0)
+    history_.erase(history_.begin(), history_.begin() + static_cast<std::ptrdiff_t>(keep_from));
+}
 
 void Entry::touch(bool modify) {
   access_time_ = std::time(nullptr);

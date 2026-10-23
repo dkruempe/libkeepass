@@ -37,15 +37,20 @@ few hot spots dominate memory and time.
   the payload through a streambuf pipeline (gzip → encrypt → HMAC framing)
   that consumes the XML output incrementally, mirroring the streaming import
   path, so plaintext and ciphertext are never both fully resident.
-- Attachments still stream through `std::stringstream` in the KDBX4 inner
-  header (see §1 P2 "Lazy binary loading").
+- Attachments in the KDBX4 inner header are written directly into the payload
+  pipeline (flags byte + length prefix + raw bytes); no per-attachment
+  `std::stringstream` copy is materialized. Loading existing attachments
+  lazily is still tracked under §1 P2 "Lazy binary loading".
 
 ### P2 - Bound the XML DOM and binary memory further
-- The pugixml DOM (a deliberate decision, see `docs/streaming.md`) plus the
-  decrypted `std::stringstream` dominate memory for large databases.
-- **Plan:** for attachments, load/copy `Binary` payloads lazily on access and
-  stream them during export instead of materializing every attachment in the
-  inner header at once.
+- [x] KDBX 4 inner-header binaries are collected into one shared, zeroized
+  `SecureBytes` buffer during import. Each `Binary` holds a
+  `detail::BufferBinarySource` view and only copies its payload into a
+  `secure_string` when `data()` is accessed; `Binary::WriteTo` streams the
+  payload directly during export (`src/binary.cc`,
+  `src/include/libkeepass/detail/binary_source.hh`). The pugixml DOM and the
+  decrypted payload remain the deliberate full-buffer points (see
+  `docs/streaming.md`).
 
 ### P2 - Export benchmark and performance regression tracking
 - [x] `test/benchmark.cc` measures export and import time for every
@@ -65,9 +70,10 @@ few hot spots dominate memory and time.
   every length from 0 to 200 bytes and cross-check all three overloads.
 
 ### P3 - Memory-mapped reader
-- For `Open(path)`, use a memory-mapped input (`mmap`/`CreateFileMapping`)
-  behind an `IInputStream` facade so large databases avoid the read+copy cost
-  entirely, while the stream-based API keeps working unchanged.
+- [x] `KeePass::Open(path)` maps the file read-only (`mmap` on POSIX,
+  `CreateFileMapping`/`MapViewOfFile` on Windows) and exposes it through
+  `detail::mapped_istreambuf`, so signature sniffing and the header rewind work
+  without an `ifstream` read/copy. The stream-based API is unchanged.
 
 ---
 
@@ -107,9 +113,11 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   hostile fixtures in `test/robustness.cc`.
 
 ### P2 - Enforce that protected content stays in secure containers
-- Audit all `RandomObfuscator::Process` call sites so protected values never
-  transit through plain `std::string`/`std::vector`. Deprecate and remove the
-  non-`secure_string` overloads once the audit is clean.
+- [x] All internal `RandomObfuscator::Process` call sites now use the
+  `secure_string` overload; the TOTP helpers keep their secret in
+  `secure_string` as well. The non-`secure_string` overloads remain for
+  backwards source compatibility and are candidates for removal in a future
+  breaking release.
 
 ### P2 - CLI credential hygiene
 - [x] `kpx` accepts `--password-file <path>` (including `-` for stdin) and
@@ -171,31 +179,39 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   `cli/kpx_export.cc`, `cli/kpx_import.cc` and `cli/kpx_edit.cc`.
 
 ### P2 - Introduce `keepass::detail` and lean public headers
-- Move implementation details out of the public headers (`cipher.hh` is ~362
-  lines and pulls OpenSSL types everywhere). Public headers should expose
-  only the documented API, with heavy plumbing in a `detail` namespace.
+- [x] `cipher.hh` no longer includes `<openssl/evp.h>`; OpenSSL types are
+  forward-declared and only implementation files include the real headers.
+  `keepass.hh` no longer pulls `kdbx.hh`, and the new registries/serializers/
+  lazy binary sources live in `detail` headers. Remaining algorithm layout in
+  `cipher.hh` is source-compatible and a candidate for PImpl at 1.0.
 
 ### P2 - Format codec interface behind the unified API
-- Replace the `switch` dispatch in `src/keepass.cc:86` with a
-  `FormatCodec`/factory registrable per format so that adding a new dialect
-  (e.g. future KDBX 4.2) does not touch `KeePass` itself.
+- [x] `detail::FormatCodec`/`FormatCodecRegistry` (with the
+  `DatabaseSerializer` alias) replaces the hand-written `switch` in
+  `KeePass`. Built-in KDB/KDBX 3/KDBX 4 codecs register themselves; a new
+  dialect only registers a factory. `Find`/`Save` no longer construct codecs
+  directly (`src/format_codec.cc`).
 
 ### P2 - Single ownership model for the object graph
-- `Database`/`Entry`/`Group` mix `shared_ptr`, `weak_ptr` and raw pointers,
-  and `Group` uses `enable_shared_from_this`. Codify and document a clear
-  ownership policy (who owns what, aliasing rules when moving/trashing
-  subtrees) to make the API predictable and safe.
+- [x] `docs/ownership.md` codifies the ownership contract: the database owns
+  the root, parents own children, children hold weak parent links, history and
+  attachments have explicit ownership, and the aliasing rules for move,
+  delete, trash and concurrent access are documented.
 
 ### P3 - ABI/API stability policy
-- Introduce explicit soname/versioning strategy and a deprecation policy so
-  breaking changes (like the `protect<secure_string>` migration in 0.3.0) are
-  staged over releases. Consider PImpl for `KdbxFile`/`KeePass` once ABI
-  stability matters.
+- [x] `docs/abi-policy.md` documents the 0.x source/ABI expectations,
+  Semantic Versioning, deprecation staging, and the planned PImpl/symbol
+  visibility/C-ABI work for a stable 1.0.
 
 ### P2 - Rich, structured error taxonomy
-- Differentiate corruption vs. wrong password vs. unsupported feature in the
-  exception types (partially present), carry the failing offset/size where
-  useful, and never include key material in `what()`.
+- [x] All exceptions derive from `keepass::Error` and expose a stable
+  `ErrorCategory` (`authentication`, `format`, `unsupported`, `resource-limit`,
+  `io`, `internal`). `UnsupportedFeatureError` and `ResourceLimitError` refine
+  `FormatError`, `FormatError` carries an optional byte `offset()`, and the CLI
+  maps categories to its documented exit codes without parsing messages.
+- [x] Variant-dictionary parse errors now carry the failing stream offset via
+  `FormatError::offset()`; further parser paths can add offsets incrementally
+  without an API change.
 
 ---
 
@@ -207,24 +223,30 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   CLI now consumes it from `cli/output.cc`), and argument parsing and the
   output/edit commands moved to `cli/kpx_export.cc`, `cli/kpx_import.cc` and
   `cli/kpx_edit.cc`, leaving `cli/kpx.cc` a thin driver.
-- Remaining (P2): CSV formats beyond the two configured via `CsvFormat` and
-  any further output formatters.
+- [x] `CsvFormat` now also provides `kCsvWithCustomFields` (adds a
+  `CustomFields` column) and `kCsvKeePass2` (KeePass 2.x
+  `Account,Login Name,Password,Web Site,Comments` layout) in addition to
+  `kCsv`/`kCsvWithPasswords`.
 
 ### P2 - Pluggable cipher/KDF registry
-- Model ciphers and KDFs behind factory interfaces so external consumers can
-  register implementations without touching core code. Keep Salsa20 and
-  AES-KDF behind a "compatibility" flag on export.
+- [x] `CipherRegistry` (`libkeepass/cipher_registry.hh`) and `KdfRegistry`
+  (`libkeepass/kdf_registry.hh`) hold process-wide factories. The built-in
+  AES/Twofish and AES-KDF/Argon2d/Argon2id implementations register
+  themselves; KDB/KDBX import/export and `KdbxKdf::Transform` resolve through
+  the registries. ChaCha20 remains a specialized stream-cipher path (its
+  framing is not a 16-byte block cipher).
 
 ### P2 - Extract reusable stream components into `keepass::io`
-- `hashed_istreambuf`/`hashed_ostreambuf`, `hmac_istreambuf`/
-  `hmac_ostreambuf`, `gzip_istreambuf`/`gzip_ostreambuf` live in `stream.cc`
-  with good tests already — formalize them as a documented `io` module with a
-  stable interface and dedicated tests.
+- [x] `libkeepass/io.hh` now exposes the documented `keepass::io` module with
+  stable aliases for the hashed/HMAC/gzip/cipher streambufs. The historical
+  names remain in `keepass` for source compatibility; existing `test/stream.cc`
+  covers the adapters.
 
 ### P2 - Decouple the object model from the codecs
-- `Database` currently knows XML/KDBX concepts. Introduce a
-  `DatabaseSerializer` abstraction so `Database`, `KdbxXml`, `KdbxHeader` and
-  `Kdb` can evolve and be tested independently.
+- [x] `detail::DatabaseSerializer` (the `FormatCodec` interface) is the only
+  path from the unified API to KDB/KDBX/XML code. `KeePass` and `Database`
+  carry no codec-specific state, so the codecs can evolve and be tested
+  independently.
 
 ### P2 - Centralize format constants
 - [x] `libkeepass/detail/constants.hh` now owns the KDB/KDBX signatures,
@@ -233,8 +255,11 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
   constants alias these definitions instead of duplicating the magic values.
 
 ### P3 - Independent CMake components
-- If consumer demand grows, expose `libkeepass` as optional components
-  (model / kdb / kdbx / cli) via `find_package(... COMPONENTS ...)`.
+- [x] `LIBKEEPASS_COMPONENT_KDB`/`LIBKEEPASS_COMPONENT_KDBX` and
+  `LIBKEEPASS_BUILD_C_API` select the compiled codecs. The installed package
+  reports `libkeepass_<component>_FOUND` and provides
+  `kruempelmann::libkeepass::model/kdb/kdbx/capi` interface targets for
+  `find_package(libkeepass COMPONENTS ...)`.
 
 ---
 
@@ -291,8 +316,9 @@ Most-wanted commands that users of a KeePass tool expect:
   the mapping is documented in `kpx --help`, the README and
   `docs/cli-output.md`. Library exceptions already carry contextual messages
   (`FormatError`, `IoError`) without key material.
-- Remaining: richer "while parsing group X"/offset context in every parser
-  error path.
+- [x] Variant-dictionary and resource-budget errors carry the failing offset
+  where the stream reports one; other parser paths can add offsets without an
+  API change.
 
 ### P2 - API ergonomics
 - [x] KDF parameter mutation invalidates the cached transformed key,
@@ -310,8 +336,11 @@ Most-wanted commands that users of a KeePass tool expect:
   index links all three and `CONTRIBUTING.md` now has a table of contents.
 
 ### P3 - Language bindings
-- Start with a C ABI (`libkeepass-c`) so Python/Go/Rust bindings and
-  higher-level tools can be built without reimplementing the format logic.
+- [x] `libkeepass-c` provides a stable C ABI (`capi/include/libkeepass-c.h`,
+  built by default, `-DLIBKEEPASS_BUILD_C_API=OFF` to disable) with opaque
+  handles, status/category mapping, thread-local errors, open/save/JSON/CSV,
+  entry lookup and simple editing. `test/capi.cc` exercises the round-trip.
+  Python/Go/Rust bindings can build on this surface.
 
 ---
 
@@ -336,8 +365,11 @@ Most-wanted commands that users of a KeePass tool expect:
   mutate whole KDB/KDBX files (including their headers). The CI fuzz workflow
   now builds and runs every target through a matrix with format-specific seed
   corpora.
-- Remaining: submit the targets to OSS-Fuzz for continuous corpus growth and
-  coverage reporting, and sync the in-repo corpus with the OSS-Fuzz corpus.
+- [x] The OSS-Fuzz project recipe is maintained in `oss-fuzz/`
+  (`Dockerfile`, `build.sh`, `project.yaml`, corpus sync helper). It builds all
+  five targets with ASan/UBSan and seeds the corpora from `test/data/`.
+- Remaining: open the actual `google/oss-fuzz` submission PR (external
+  repository) and sync the hosted corpus bucket.
 
 ### P2 - Adversarial fixtures
 - [x] `test/robustness.cc` covers truncated payloads, oversized header fields
@@ -371,8 +403,11 @@ Most-wanted commands that users of a KeePass tool expect:
 - [x] GitHub Releases now include an SPDX SBOM generated by Syft
   (`anchore/sbom-action`) alongside the CPack TGZ/ZIP/DEB/RPM artifacts and
   `SHA256SUMS.txt`, so checksums cover the SBOM too.
-- Remaining: add a vcpkg port and an optional Homebrew formula, and sign the
-  release artifacts where feasible.
+- [x] An in-tree vcpkg port (`ports/libkeepass/`) with a pinned source hash,
+  dependency manifest and usage notes.
+- [x] An optional Homebrew formula (`Formula/libkeepass.rb`) and keyless
+  Sigstore/cosign signing of every release asset in the tag-driven release
+  workflow (`.github/workflows/release.yml`).
 
 ### P1 - Release automation
 - [x] `.github/workflows/release.yml` is a tag-driven workflow (on `v*`) that
@@ -386,30 +421,39 @@ Most-wanted commands that users of a KeePass tool expect:
   lint, CodeQL, release and security workflows. Conan cache keys hash
   `conanfile.py` instead of the non-existent `conanfile.txt`, so dependency
   changes invalidate the cache correctly.
-- Remaining: fold the restore/save cache steps into the composite action and
-  run clang-tidy on Windows as well (currently Linux-only).
+- [x] `setup-conan` now has `cache-mode: restore|save|both` and the workflows
+  use it instead of separate `actions/cache` steps. The lint workflow also has
+  a `windows-lint` job that runs `run-clang-tidy.py` against an MSVC build.
 
 ### P3 - WebAssembly demo
-- Build the library (and optionally `kpx`) for WASM so databases can be
-  inspected in the browser - useful as a security showcase (client-side only
-  decryption) and a distribution vehicle.
+- [x] `wasm/` contains an Emscripten build (`CMakeLists.txt`, `demo.cc`), a
+  client-side-only browser page (`index.html`) using the C ABI, and build
+  notes (`README.md`). It decrypts and inspects a database without uploading
+  it; the dependency notes cover the wasm32 OpenSSL/Argon2 ports.
 
 ---
 
 ## 8. "Etc." - additional opportunities
 
-- **KDBX 4.1 verification surface:** keep extending the KeePass-generated
-  fixture corpus (`tools/kdbx41_fixturegen/`) to future KeePass releases and
-  cover every 4.1 feature against real files.
-- **TOTP / custom-field helpers:** first-class helpers for the
-  KeePass-specific TOTP seed fields (`otp`) used by KeePass2Android and
-  KeeOtp.
-- **Entry history controls:** expose `DeleteOldHistory`/max-history policy in
-  the model and CLI.
+- [x] **KDBX 4.1 verification surface:** the KeePass-generated fixture corpus
+  (`test/data/kdbx4/kdbx41/`, produced by `tools/kdbx41_fixturegen/`) covers
+  previous-parent group/entry, custom icons, deleted objects and the 4.1
+  version-migration rules; `test/kdbx4.cc` verifies them against real files.
+  New KeePass releases should extend the same generator/fixtures.
+- [x] **TOTP / custom-field helpers:** `TotpConfig`/`Totp` parse the
+  `otp`/`TOTP Seed`/`TOTP Settings` field variants and complete
+  `otpauth://totp/...` URIs (Base32, SHA-1/256/512, period, digits), generate
+  RFC 6238 codes and expose `Entry::totp()`/`Entry::totp_code()`.
+  `kpx otp --code` prints the current code and remaining seconds.
+- [x] **Entry history controls:** `Entry::delete_old_history()` and
+  `Database::DeleteOldHistory()` implement the `HistoryMaxItems`/
+  `HistoryMaxSize` policy, and `kpx purge --keep <n>` trims instead of clearing.
 - **Lazy binary loading:** access attachment payloads on demand for databases
-  with many large binaries (§1).
-- **Delta/backup workflows:** snapshot or incremental export of changed
-  entries to support backup tools on top of the library.
+  with many large binaries (§1). Export already writes attachment bytes
+  directly into the payload pipeline.
+- [x] **Delta/backup workflows:** `Database::DeltaSince(previous)` returns a
+  `DatabaseDelta` with added/modified/deleted entries matched by UUID and a
+  canonical JSON export (`DatabaseDelta::ToJson`) for incremental backups.
 
 ---
 

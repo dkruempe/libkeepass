@@ -28,6 +28,7 @@
 
 #include "libkeepass/binary.hh"
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/binary_source.hh"
 #include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/secure.hh"
@@ -369,6 +370,27 @@ TEST(BinaryTest, SetDataReplacesPayload) {
   EXPECT_EQ(*binary.data(), replacement);
   EXPECT_EQ(binary.Size(), replacement.size());
   EXPECT_NE(binary.data()->c_str(), old_storage);
+}
+
+TEST(BinaryTest, LazySourceLoadsOnDemandAndStreams) {
+  const std::vector<uint8_t> payload = {'l', 'a', 'z', 'y'};
+  auto pool = std::make_shared<SecureBytes>(payload);
+  auto source = std::make_shared<detail::BufferBinarySource>(pool, 0, payload.size());
+  Binary binary(source, true);
+
+  EXPECT_TRUE(binary.is_lazy());
+  EXPECT_FALSE(binary.is_loaded());
+  EXPECT_EQ(payload.size(), binary.Size());
+  EXPECT_TRUE(binary.is_protected());
+
+  // Streaming must not materialize the payload.
+  std::ostringstream stream;
+  binary.WriteTo(stream);
+  EXPECT_EQ("lazy", stream.str());
+  EXPECT_FALSE(binary.is_loaded());
+
+  EXPECT_EQ("lazy", binary.data()->str());
+  EXPECT_TRUE(binary.is_loaded());
 }
 
 TEST(BinaryTest, EmptySetDataMarksEmpty) {

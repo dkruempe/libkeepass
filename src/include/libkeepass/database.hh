@@ -39,7 +39,28 @@ class Metadata;
 class Visitor;
 
 /// Formats for Database::ToCsv().
-enum class CsvFormat { kCsv, kCsvWithPasswords };
+enum class CsvFormat { kCsv, kCsvWithPasswords, kCsvWithCustomFields, kCsvKeePass2 };
+
+/// One changed entry in a DatabaseDelta.
+struct LIBKEEPASS_API EntryDelta {
+  std::shared_ptr<Entry> entry;
+  std::string group_path;
+};
+
+/// Entry-level difference between two databases, for incremental backups.
+struct LIBKEEPASS_API DatabaseDelta {
+  std::vector<EntryDelta> added;
+  std::vector<EntryDelta> modified;
+  /// UUIDs (and paths) of entries removed since the previous database.
+  std::vector<std::array<uint8_t, 16>> deleted;
+  std::vector<std::string> deleted_paths;
+
+  /// Returns whether no change was detected.
+  bool empty() const { return added.empty() && modified.empty() && deleted.empty(); }
+
+  /// Serializes the delta to JSON (entry payloads use Entry::ToJson()).
+  std::string ToJson() const;
+};
 
 /**
  * @brief Represents a KeePass (KDB/KDBX) database.
@@ -323,6 +344,17 @@ public:
   static void MoveGroup(const std::shared_ptr<Group>& group,
                         const std::shared_ptr<Group>& new_parent);
 
+  /// Applies the database history limits to every entry's history.
+  /**
+   * The limits are read from @ref Metadata::history_max_items and
+   * @ref Metadata::history_max_size; a negative value means unlimited, as in
+   * the KeePass format. The newest history versions are retained.
+   */
+  void DeleteOldHistory();
+
+  /// Alias for @ref DeleteOldHistory using the library's snake_case style.
+  void delete_old_history() { DeleteOldHistory(); }
+
   /// Moves an entry to the recycle bin.
   void TrashEntry(const std::shared_ptr<Entry>& entry);
 
@@ -348,13 +380,26 @@ public:
    * The group column holds the '/'-joined path of the group an entry lives in
    * (relative to and including the root group). Fields containing a comma,
    * a double quote or a newline are quoted per RFC 4180 (embedded quotes are
-   * doubled). Meta entries are skipped. Passwords are only included when
-   * @p format is CsvFormat::kCsvWithPasswords.
+   * doubled). Meta entries are skipped.
    *
-   * @param format Whether passwords are included in the output.
+   * `kCsv` omits passwords, `kCsvWithPasswords` includes them,
+   * `kCsvWithCustomFields` appends a `CustomFields` column (`key=value; ...`)
+   * and `kCsvKeePass2` emits the KeePass 2.x CSV layout
+   * (`Account,Login Name,Password,Web Site,Comments`, passwords included).
+   *
+   * @param format Output schema and password handling.
    * @return The CSV data including the header line.
    */
   std::string ToCsv(CsvFormat format = CsvFormat::kCsv) const;
+
+  /// Computes the entry-level difference to a previous database snapshot.
+  /**
+   * Entries are matched by UUID. An entry is `modified` when its canonical
+   * `Entry::ToJson()` representation or its group path changed. Use the
+   * result to write a small incremental export for backup tools; groups
+   * themselves are represented by the entry paths.
+   */
+  DatabaseDelta DeltaSince(const Database& previous) const;
 
   /// Returns the total number of entries in the database.
   size_t EntryCount() const;

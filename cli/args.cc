@@ -73,6 +73,19 @@ int ParseGenerateLength(const std::string& value, const std::string& option) {
   return static_cast<int>(length);
 }
 
+// Parses a non-negative history limit for --keep, printing an error and
+// returning false on invalid input.
+bool ParseHistoryLimit(const std::string& value, int& out) {
+  char* end = nullptr;
+  const long limit = std::strtol(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0' || limit < 0 || limit > 1000000) {
+    std::cerr << "error: option '--keep' expects a non-negative integer\n";
+    return false;
+  }
+  out = static_cast<int>(limit);
+  return true;
+}
+
 // Returns whether the string consists entirely of decimal digits.
 bool IsNumeric(const std::string& s) {
   return !s.empty() && std::all_of(s.begin(), s.end(), [](char c) {
@@ -229,6 +242,14 @@ bool ParseArgs(int argc, const char* argv[], Options& opt) {
         opt.include_attachments = true;
       } else if (name == "all") {
         opt.all = true;
+      } else if (name == "keep") {
+        std::string limit;
+        if (!NextValue(argc, argv, i, "--keep", has_value, value, limit))
+          return false;
+        if (!ParseHistoryLimit(limit, opt.history_limit))
+          return false;
+      } else if (name == "code") {
+        opt.totp_code = true;
       } else if (name == "verbose") {
         opt.verbose = true;
       } else if (name == "help") {

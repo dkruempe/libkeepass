@@ -37,15 +37,13 @@ jobs:
         with:
           conan-version: ${{ env.CONAN_VERSION }}
 
-      - name: Cache Conan packages (restore)
-        id: cache-restore
-        uses: actions/cache/restore@v5
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-
-            conan-${{ runner.os }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "default"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -60,12 +58,13 @@ jobs:
       # building the project, so that a later build failure does not lose the
       # fetched/built dependencies. Skip saving when the restore hit the exact
       # key, otherwise GitHub refuses to reserve the already-existing cache.
-      - name: Cache Conan packages (save before build)
-        if: steps.cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-codeql-${{ runner.os }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "default"
 
       - name: Build
         run: cmake --build build -j $(nproc)

@@ -162,13 +162,13 @@ std::array<uint8_t, 32> KdbxHeader::Parse3(std::istream& src, Database& db) {
       break;
     case KdbxHeaderField::kCipherId:
       if (consume<std::array<uint8_t, 16>>(field) != kKdbxCipherAes)
-        throw FormatError("Unknown cipher in KDBX.");
+        throw UnsupportedFeatureError("Unknown cipher in KDBX.");
       db.set_cipher(Database::Cipher::kAes);
       break;
     case KdbxHeaderField::kCompressionFlags: {
       auto comp_flags = consume<uint32_t>(field);
       if (comp_flags > static_cast<uint32_t>(kKdbxCompressionFlags::kCount))
-        throw FormatError("Unknown compression method in KDBX.");
+        throw UnsupportedFeatureError("Unknown compression method in KDBX.");
       db.set_compress(comp_flags == static_cast<uint32_t>(kKdbxCompressionFlags::kGzip));
       break;
     }
@@ -205,7 +205,7 @@ std::array<uint8_t, 32> KdbxHeader::Parse3(std::istream& src, Database& db) {
     case KdbxHeaderField::kInnerRandomStreamId: {
       auto inner_random_stream_id = consume<uint32_t>(field);
       if (inner_random_stream_id != static_cast<uint32_t>(kKdbxRandomStream::kSalsa20)) {
-        throw FormatError("Unknown random stream in KDBX.");
+        throw UnsupportedFeatureError("Unknown random stream in KDBX.");
       }
       break;
     }
@@ -251,14 +251,14 @@ void KdbxHeader::Parse4(std::istream& src, Database& db) {
       } else if (uuid == kKdbxCipherTwofish) {
         db.set_cipher(Database::Cipher::kTwofish);
       } else {
-        throw FormatError("Unknown cipher in KDBX 4 database.");
+        throw UnsupportedFeatureError("Unknown cipher in KDBX 4 database.");
       }
       break;
     }
     case Kdbx4HeaderField::kCompressionFlags: {
       auto comp_flags = consume<uint32_t>(field);
       if (comp_flags > static_cast<uint32_t>(kKdbxCompressionFlags::kCount))
-        throw FormatError("Unknown compression method in KDBX.");
+        throw UnsupportedFeatureError("Unknown compression method in KDBX.");
       db.set_compress(comp_flags == static_cast<uint32_t>(kKdbxCompressionFlags::kGzip));
       break;
     }

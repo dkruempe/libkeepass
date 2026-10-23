@@ -20,6 +20,8 @@
 #include "libkeepass/database.hh"
 
 #include <ctime>
+#include <limits>
+#include <map>
 #include <sstream>
 
 #include "libkeepass/entry.hh"
@@ -36,6 +38,54 @@ template <typename F> void Dfs(const std::shared_ptr<Group>& current, F&& functi
   function(current);
   for (const auto& child : current->Groups())
     Dfs(child, function);
+}
+
+std::string JsonEscape(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char c : value) {
+    switch (c) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped.push_back(c);
+      break;
+    }
+  }
+  return escaped;
+}
+
+std::string UuidHex(const std::array<uint8_t, 16>& uuid) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string text;
+  text.reserve(uuid.size() * 2);
+  for (const uint8_t byte : uuid) {
+    text.push_back(kHex[byte >> 4]);
+    text.push_back(kHex[byte & 0x0f]);
+  }
+  return text;
+}
+
+using EntryMap = std::map<std::array<uint8_t, 16>, std::pair<std::shared_ptr<Entry>, std::string>>;
+
+void CollectEntries(const std::shared_ptr<Group>& group, EntryMap& entries) {
+  for (const auto& entry : group->Entries())
+    entries.emplace(entry->uuid(), std::make_pair(entry, entry->path()));
+  for (const auto& child : group->Groups())
+    CollectEntries(child, entries);
 }
 
 } // namespace
@@ -100,6 +150,88 @@ void Database::AddEntry(const std::shared_ptr<Group>& group, const std::shared_p
 void Database::AddGroup(const std::shared_ptr<Group>& parent, const std::shared_ptr<Group>& group) {
   if (parent)
     parent->AddGroup(group);
+}
+
+void Database::DeleteOldHistory() {
+  if (!root_)
+    return;
+
+  const std::size_t max_items = meta_ && meta_->history_max_items() >= 0
+                                    ? static_cast<std::size_t>(meta_->history_max_items())
+                                    : std::numeric_limits<std::size_t>::max();
+  const std::size_t max_bytes = meta_ && meta_->history_max_size() >= 0
+                                    ? static_cast<std::size_t>(meta_->history_max_size())
+                                    : std::numeric_limits<std::size_t>::max();
+
+  const auto apply = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
+    for (const auto& entry : group->Entries())
+      entry->delete_old_history(max_items, max_bytes);
+    for (const auto& child : group->Groups())
+      self(self, child);
+  };
+  apply(apply, root_);
+}
+
+DatabaseDelta Database::DeltaSince(const Database& previous) const {
+  DatabaseDelta delta;
+  if (!root_)
+    return delta;
+
+  EntryMap current_entries;
+  CollectEntries(root_, current_entries);
+
+  EntryMap previous_entries;
+  if (previous.root_)
+    CollectEntries(previous.root_, previous_entries);
+
+  for (const auto& [uuid, current] : current_entries) {
+    const auto it = previous_entries.find(uuid);
+    if (it == previous_entries.end()) {
+      delta.added.push_back({current.first, current.second});
+      continue;
+    }
+
+    const auto& old = it->second;
+    if (old.second != current.second || old.first->ToJson() != current.first->ToJson())
+      delta.modified.push_back({current.first, current.second});
+  }
+
+  for (const auto& [uuid, old] : previous_entries) {
+    if (current_entries.find(uuid) == current_entries.end()) {
+      delta.deleted.push_back(uuid);
+      delta.deleted_paths.push_back(old.second);
+    }
+  }
+
+  return delta;
+}
+
+std::string DatabaseDelta::ToJson() const {
+  std::ostringstream json;
+  const auto write_entries = [&json](const std::vector<EntryDelta>& entries) {
+    bool first = true;
+    for (const auto& change : entries) {
+      if (!first)
+        json << ',';
+      first = false;
+      json << R"({"path":")" << JsonEscape(change.group_path) << R"(","uuid":")"
+           << UuidHex(change.entry->uuid()) << R"(","entry":)" << change.entry->ToJson() << '}';
+    }
+  };
+
+  json << R"({"added":[)";
+  write_entries(added);
+  json << R"(],"modified":[)";
+  write_entries(modified);
+  json << R"(],"deleted":[)";
+  for (std::size_t i = 0; i < deleted.size(); ++i) {
+    if (i != 0)
+      json << ',';
+    json << R"({"path":")" << JsonEscape(i < deleted_paths.size() ? deleted_paths[i] : "")
+         << R"(","uuid":")" << UuidHex(deleted[i]) << R"("})";
+  }
+  json << "]}";
+  return json.str();
 }
 
 void Database::DeleteEntry(const std::array<uint8_t, 16>& uuid) {
@@ -279,8 +411,20 @@ std::string CsvField(const std::string& value) {
 // Writes the CSV rows of the subtree rooted at group, where @p path is the
 // '/'-joined group path above the current group (the root's name is appended
 // here, so entries directly in the root group appear under its name).
+std::string CustomFieldsCsv(const Entry& entry) {
+  std::string fields;
+  for (const auto& field : entry.custom_fields()) {
+    if (!fields.empty())
+      fields += "; ";
+    fields += field.key();
+    fields += "=";
+    fields += field.value()->str();
+  }
+  return fields;
+}
+
 void ToCsvGroup(std::ostringstream& os, const std::shared_ptr<Group>& group,
-                const std::string& path, bool with_passwords) {
+                const std::string& path, CsvFormat format) {
   std::string group_path = path;
   if (!group->name().empty()) {
     if (!group_path.empty())
@@ -292,23 +436,42 @@ void ToCsvGroup(std::ostringstream& os, const std::shared_ptr<Group>& group,
     if (entry->IsMetaEntry())
       continue;
 
+    if (format == CsvFormat::kCsvKeePass2) {
+      // KeePass 2.x "KeePass CSV" compatibility: Account, Login Name,
+      // Password, Web Site, Comments.
+      os << CsvField(entry->title().value().str()) << ","
+         << CsvField(entry->username().value().str()) << ","
+         << CsvField(entry->password().value().str()) << "," << CsvField(entry->url().value().str())
+         << "," << CsvField(entry->notes().value().str()) << "\n";
+      continue;
+    }
+
+    const bool with_passwords = format == CsvFormat::kCsvWithPasswords;
     os << CsvField(group_path) << "," << CsvField(entry->title().value().str()) << ","
        << CsvField(entry->username().value().str()) << ","
        << (with_passwords ? CsvField(entry->password().value().str()) : std::string()) << ","
-       << CsvField(entry->url().value().str()) << "," << CsvField(entry->notes().value().str())
-       << "\n";
+       << CsvField(entry->url().value().str()) << "," << CsvField(entry->notes().value().str());
+    if (format == CsvFormat::kCsvWithCustomFields)
+      os << "," << CsvField(CustomFieldsCsv(*entry));
+    os << "\n";
   }
   for (const auto& child : group->Groups())
-    ToCsvGroup(os, child, group_path, with_passwords);
+    ToCsvGroup(os, child, group_path, format);
 }
 
 } // namespace
 
 std::string Database::ToCsv(CsvFormat format) const {
   std::ostringstream os;
-  os << "Group,Title,Username,Password,Url,Notes\n";
+  if (format == CsvFormat::kCsvKeePass2)
+    os << "Account,Login Name,Password,Web Site,Comments\n";
+  else if (format == CsvFormat::kCsvWithCustomFields)
+    os << "Group,Title,Username,Password,Url,Notes,CustomFields\n";
+  else
+    os << "Group,Title,Username,Password,Url,Notes\n";
+
   if (root_)
-    ToCsvGroup(os, root_, std::string(), format == CsvFormat::kCsvWithPasswords);
+    ToCsvGroup(os, root_, std::string(), format);
   return os.str();
 }
 

@@ -20,10 +20,12 @@
 #include "output.hh"
 
 #include <cctype>
+#include <cstdint>
 #include <ctime>
 #include <functional>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <regex>
 #include <utility>
 
@@ -59,6 +61,8 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "      --to <group>      destination group for move/merge\n"
      << "      --from <path>     source database for merge/import\n"
      << "      --all             select all entries (purge)\n"
+     << "      --keep <n>        keep the <n> newest history versions (purge)\n"
+     << "      --code            generate current TOTP codes (otp)\n"
      << "      --force           overwrite an existing file for the create command\n"
      << "      (fallback: KEEPASS_PASSWORD; interactive prompt when stdin is a\n"
      << "       terminal and no other password source is given)\n"
@@ -95,8 +99,10 @@ void PrintUsage(const char* prog, std::ostream& os) {
      << "         (--new-password*, --kdf)\n"
      << "  move   move entries (--title/--search) or a group (--group) to --to\n"
      << "  history print entry history versions (--title/--search/--group)\n"
-     << "  purge  clear entry history (--title/--search/--group or --all)\n"
+     << "  purge  clear entry history or trim it with --keep <n>\n"
+     << "         (--title/--search/--group or --all)\n"
      << "  otp    print TOTP seeds/settings stored in custom fields\n"
+     << "         (--code adds the current code and remaining seconds)\n"
      << "  merge  merge a second database (--from <path>, optional --to <group>)\n"
      << "         into the target; both use the same password/keyfile\n"
      << "  import alias for merge\n"
@@ -695,6 +701,9 @@ int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
     std::string path;
     std::string seed;
     std::string settings;
+    std::string code;
+    uint32_t remaining = 0;
+    bool has_code = false;
   };
 
   std::vector<OtpRow> rows;
@@ -707,12 +716,23 @@ int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
       if (lower == "otp" || lower == "totp seed" || lower == "otp seed" || lower == "totpsecret" ||
           lower == "totp_secret") {
         seed = value;
-      } else if (lower == "totp settings" || lower == "otp settings") {
+      } else if (lower == "totp settings" || lower == "otp settings" || lower == "totp_settings") {
         settings = value;
       }
     }
-    if (!seed.empty())
-      rows.push_back({entry->path(), seed, settings});
+    if (seed.empty())
+      continue;
+
+    OtpRow row{entry->path(), seed, settings, {}, 0, false};
+    if (opt.totp_code) {
+      const std::optional<keepass::TotpConfig> config = entry->totp();
+      if (config) {
+        row.code = keepass::Totp::Generate(*config);
+        row.remaining = keepass::Totp::SecondsRemaining(*config);
+        row.has_code = !row.code.empty();
+      }
+    }
+    rows.push_back(std::move(row));
   }
 
   std::ofstream file;
@@ -727,17 +747,27 @@ int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
         out << ",";
       out << R"({"path":")" << JsonEscape(rows[i].path) << R"(","seed":")"
           << JsonEscape(rows[i].seed) << R"(","settings":")" << JsonEscape(rows[i].settings)
-          << "\"}";
+          << "\"";
+      if (rows[i].has_code)
+        out << R"(,"code":")" << JsonEscape(rows[i].code) << R"(","remaining":)"
+            << rows[i].remaining;
+      out << "}";
     }
     out << "]\n";
     return 0;
   }
 
   if (opt.format == "csv") {
-    out << "Path,Seed,Settings\n";
-    for (const auto& row : rows)
-      out << CsvField(row.path) << ',' << CsvField(row.seed) << ',' << CsvField(row.settings)
-          << "\n";
+    out << "Path,Seed,Settings";
+    if (opt.totp_code)
+      out << ",Code,Remaining";
+    out << "\n";
+    for (const auto& row : rows) {
+      out << CsvField(row.path) << ',' << CsvField(row.seed) << ',' << CsvField(row.settings);
+      if (opt.totp_code)
+        out << ',' << CsvField(row.code) << ',' << row.remaining;
+      out << "\n";
+    }
     return 0;
   }
 
@@ -745,6 +775,8 @@ int RunOtp(const Options& opt, const std::shared_ptr<keepass::Group>& start) {
     out << row.path << ": " << row.seed;
     if (!row.settings.empty())
       out << " [" << row.settings << "]";
+    if (row.has_code)
+      out << " => " << row.code << " (" << row.remaining << "s)";
     out << "\n";
   }
   return 0;
