@@ -103,7 +103,11 @@ jobs:
           cache-mode: save
           cache-suffix: "windows-lint"
 
-      - name: Run clang-tidy
+      # Advisory on Windows: MSVC's system headers and zlib's Unix fallbacks
+      # produce diagnostics that are unrelated to the project sources. Linux
+      # remains the gating clang-tidy job.
+      - name: Run clang-tidy (advisory)
+        continue-on-error: true
         shell: pwsh
         run: |
           $env:Path = "C:\Program Files\LLVM\bin;$env:Path"
