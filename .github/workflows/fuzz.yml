@@ -35,13 +35,13 @@ jobs:
         with:
           conan-version: ${{ env.CONAN_VERSION }}
 
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-${{ runner.os }}-fuzz-conan-${{ env.CONAN_VERSION }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "fuzz"
 
       - name: Configure CMake (fuzzing)
         run: |
@@ -52,7 +52,16 @@ jobs:
             -DCMAKE_C_STANDARD=11 \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
+            -DLIBKEEPASS_BUILD_C_API=OFF \
             -DLIBKEEPASS_BUILD_FUZZING=ON
+
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
+        with:
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "fuzz"
 
       - name: Build ${{ matrix.target }}
         run: cmake --build build-fuzz --target ${{ matrix.target }} -- -j $(nproc)

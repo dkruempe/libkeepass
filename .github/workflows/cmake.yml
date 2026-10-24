@@ -28,14 +28,13 @@ jobs:
         with:
           conan-version: ${{ env.CONAN_VERSION }}
 
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
-            conan-${{ runner.os }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "${{ matrix.build-type }}"
 
       - name: Install lcov
         if: matrix.build-type == 'Debug'
@@ -47,11 +46,13 @@ jobs:
       # Save the cache immediately after dependency provisioning but before
       # building the project, so that a later build failure does not lose the
       # fetched/built dependencies. The next run can then restore them.
-      - name: Cache Conan packages (save before build)
-        uses: actions/cache/save@v4
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "${{ matrix.build-type }}"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
@@ -126,14 +127,13 @@ jobs:
         with:
           conan-version: ${{ env.CONAN_VERSION }}
 
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
-            conan-${{ runner.os }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "${{ matrix.build-type }}"
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DCMAKE_CXX_STANDARD=17
@@ -141,11 +141,13 @@ jobs:
       # Save the cache immediately after dependency provisioning but before
       # building the project, so that a later build failure does not lose the
       # fetched/built dependencies. The next run can then restore them.
-      - name: Cache Conan packages (save before build)
-        uses: actions/cache/save@v4
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "${{ matrix.build-type }}"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(sysctl -n hw.ncpu)
@@ -175,14 +177,13 @@ jobs:
         with:
           conan-version: ${{ env.CONAN_VERSION }}
 
-      - name: Cache Conan packages (restore)
-        uses: actions/cache/restore@v4
+      - name: Restore Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-
-            conan-${{ runner.os }}-
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: restore
+          cache-suffix: "${{ matrix.build-type }}"
 
       # Windows builds are otherwise surprisingly sequential: OpenSSL is built
       # with nmake (no -j) and project-level /m parallelism is disabled by
@@ -206,11 +207,13 @@ jobs:
       # Save the cache immediately after dependency provisioning but before
       # building the project, so that a later build failure does not lose the
       # fetched/built dependencies. The next run can then restore them.
-      - name: Cache Conan packages (save before build)
-        uses: actions/cache/save@v4
+      - name: Save Conan packages
+        uses: ./.github/actions/setup-conan
         with:
-          path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ matrix.build-type }}-conan-${{ env.CONAN_VERSION }}-${{ hashFiles('conanfile.py') }}
+          conan-version: ${{ env.CONAN_VERSION }}
+          install: "false"
+          cache-mode: save
+          cache-suffix: "${{ matrix.build-type }}"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }}

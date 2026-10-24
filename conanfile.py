@@ -28,6 +28,7 @@ class LibkeepassConan(ConanFile):
         "COPYING",
         "README.md",
         "cmake/*",
+        "capi/*",
         "cli/*",
         "src/*",
         "test/*",

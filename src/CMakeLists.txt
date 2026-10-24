@@ -14,6 +14,13 @@ find_package(argon2 REQUIRED)
 FILE(GLOB_RECURSE headers include/libkeepass/*.hh)
 FILE(GLOB_RECURSE sources *.cc)
 
+if (NOT LIBKEEPASS_COMPONENT_KDB)
+    list(FILTER sources EXCLUDE REGEX "/kdb_[^/]*\\.cc$")
+endif()
+if (NOT LIBKEEPASS_COMPONENT_KDBX)
+    list(FILTER sources EXCLUDE REGEX "/kdbx_[^/]*\\.cc$")
+endif()
+
 # The library is shared by default; set LIBKEEPASS_BUILD_SHARED=OFF for a
 # static library (used by the Conan recipe options).
 option(LIBKEEPASS_BUILD_SHARED "Build libkeepass as a shared library" ON)
@@ -41,6 +48,12 @@ if (LIBKEEPASS_HAS_AES_NI)
             COMPILE_FLAGS "-maes")
 endif()
 target_compile_features(libkeepass PUBLIC cxx_std_17)
+if (LIBKEEPASS_COMPONENT_KDB)
+    target_compile_definitions(libkeepass PUBLIC LIBKEEPASS_WITH_KDB=1)
+endif()
+if (LIBKEEPASS_COMPONENT_KDBX)
+    target_compile_definitions(libkeepass PUBLIC LIBKEEPASS_WITH_KDBX=1)
+endif()
 target_include_directories(libkeepass
         SYSTEM PUBLIC
         "$<BUILD_INTERFACE:${OpenSSL_INCLUDES};${ZLIB_INCLUDE_DIRS};${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -55,6 +68,16 @@ else()
     target_link_libraries(libkeepass PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto pugixml::pugixml argon2::argon2)
 endif()
 add_library(kruempelmann::libkeepass ALIAS libkeepass)
+
+# 0.x has a single ABI generation (SOVERSION 0). The full version is kept for
+# packaging and diagnostics; the policy and 1.0 transition are documented in
+# docs/abi-policy.md.
+if (NOT DEFINED LIBKEEPASS_VERSION)
+    set(LIBKEEPASS_VERSION ${PROJECT_VERSION})
+endif()
+set_target_properties(libkeepass PROPERTIES
+        VERSION ${LIBKEEPASS_VERSION}
+        SOVERSION 0)
 INSTALL(TARGETS libkeepass
         EXPORT libkeepass_targets
         LIBRARY DESTINATION lib

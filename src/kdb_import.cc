@@ -31,6 +31,7 @@
 
 #include "kdb_internal.hh"
 #include "libkeepass/cipher.hh"
+#include "libkeepass/cipher_registry.hh"
 #include "libkeepass/database.hh"
 #include "libkeepass/detail/constant_time.hh"
 #include "libkeepass/detail/secure_io.hh"
@@ -70,11 +71,11 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   switch (header.version & 0xffffff00) {
   // Version 1.
   case 0x00010000:
-    throw FormatError("KDB version 1 is not supported.");
+    throw UnsupportedFeatureError("KDB version 1 is not supported.");
     break;
   // Version 2.
   case 0x00020000:
-    throw FormatError("KDB version 2 is not supported.");
+    throw UnsupportedFeatureError("KDB version 2 is not supported.");
     break;
   // Version 3.
   case 0x00030000:
@@ -107,18 +108,15 @@ std::unique_ptr<Database> KdbFile::Import(std::istream& src, const Key& key) {
   EVP_MD_CTX_free(mdctx);
   secure_zero(transformed_key.data(), transformed_key.size());
 
-  std::unique_ptr<Cipher<16>> cipher;
-  if (header.flags & kKdbFlagRijndael) {
+  if (header.flags & kKdbFlagRijndael)
     db->set_cipher(Database::Cipher::kAes);
-
-    cipher.reset(new AesCipher(final_key.data(), header.init_vector));
-  } else if (header.flags & kKdbFlagTwofish) {
+  else if (header.flags & kKdbFlagTwofish)
     db->set_cipher(Database::Cipher::kTwofish);
+  else
+    throw UnsupportedFeatureError("Unknown cipher in KDB.");
 
-    cipher.reset(new TwofishCipher(final_key.data(), header.init_vector));
-  } else {
-    throw FormatError("Unknown cipher in KDB.");
-  }
+  std::unique_ptr<Cipher<16>> cipher =
+      CipherRegistry::Instance().Create(db->cipher(), final_key.data(), header.init_vector);
   secure_zero(final_key.data(), final_key.size());
 
   // Decrypt the content.

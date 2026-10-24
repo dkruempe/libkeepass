@@ -1,0 +1,13 @@
+{
+  "name": "libkeepass",
+  "version-semver": "0.3.0",
+  "description": "C++17 library for importing and exporting KeePass password databases",
+  "homepage": "https://github.com/dkruempe/libkeepass",
+  "license": "GPL-3.0-only",
+  "dependencies": [
+    "argon2",
+    "openssl",
+    "pugixml",
+    "zlib"
+  ]
+}

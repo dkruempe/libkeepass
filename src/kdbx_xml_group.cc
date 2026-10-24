@@ -37,7 +37,7 @@ std::shared_ptr<Group> KdbxXml::ParseGroup(const pugi::xml_node& group_node,
   // Budget the nesting depth and the total number of groups so that hostile
   // documents cannot force unbounded recursion or allocations.
   if (depth > resource_limits_.max_xml_depth)
-    throw FormatError("Group nesting exceeds the configured depth limit.");
+    throw ResourceLimitError("Group nesting exceeds the configured depth limit.");
   if (groups_seen_ >= resource_limits_.max_groups)
     throw FormatError("Too many groups in KDBX XML.");
   ++groups_seen_;

@@ -25,6 +25,7 @@
 
 #include "libkeepass/detail/constants.hh"
 #include "libkeepass/exception.hh"
+#include "libkeepass/kdf_registry.hh"
 #include "libkeepass/variantdictionary.hh"
 
 namespace keepass {
@@ -77,7 +78,7 @@ void KdbxKdf::ParseParameters(std::istream& field, Database& db) {
     db.set_argon2_parallelism(vdict.GetUInt32("P"));
     db.set_argon2_version(vdict.GetUInt32("V"));
   } else {
-    throw FormatError("Unknown KDF in KDBX 4 database.");
+    throw UnsupportedFeatureError("Unknown KDF in KDBX 4 database.");
   }
 }
 
@@ -133,17 +134,7 @@ void KdbxKdf::WriteParameters(std::ostream& dst, const Database& db) {
 
 SecureBuffer<32> KdbxKdf::Transform(const Key& key, const Database& db,
                                     Key::SubKeyResolution resolution) {
-  switch (db.kdf()) {
-  case Database::Kdf::kAes:
-    return key.Transform(db.transform_seed(), db.transform_rounds(), resolution);
-  case Database::Kdf::kArgon2d:
-  case Database::Kdf::kArgon2id:
-    return key.TransformArgon2(db.kdf() == Database::Kdf::kArgon2d ? Key::Kdf::kArgon2d
-                                                                   : Key::Kdf::kArgon2id,
-                               db.argon2_salt(), db.argon2_iterations(), db.argon2_memory(),
-                               db.argon2_parallelism(), db.argon2_version(), resolution);
-  }
-  return SecureBuffer<32>{};
+  return KdfRegistry::Instance().Transform(db.kdf(), key, db, resolution);
 }
 
 } // namespace keepass

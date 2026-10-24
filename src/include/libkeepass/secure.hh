@@ -339,6 +339,9 @@ public:
   /// Replaces the value with a std::string.
   void assign(const std::string& str);
 
+  /// Replaces the value with a byte range of explicitly known length.
+  void assign(const char* data, std::size_t size);
+
 private:
   void Allocate(const char* data, std::size_t size);
   void Release() noexcept;

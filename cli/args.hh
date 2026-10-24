@@ -58,7 +58,8 @@ struct Options {
   std::string url;
   std::string notes;
 
-  int generate = 0; // --generate[=n]; 0 = disabled, -1 = invalid
+  int generate = 0;       // --generate[=n]; 0 = disabled, -1 = invalid
+  int history_limit = -1; // --keep <n> for purge; -1 = clear all history
 
   bool password_stdin = false;
   bool new_password_stdin = false;
@@ -73,6 +74,7 @@ struct Options {
   bool with_passwords = false;
   bool include_attachments = false; // --include-attachments (JSON output)
   bool all = false;                 // --all (history/purge scope)
+  bool totp_code = false;           // --code (generate TOTP codes)
   bool verbose = false;
   bool help = false;
   bool show_version = false;
@@ -83,7 +85,7 @@ struct Options {
 /// --new-password-file, --new-password-stdin, --keyfile, --format, --output,
 /// --export, --with-passwords, --search, --regex, --group, --to, --kdf,
 /// --force, --generate, --audit, --title, --user, --pass, --url, --notes,
-/// --verbose, --help, --version, both with '=' and as separate
+/// --all, --keep, --code, --verbose, --help, --version, both with '=' and as separate
 /// value arguments), combined short options (-p, -k) and the "--" separator.
 /// The first positional argument may be the "add", "update", "rm", "groups",
 /// "create", "passwd" or "move" command; the following positional argument is

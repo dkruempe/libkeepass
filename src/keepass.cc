@@ -25,9 +25,12 @@
 #include <sstream>
 
 #include "libkeepass/detail/constants.hh"
+#include "libkeepass/detail/format_codec.hh"
+#include "libkeepass/detail/mapped_file.hh"
 #include "libkeepass/exception.hh"
-#include "libkeepass/kdb.hh"
+#ifdef LIBKEEPASS_WITH_KDBX
 #include "libkeepass/kdbx_kdf.hh"
+#endif
 #include "libkeepass/metadata.hh"
 #include "libkeepass/random.hh"
 
@@ -50,10 +53,27 @@ KeePass::KeePass(const std::string& password, const std::string& keyfile)
     : key_(password, keyfile) {}
 
 std::unique_ptr<Database> KeePass::Open(const std::string& path) {
+  // Map the file read-only instead of copying it through an ifstream buffer.
+  // The importer only needs a seekable view for signature sniffing and the
+  // header rewind, which the mapped stream buffer provides for free.
+  try {
+    detail::MappedFile file(path);
+    if (!file.empty()) {
+      detail::mapped_istreambuf buffer(file.data(), file.size());
+      std::istream src(&buffer);
+      return Open(src);
+    }
+  } catch (const FileNotFoundError&) {
+    throw;
+  } catch (const IoError& error) {
+    // Mapping can be unavailable (32-bit address space, restrictive
+    // sandboxes, special files). Fall back to a regular buffered stream.
+    (void)error;
+  }
+
   std::ifstream src(path, std::ios::in | std::ios::binary);
   if (!src.is_open())
     throw FileNotFoundError();
-
   return Open(src);
 }
 
@@ -118,15 +138,12 @@ std::unique_ptr<Database> KeePass::Open(const uint8_t* data, std::size_t size) {
 }
 
 std::unique_ptr<Database> KeePass::Import(std::istream& src, Format format) {
-  switch (format) {
-  case Format::kKdb:
-    return KdbFile::Import(src, key_);
-  case Format::kKdbx3:
-  case Format::kKdbx4:
-    return kdbx_file_.Import(src, key_);
-  default:
+  if (format == Format::kAuto)
     throw FormatError("Unknown KeePass database format.");
-  }
+  detail::FormatCodecOptions options;
+  return detail::FormatCodecRegistry::Instance()
+      .Create(static_cast<int>(format), options)
+      ->Import(src, key_);
 }
 
 void KeePass::Save(const std::string& path, const Database& db) {
@@ -137,54 +154,42 @@ void KeePass::Save(const std::string& path, const Database& db) {
   Save(dst, db, ResolveOutputFormat(path, db));
 }
 
-void KeePass::Save(std::ostream& dst, const Database& db) {
-  if (format_ != Format::kAuto) {
-    Save(dst, db, format_);
-    return;
-  }
+KeePass::Format KeePass::ResolveStreamFormat(const Database& db) const {
+  if (format_ != Format::kAuto)
+    return format_;
 
-  if (db.kdf() != Database::Kdf::kAes || db.cipher() != Database::Cipher::kAes) {
-    Save(dst, db, Format::kKdbx4);
-  } else {
-    Save(dst, db, Format::kKdbx3);
-  }
+  // KDBX 3 only supports AES + AES-KDF; everything else needs KDBX 4.
+  if (db.kdf() != Database::Kdf::kAes || db.cipher() != Database::Cipher::kAes)
+    return Format::kKdbx4;
+  return Format::kKdbx3;
+}
+
+void KeePass::Save(std::ostream& dst, const Database& db) {
+  SaveWithOptions(dst, db, key_, ResolveStreamFormat(db), true);
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db, const Key& key) {
-  Key old_key = key_;
-  const bool old_use_cached_key = kdbx_file_.use_cached_key();
-  key_ = key;
   // An explicitly supplied key must take precedence over a transformed key
   // cached on the database (for example after Create or Import); otherwise
   // SaveAs would silently keep encrypting with the old key.
-  kdbx_file_.set_use_cached_key(false);
-  try {
-    Save(dst, db);
-  } catch (...) {
-    kdbx_file_.set_use_cached_key(old_use_cached_key);
-    key_ = old_key;
-    throw;
-  }
-  kdbx_file_.set_use_cached_key(old_use_cached_key);
-  key_ = old_key;
+  SaveWithOptions(dst, db, key, ResolveStreamFormat(db), false);
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db, Format format) {
-  switch (format) {
-  case Format::kKdb:
-    KdbFile::Export(dst, db, key_);
-    break;
-  case Format::kKdbx3:
-    kdbx_file_.set_write_kdbx4(false);
-    kdbx_file_.Export(dst, db, key_);
-    break;
-  case Format::kKdbx4:
-    kdbx_file_.set_write_kdbx4(true);
-    kdbx_file_.Export(dst, db, key_);
-    break;
-  default:
-    throw FormatError("Unsupported output format.");
-  }
+  SaveWithOptions(dst, db, key_, format, true);
+}
+
+void KeePass::SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
+                              bool use_cached_key) {
+  if (format == Format::kAuto)
+    throw UnsupportedFeatureError("Unsupported output format.");
+
+  detail::FormatCodecOptions options;
+  options.write_kdbx4 = format == Format::kKdbx4;
+  options.use_cached_key = use_cached_key;
+  detail::FormatCodecRegistry::Instance()
+      .Create(static_cast<int>(format), options)
+      ->Export(dst, db, key);
 }
 
 KeePass::Format KeePass::ResolveOutputFormat(const std::string& path, const Database& db) const {
@@ -261,10 +266,12 @@ std::unique_ptr<Database> KeePass::Create(const std::string& password, Format fo
   // the save was constructed without a key. KDB (1.x) export nevertheless
   // requires an explicit key because the legacy format derives its key
   // differently.
+#ifdef LIBKEEPASS_WITH_KDBX
   if (!password.empty() && format != Format::kKdb) {
     const Key key(password);
     db->set_transformed_key(KdbxKdf::Transform(key, *db, Key::SubKeyResolution::kHashSubKeys));
   }
+#endif
 
   return db;
 }

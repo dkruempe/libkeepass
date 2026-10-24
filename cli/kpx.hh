@@ -34,7 +34,7 @@ namespace kpx {
 extern const char* const kVersion;
 
 /// Stable process exit codes. Command/usage validation failures use kError;
-/// exceptions are categorized by type in kpx_main.
+/// exceptions are categorized by keepass::ErrorCategory in kpx_main.
 enum class ExitCode : int {
   kSuccess = 0,
   kError = 1,

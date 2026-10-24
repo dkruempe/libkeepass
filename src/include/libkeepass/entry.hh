@@ -24,6 +24,7 @@
 
 #pragma once
 #include <array>
+#include <cstddef>
 #include <ctime>
 #include <map>
 #include <memory>
@@ -35,6 +36,7 @@
 #include "libkeepass/export.hh"
 #include "secure.hh"
 #include "security.hh"
+#include "totp.hh"
 #include "util.hh"
 
 namespace keepass {
@@ -450,11 +452,42 @@ public:
   /// Removes the binary property with the given name.
   void delete_binary_property(const std::string& name);
 
+  /// Returns the TOTP parameters stored in the `otp`/`TOTP Seed`/`TOTP Settings`
+  /// custom fields, if present and valid.
+  std::optional<TotpConfig> totp() const;
+
+  /// Generates the current TOTP code from the entry's custom fields.
+  /**
+   * @param time Unix time to use; 0 means the current system time.
+   * @return The code, or an empty string if no valid TOTP seed is present.
+   */
+  std::string totp_code(std::time_t time = 0) const;
+
   /// Saves a copy of the current state into the entry history.
   void save_history();
 
   /// Clears the entry history.
   void delete_history();
+
+  /// Removes the oldest history items, keeping at most @p max_items.
+  /**
+   * History is ordered oldest first. A @p max_items value of zero clears the
+   * history entirely; use a large value (for example
+   * `std::numeric_limits<std::size_t>::max()`) to keep everything.
+   */
+  void delete_old_history(std::size_t max_items);
+
+  /// Removes the oldest history items until at most @p max_items remain and
+  /// the estimated serialized history size is at most @p max_bytes.
+  /**
+   * The size estimate is based on each history item's JSON representation and
+   * is intended as a practical bound, not a byte-exact copy of KeePass's own
+   * accounting. Pass a large value to disable the byte limit.
+   */
+  void delete_old_history(std::size_t max_items, std::size_t max_bytes);
+
+  /// Alias for @ref delete_old_history(std::size_t) matching the KeePass API.
+  void DeleteOldHistory(std::size_t max_items) { delete_old_history(max_items); }
 
   /// Updates the last access time (and optionally the modification time).
   void touch(bool modify = false);

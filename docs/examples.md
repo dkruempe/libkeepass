@@ -93,11 +93,65 @@ db->EmptyRecycleBin();
 
 entry->save_history();          // snapshot the current field values
 entry->set_notes(protect<secure_string>(secure_string("changed"), false));
+entry->delete_old_history(10);  // keep only the 10 newest versions
 entry->delete_history();        // clear all previous versions
 ```
 
 Entry history is preserved by import/export but hidden from the `kpx` print and
-audit output; use `Entry::history()` when you need it.
+audit output; use `Entry::history()` when you need it. `Database::DeleteOldHistory()`
+applies the `HistoryMaxItems`/`HistoryMaxSize` metadata limits to every entry,
+and `kpx purge --keep <n>` exposes the same policy on the command line.
+
+## TOTP custom fields
+
+`Entry::totp()` parses the KeePass field variants (`otp`, `TOTP Seed`,
+`TOTP Settings`, including complete `otpauth://totp/...` URIs), and
+`Totp::Generate()` produces the current code:
+
+```cpp
+if (auto config = entry->totp()) {
+    std::string code = Totp::Generate(*config);
+    uint32_t remaining = Totp::SecondsRemaining(*config);
+    std::cout << code << " (" << remaining << "s)\n";
+}
+```
+
+`kpx otp --code` uses the same helpers.
+
+## Incremental backups
+
+`Database::DeltaSince()` matches entries by UUID and compares their canonical
+JSON representation, so a backup tool can export only changed records:
+
+```cpp
+DatabaseDelta delta = current->DeltaSince(*previous);
+if (!delta.empty()) {
+    std::ofstream out("delta.json");
+    out << delta.ToJson();
+}
+```
+
+`added`/`modified` carry the current entry object plus its group path; deleted
+entries are reported by UUID and path.
+
+## CSV layouts
+
+`Database::ToCsv()` supports four schemas: `kCsv` (no passwords),
+`kCsvWithPasswords`, `kCsvWithCustomFields` (appends `CustomFields`) and
+`kCsvKeePass2` (`Account,Login Name,Password,Web Site,Comments`).
+
+## Lazy attachments
+
+KDBX 4 attachments are imported as views into one shared secure buffer.
+`Binary::data()` materializes a single payload on first access, while
+`Binary::WriteTo()` streams it without copying during export:
+
+```cpp
+if (auto binary = entry->FindAttachment("large.bin")) {
+    std::ofstream out("large.bin", std::ios::binary);
+    binary->WriteTo(out);
+}
+```
 
 ## Streams and resource limits
 

@@ -1338,6 +1338,21 @@ TEST_F(KpxTest, PurgeHistory) {
   std::remove(path.c_str());
 }
 
+TEST_F(KpxTest, PurgeHistoryKeepNewest) {
+  const std::string path = CreateHistoryFixture("cli-purge-keep.kdbx");
+
+  CliResult trim =
+      RunCli({"-p", "password", "--title", "mail, \"quoted\"", "--keep", "0", "purge", path});
+  EXPECT_EQ(0, trim.code);
+  EXPECT_NE(std::string::npos, trim.out.find("trimmed history of 1 entry"));
+  EXPECT_NE(std::string::npos, trim.out.find("at most 0 versions"));
+
+  CliResult history = RunCli({"-p", "password", "history", path});
+  EXPECT_EQ(0, history.code);
+  EXPECT_EQ(std::string::npos, history.out.find("history entry"));
+  std::remove(path.c_str());
+}
+
 TEST_F(KpxTest, PurgeRequiresSelector) {
   const std::string path = CreateHistoryFixture("cli-purge-selector.kdbx");
   CliResult result = RunCli({"-p", "password", "purge", path});
@@ -1362,6 +1377,16 @@ TEST_F(KpxTest, OtpPrintsSeeds) {
   CliResult csv = RunCli({"-p", "password", "-f", "csv", "otp", path});
   EXPECT_EQ(0, csv.code);
   EXPECT_EQ("Path,Seed,Settings\n", csv.out.substr(0, 19));
+
+  CliResult code = RunCli({"-p", "password", "--code", "otp", path});
+  EXPECT_EQ(0, code.code);
+  EXPECT_NE(std::string::npos, code.out.find(" => "));
+  EXPECT_NE(std::string::npos, code.out.find("s)"));
+
+  CliResult code_json = RunCli({"-p", "password", "-f", "json", "--code", "otp", path});
+  EXPECT_EQ(0, code_json.code);
+  EXPECT_NE(std::string::npos, code_json.out.find("\"code\":\""));
+  EXPECT_NE(std::string::npos, code_json.out.find("\"remaining\":"));
   std::remove(path.c_str());
 }
 

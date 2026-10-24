@@ -30,6 +30,7 @@
 
 #include "kdb_internal.hh"
 #include "libkeepass/cipher.hh"
+#include "libkeepass/cipher_registry.hh"
 #include "libkeepass/database.hh"
 #include "libkeepass/detail/secure_io.hh"
 #include "libkeepass/entry.hh"
@@ -75,18 +76,8 @@ void KdbFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   EVP_MD_CTX_free(mdctx);
   secure_zero(transformed_key.data(), transformed_key.size());
 
-  std::unique_ptr<Cipher<16>> cipher;
-  switch (db.cipher()) {
-  case Database::Cipher::kAes:
-    cipher.reset(new AesCipher(final_key.data(), db.init_vector()));
-    break;
-  case Database::Cipher::kTwofish:
-    cipher.reset(new TwofishCipher(final_key.data(), db.init_vector()));
-    break;
-  default:
-    assert(false);
-    break;
-  }
+  std::unique_ptr<Cipher<16>> cipher =
+      CipherRegistry::Instance().Create(db.cipher(), final_key.data(), db.init_vector());
   secure_zero(final_key.data(), final_key.size());
 
   // Write unencrypted content to temporary stream.

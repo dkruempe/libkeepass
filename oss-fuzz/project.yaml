@@ -1,0 +1,11 @@
+homepage: "https://github.com/dkruempe/libkeepass"
+language: c++
+primary_contact: "dkruempe@gmail.com"
+auto_ccs:
+  - "dkruempe@gmail.com"
+main_repo: "https://github.com/dkruempe/libkeepass.git"
+sanitizers:
+  - address
+  - undefined
+architectures:
+  - x86_64

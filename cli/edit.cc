@@ -321,12 +321,25 @@ int RunPurge(const Options& opt, keepass::KeePass& keeper, keepass::Database* db
   for (const auto& entry : entries) {
     if (entry->history().empty())
       continue;
-    entry->delete_history();
+
+    if (opt.history_limit >= 0)
+      entry->delete_old_history(static_cast<std::size_t>(opt.history_limit));
+    else
+      entry->delete_history();
+
+    // With --keep the entry may still have history; it still counts as
+    // processed so the summary reflects the selected entries.
     ++purged;
   }
 
   keeper.Save(opt.input, *db);
-  std::cout << "purged history of " << purged << " entr" << (purged == 1 ? "y" : "ies") << "\n";
+  if (opt.history_limit >= 0) {
+    std::cout << "trimmed history of " << purged << " entr" << (purged == 1 ? "y" : "ies")
+              << " to at most " << opt.history_limit << " version"
+              << (opt.history_limit == 1 ? "" : "s") << "\n";
+  } else {
+    std::cout << "purged history of " << purged << " entr" << (purged == 1 ? "y" : "ies") << "\n";
+  }
   return 0;
 }
 

@@ -32,7 +32,6 @@
 #include <vector>
 
 #include "database.hh"
-#include "kdbx.hh"
 #include "key.hh"
 #include "libkeepass/export.hh"
 
@@ -217,11 +216,13 @@ public:
 private:
   std::unique_ptr<Database> Import(std::istream& src, Format format);
   void Save(std::ostream& dst, const Database& db, Format format);
+  static void SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
+                              bool use_cached_key);
   Format ResolveOutputFormat(const std::string& path, const Database& db) const;
+  Format ResolveStreamFormat(const Database& db) const;
 
   Key key_;
   Format format_ = Format::kAuto;
-  KdbxFile kdbx_file_;
 };
 
 } // namespace keepass

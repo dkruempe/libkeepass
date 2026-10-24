@@ -31,12 +31,16 @@
 #include <gtest/gtest.h>
 
 #include "config.hh"
+#include "libkeepass/cipher_registry.hh"
 #include "libkeepass/database.hh"
+#include "libkeepass/detail/format_codec.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/group.hh"
+#include "libkeepass/kdf_registry.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
+#include "libkeepass/metadata.hh"
 #include "libkeepass/visitor.hh"
 
 using namespace keepass;
@@ -240,6 +244,45 @@ TEST_F(KeePassTest, OpenFromByteRange) {
 TEST_F(KeePassTest, OpenMissingFileThrows) {
   KeePass kp("password");
   EXPECT_THROW(kp.Open(GetTmpPath("does-not-exist.kdbx")), FileNotFoundError);
+}
+
+TEST_F(KeePassTest, RegistriesExposeBuiltins) {
+  EXPECT_TRUE(CipherRegistry::Instance().Contains(Database::Cipher::kAes));
+  EXPECT_TRUE(CipherRegistry::Instance().Contains(Database::Cipher::kTwofish));
+  EXPECT_FALSE(CipherRegistry::Instance().Contains(Database::Cipher::kChaCha20));
+
+  EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kAes));
+  EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kArgon2d));
+  EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kArgon2id));
+
+  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdb));
+  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdbx3));
+  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdbx4));
+}
+
+TEST_F(KeePassTest, ErrorCategoriesAndOffsets) {
+  const PasswordError auth;
+  EXPECT_EQ(ErrorCategory::kAuthentication, auth.category());
+  EXPECT_STREQ("authentication", ErrorCategoryName(auth.category()));
+
+  const FormatError corrupt("corrupt");
+  EXPECT_EQ(ErrorCategory::kFormat, corrupt.category());
+  EXPECT_FALSE(corrupt.offset());
+
+  const FormatError located("corrupt", 42);
+  ASSERT_TRUE(located.offset().has_value());
+  if (located.offset().has_value())
+    EXPECT_EQ(42U, *located.offset());
+
+  const UnsupportedFeatureError unsupported("unsupported");
+  EXPECT_EQ(ErrorCategory::kUnsupported, unsupported.category());
+
+  const ResourceLimitError budget("budget");
+  EXPECT_EQ(ErrorCategory::kResourceLimit, budget.category());
+
+  const IoError io("io");
+  EXPECT_EQ(ErrorCategory::kIo, io.category());
+  EXPECT_EQ(ErrorCategory::kIo, FileNotFoundError().category());
 }
 
 TEST_F(KeePassTest, SaveAndReopenKdbx4) {
@@ -683,6 +726,56 @@ TEST_F(KeePassTest, DeleteGroupRemovesSubtree) {
   EXPECT_EQ(1U, db->GroupCount());
 }
 
+TEST_F(KeePassTest, CsvExtraFormats) {
+  std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
+  auto entry = db->FindEntry("Alpha");
+  ASSERT_TRUE(entry);
+  entry->set_custom_property("otp", "JBSWY3DPEHPK3PXP");
+
+  const std::string custom = db->ToCsv(CsvFormat::kCsvWithCustomFields);
+  EXPECT_EQ(0U, custom.find("Group,Title,Username,Password,Url,Notes,CustomFields\n"));
+  EXPECT_NE(std::string::npos, custom.find("otp=JBSWY3DPEHPK3PXP"));
+
+  const std::string keepass2 = db->ToCsv(CsvFormat::kCsvKeePass2);
+  EXPECT_EQ(0U, keepass2.find("Account,Login Name,Password,Web Site,Comments\n"));
+  EXPECT_NE(std::string::npos, keepass2.find("Alpha,alice,secret,https://alpha.example"));
+}
+
+TEST_F(KeePassTest, DeltaSinceReportsAddedModifiedDeleted) {
+  std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
+  KeePass keeper(Key("password"));
+
+  std::stringstream saved;
+  keeper.Save(saved, *db);
+  std::istringstream source(saved.str());
+  std::unique_ptr<Database> previous = keeper.Open(source);
+  ASSERT_TRUE(previous);
+
+  EXPECT_TRUE(db->DeltaSince(*previous).empty());
+
+  auto alpha = db->FindEntry("Alpha");
+  ASSERT_TRUE(alpha);
+  alpha->set_notes(protect<secure_string>(secure_string("changed"), false));
+
+  auto added = Database::NewEntry("DeltaEntry");
+  Database::AddEntry(db->root(), added);
+
+  auto beta = db->FindEntry("Beta");
+  ASSERT_TRUE(beta);
+  db->DeleteEntry(beta->uuid());
+
+  const DatabaseDelta delta = db->DeltaSince(*previous);
+  EXPECT_EQ(1U, delta.added.size());
+  EXPECT_EQ("DeltaEntry", delta.added[0].entry->title()->str());
+  EXPECT_EQ(1U, delta.modified.size());
+  EXPECT_EQ("Alpha", delta.modified[0].entry->title()->str());
+  EXPECT_EQ(1U, delta.deleted.size());
+  EXPECT_EQ(1U, delta.deleted_paths.size());
+  EXPECT_NE(std::string::npos, delta.ToJson().find("\"added\""));
+  EXPECT_NE(std::string::npos, delta.ToJson().find("\"modified\""));
+  EXPECT_NE(std::string::npos, delta.ToJson().find("\"deleted\""));
+}
+
 TEST_F(KeePassTest, ToJsonAndVisit) {
   std::unique_ptr<Database> db = MakeDatabase(Database::Cipher::kAes, Database::Kdf::kAes, true);
 
@@ -785,6 +878,24 @@ TEST_F(KeePassTest, EntryHistoryAndTouch) {
 
   entry->delete_history();
   EXPECT_EQ(0U, entry->history().size());
+
+  // Keep only the newest versions; history is ordered oldest first.
+  for (int i = 0; i < 5; ++i) {
+    entry->set_title(protect<secure_string>(secure_string("v" + std::to_string(i)), true));
+    entry->save_history();
+  }
+  ASSERT_EQ(5U, entry->history().size());
+  entry->delete_old_history(2);
+  ASSERT_EQ(2U, entry->history().size());
+  EXPECT_EQ("v3", entry->history()[0]->title()->str());
+  EXPECT_EQ("v4", entry->history()[1]->title()->str());
+
+  // A metadata policy can be applied to every entry in the database.
+  db->set_meta(std::make_shared<Metadata>());
+  db->meta()->set_history_max_items(1);
+  db->DeleteOldHistory();
+  ASSERT_EQ(1U, entry->history().size());
+  EXPECT_EQ("v4", entry->history()[0]->title()->str());
 
   const std::time_t before_access = entry->access_time();
   entry->touch();

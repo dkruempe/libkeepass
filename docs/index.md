@@ -30,6 +30,16 @@ pieces fit together*.
   categories and exit codes.
 - [Migration 0.2 → 0.3](migration-0.2-to-0.3.md) — the `secure_string`
   migration, C++17 baseline and other breaking changes.
+- [Object ownership and aliasing](ownership.md) — who owns the database tree,
+  parent/child weak references, moving, deleting and trashing.
+- [ABI and API stability policy](abi-policy.md) — versioning, shared-library
+  ABI expectations, deprecation and the route to a stable 1.0 surface.
+- [Extension points](extensions.md) — registering format codecs, block
+  ciphers and KDFs.
+- [C ABI](c-api.md) — the stable C surface for language bindings
+  ([header](../capi/include/libkeepass-c.h)), plus the
+  [OSS-Fuzz recipe](../oss-fuzz/README.md) and
+  [WASM demo](../wasm/README.md).
 
 ## High-level flow
 
@@ -62,7 +72,14 @@ src/
 ├── cipher_*.cc           block/stream ciphers (AES, Twofish, Salsa20, ChaCha20)
 ├── entry.cc              Entry, Attachment, AutoType, history
 ├── group.cc              Group tree and ToJson() serialization
+├── binary.cc             materialized/lazy Binary payload access
+├── binary_source.cc      shared-buffer source for lazy attachments
+├── cipher_registry.cc    registrable block-cipher factories
+├── exception.cc          error categories and exception implementation
+├── format_codec.cc       registrable DatabaseSerializer/format codecs
 ├── io.cc                 endian-aware read/write helpers (consume/conserve)
+├── kdf_registry.cc       registrable KDF factories
+├── mapped_file.cc        read-only mmap/CreateFileMapping input for Open(path)
 ├── kdb_fields.cc         KDB 1.x header/field codec
 ├── kdb_import.cc         legacy KDB 1.x importer
 ├── kdb_export.cc         legacy KDB 1.x exporter
@@ -73,9 +90,13 @@ src/
 ├── metadata.cc           Metadata (database meta, binaries, icons, custom data)
 ├── random.cc             inner random stream obfuscator (Salsa20 / ChaCha20)
 ├── stream.cc             streambufs: hashed blocks, HMAC blocks, gzip
+├── totp.cc               KeePass TOTP field parsing and code generation
 ├── util.cc               time formatting, UUID generation
 └── variantdictionary.cc  KDBX 4 KDF parameter dictionary
 ```
+
+The optional C ABI wrapper (`libkeepass-c`) is in `capi/`; the browser demo and
+fuzzing recipes are in `wasm/` and `oss-fuzz/`.
 
 Key entry points:
 

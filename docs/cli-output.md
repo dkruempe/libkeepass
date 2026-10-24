@@ -76,18 +76,24 @@ CSV header: `Path,Title,Username,ModificationTime`
 
 ## `otp`
 
-Text: `<path>: <seed> [<settings>]`.
+Text: `<path>: <seed> [<settings>]`. With `--code`:
+`<path>: <seed> [<settings>] => <code> (<seconds>s)`.
 
 JSON:
 
 ```json
-[{"path": "/root/Internet/mail", "seed": "JBSWY3DPEHPK3PXP", "settings": "30;6"}]
+[{"path": "/root/Internet/mail", "seed": "JBSWY3DPEHPK3PXP", "settings": "30;6",
+  "code": "123456", "remaining": 17}]
 ```
 
-CSV header: `Path,Seed,Settings`
+CSV header: `Path,Seed,Settings` (without `--code`), otherwise
+`Path,Seed,Settings,Code,Remaining`.
 
-The command only displays the stored seed; it does not generate one-time
-passwords.
+Without `--code` the command displays the stored seed and settings. With
+`--code` it parses the seed/`otpauth://` URI and emits the current TOTP code
+plus the seconds until it expires. Entries without a valid TOTP configuration
+simply omit the `code`/`remaining` members (JSON) or leave the cells empty
+(CSV).
 
 ## `--audit`
 

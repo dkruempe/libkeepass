@@ -21,6 +21,8 @@
 
 #include <cassert>
 
+#include <openssl/evp.h>
+
 #include "libkeepass/exception.hh"
 
 namespace keepass {

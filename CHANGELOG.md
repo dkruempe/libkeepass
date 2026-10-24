@@ -9,6 +9,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `TotpConfig`/`Totp` (`libkeepass/totp.hh`) parse the KeePass `otp`,
+  `TOTP Seed` and `TOTP Settings` custom fields and complete
+  `otpauth://totp/...` URIs, then generate RFC 6238 codes (Base32 secrets,
+  SHA-1/SHA-256/SHA-512, configurable period/digits). `Entry::totp()`/
+  `Entry::totp_code()` expose the same helpers, and `kpx otp --code` prints the
+  current code and the seconds until it expires.
+- `Entry::delete_old_history()`/`Database::DeleteOldHistory()` apply the
+  `HistoryMaxItems`/`HistoryMaxSize` metadata policy while keeping the newest
+  versions. `kpx purge --keep <n>` exposes this as a trim instead of clearing
+  history.
+- All exceptions now derive from `keepass::Error` and expose a stable
+  `ErrorCategory`; `UnsupportedFeatureError` and `ResourceLimitError` refine
+  `FormatError`, and `FormatError::offset()` can carry the failing byte
+  position.
+- `KeePass::Open(path)` maps the database read-only (`mmap` on POSIX,
+  `CreateFileMapping` on Windows) instead of copying it through an `ifstream`.
+  The stream API is unchanged.
+- `libkeepass/io.hh` exposes the documented `keepass::io` module for the
+  hashed/HMAC/gzip/cipher stream adapters.
+- `docs/ownership.md` and `docs/abi-policy.md` document the object graph
+  ownership contract and the versioning/deprecation policy.
+- An in-tree vcpkg port (`ports/libkeepass/`) makes the library installable
+  through vcpkg overlay/local registries; an optional Homebrew formula is in
+  `Formula/libkeepass.rb`.
+- `libkeepass-c` adds a stable C ABI (`capi/include/libkeepass-c.h`) for FFI
+  consumers, with opaque handles, open/save, JSON/CSV output, entry lookup,
+  simple editing and thread-local error reporting.
+- `CipherRegistry` and `KdfRegistry` make block ciphers and KDFs registrable;
+  the built-in AES/Twofish and AES-KDF/Argon2d/Argon2id implementations
+  register themselves and the codecs resolve through the registries.
+- `detail::FormatCodec`/`FormatCodecRegistry` (aliased as
+  `DatabaseSerializer`) replaces the format `switch` in `KeePass`; new
+  dialects can register a codec factory without changing the unified API.
+- `Database::DeltaSince()`/`DatabaseDelta` provide an incremental backup
+  diff (added/modified/deleted by UUID) with a JSON export.
+- `CsvFormat` gained `kCsvWithCustomFields` and `kCsvKeePass2`.
+- KDBX 4 attachments are lazy: one shared secure buffer holds the inner-header
+  binaries; `Binary::data()` materializes on demand and `Binary::WriteTo()`
+  streams during export.
+- Optional CMake components (`LIBKEEPASS_COMPONENT_KDB`,
+  `LIBKEEPASS_COMPONENT_KDBX`) and component-aware
+  `find_package(libkeepass COMPONENTS ...)` metadata/targets.
+- `oss-fuzz/` contains the OSS-Fuzz project recipe and corpus sync helper;
+  `wasm/` contains the Emscripten C-ABI demo and browser page.
+- Release assets are signed keylessly with Sigstore/cosign, and the CI
+  `setup-conan` action now folds cache restore/save into one reusable action;
+  clang-tidy also runs on a Windows/MSVC build.
+- Variant-dictionary parse errors now carry the failing byte offset via
+  `FormatError::offset()`.
+
 - `kpx` now returns stable exit codes by error category (1 command/usage,
   3 auth, 4 format, 5 I/O) and emits structured JSON errors when `--format
   json` is selected. The schemas for every output format are documented in
@@ -63,6 +113,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Performance
 
+- `KeePass::Open(path)` avoids the read/copy through `std::ifstream` by mapping
+  the file read-only and importing from the mapped view.
+- KDBX4 export writes attachment flags, length and payload directly into the
+  inner-header pipeline instead of copying every attachment through a
+  `std::stringstream`.
+
 - The benchmark now measures export and import round-trips, reports peak RSS
   and supports `--json`; `tools/benchmark_compare.py` gates the CI Release job
   against `test/benchmark_baseline.json` (absolute and export/import-ratio
@@ -75,6 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Tests
 
+- New `test/totp.cc` covers the RFC 6238 SHA-1/SHA-256/SHA-512 vectors, URI
+  and settings parsing, entry-field extraction and remaining-seconds
+  calculation. History trimming is covered in `test/keepass.cc`, and the CLI
+  `--code`/`--keep` paths in `test/kpx.cc`.
 - New `test/concurrency.cc` covers concurrent imports of the same file (eight
   threads), transformed-key isolation between `KeePass` instances, and
   `secure_alloc`/`secure_free` edge cases.
