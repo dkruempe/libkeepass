@@ -158,6 +158,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   returned an empty group while the tree group carried the entries.
   `ParseGroup` now reuses a pooled placeholder when the UUID was already
   resolved.
+- A group UUID that already appeared in the parsed group tree is rejected with
+  `FormatError` instead of reusing the pooled instance. Reusing an ancestor
+  made the object graph cyclic and recursed without bound in
+  `KdbxXml::WriteGroup` (found by `fuzz_xml`); regression test in
+  `test/robustness.cc`.
 
 ### Changed
 
