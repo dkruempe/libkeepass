@@ -28,6 +28,7 @@
 #include <cstdint>
 
 #include "libkeepass/detail/constants.hh"
+#include "libkeepass/kdbx.hh"
 
 /// OpenSSL's HMAC takes the data length as size_t on POSIX but as int on MSVC.
 #ifdef _MSC_VER
@@ -45,6 +46,19 @@ enum class kKdbxInnerHeader : uint8_t {
   kInnerRandomStreamId = 1,
   kInnerRandomStreamKey = 2,
   kBinaries = 3
+};
+
+/// Private state kept out of the public header so the ABI does not depend on
+/// KdbxXml (and through it pugixml).
+struct KdbxFile::Impl {
+  /** Force KDBX 4 output even if the database could be written as KDBX 3. */
+  bool write_kdbx4 = false;
+
+  /** Reuse a transformed key cached on the Database instead of deriving it. */
+  bool use_cached_key = true;
+
+  /** KDBX XML body serializer/deserializer holding all per-operation state. */
+  KdbxXml xml;
 };
 
 } // namespace keepass

@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 #include "libkeepass/detail/constants.hh"
 #include "libkeepass/detail/format_codec.hh"
@@ -45,12 +46,44 @@ using detail::kKdbxSignature1;
 
 } // namespace
 
-KeePass::KeePass() = default;
+/// Private state kept out of the public header so the ABI does not depend on
+/// Key or the format enum's storage.
+struct KeePass::Impl {
+  Key key;
+  Format format = Format::kAuto;
+};
 
-KeePass::KeePass(const Key& key) : key_(key) {}
+KeePass::KeePass() : impl_(std::make_unique<Impl>()) {}
+
+KeePass::KeePass(const Key& key) : impl_(std::make_unique<Impl>()) { impl_->key = key; }
 
 KeePass::KeePass(const std::string& password, const std::string& keyfile)
-    : key_(password, keyfile) {}
+    : impl_(std::make_unique<Impl>()) {
+  impl_->key = Key(password, keyfile);
+}
+
+KeePass::KeePass(const KeePass& other)
+    : impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : std::make_unique<Impl>()) {}
+
+KeePass& KeePass::operator=(const KeePass& other) {
+  if (this != &other)
+    impl_ = other.impl_ ? std::make_unique<Impl>(*other.impl_) : std::make_unique<Impl>();
+  return *this;
+}
+
+KeePass::KeePass(KeePass&& other) : impl_(std::exchange(other.impl_, std::make_unique<Impl>())) {}
+
+KeePass& KeePass::operator=(KeePass&& other) {
+  if (this != &other)
+    impl_ = std::exchange(other.impl_, std::make_unique<Impl>());
+  return *this;
+}
+
+KeePass::~KeePass() = default;
+
+void KeePass::SetFormat(Format format) { impl_->format = format; }
+
+KeePass::Format KeePass::GetFormat() const { return impl_->format; }
 
 std::unique_ptr<Database> KeePass::Open(const std::string& path) {
   // Map the file read-only instead of copying it through an ifstream buffer.
@@ -78,7 +111,7 @@ std::unique_ptr<Database> KeePass::Open(const std::string& path) {
 }
 
 std::unique_ptr<Database> KeePass::Open(std::istream& src) {
-  Format format = format_;
+  Format format = impl_->format;
 
   if (format == Format::kAuto) {
     // Sniff only the 8-byte format signature; seekable streams are then
@@ -143,7 +176,7 @@ std::unique_ptr<Database> KeePass::Import(std::istream& src, Format format) {
   detail::FormatCodecOptions options;
   return detail::FormatCodecRegistry::Instance()
       .Create(static_cast<int>(format), options)
-      ->Import(src, key_);
+      ->Import(src, impl_->key);
 }
 
 void KeePass::Save(const std::string& path, const Database& db) {
@@ -155,8 +188,8 @@ void KeePass::Save(const std::string& path, const Database& db) {
 }
 
 KeePass::Format KeePass::ResolveStreamFormat(const Database& db) const {
-  if (format_ != Format::kAuto)
-    return format_;
+  if (impl_->format != Format::kAuto)
+    return impl_->format;
 
   // KDBX 3 only supports AES + AES-KDF; everything else needs KDBX 4.
   if (db.kdf() != Database::Kdf::kAes || db.cipher() != Database::Cipher::kAes)
@@ -165,7 +198,7 @@ KeePass::Format KeePass::ResolveStreamFormat(const Database& db) const {
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db) {
-  SaveWithOptions(dst, db, key_, ResolveStreamFormat(db), true);
+  SaveWithOptions(dst, db, impl_->key, ResolveStreamFormat(db), true);
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db, const Key& key) {
@@ -176,7 +209,7 @@ void KeePass::Save(std::ostream& dst, const Database& db, const Key& key) {
 }
 
 void KeePass::Save(std::ostream& dst, const Database& db, Format format) {
-  SaveWithOptions(dst, db, key_, format, true);
+  SaveWithOptions(dst, db, impl_->key, format, true);
 }
 
 void KeePass::SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
@@ -193,8 +226,8 @@ void KeePass::SaveWithOptions(std::ostream& dst, const Database& db, const Key& 
 }
 
 KeePass::Format KeePass::ResolveOutputFormat(const std::string& path, const Database& db) const {
-  if (format_ != Format::kAuto)
-    return format_;
+  if (impl_->format != Format::kAuto)
+    return impl_->format;
 
   std::string ext;
   std::string::size_type pos = path.rfind('.');

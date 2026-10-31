@@ -6,7 +6,7 @@ labels: enhancement
 assignees: ''
 ---
 
-<!-- Thanks for suggesting an improvement! Please keep the roadmap (TODO.md)
+<!-- Thanks for suggesting an improvement! Please keep the roadmap (ROADMAP.md)
      and the existing public API in mind when filling out this template. -->
 
 ## Problem / motivation

@@ -40,7 +40,7 @@ namespace detail {
  * truncated while the mapping is alive (the operating system may deliver
  * @c SIGBUS/raise an exception on access to the missing pages).
  */
-class LIBKEEPASS_API MappedFile final {
+class MappedFile final {
 public:
   /// Opens and maps the file at @p path.
   /**
@@ -84,7 +84,7 @@ private:
  * The entire mapping is exposed as the get area, so normal sequential and
  * seekable stream operations avoid any additional copies.
  */
-class LIBKEEPASS_API mapped_istreambuf final : public std::streambuf {
+class mapped_istreambuf final : public std::streambuf {
 public:
   /**
    * @param data Pointer to the first byte.

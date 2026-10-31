@@ -14,7 +14,7 @@ effort first:
 
 Checkboxes track the current state of the roadmap. Before starting an item,
 make sure the corresponding issue/PR exists and is linked so progress is
-visible.
+visible (this repository currently has GitHub issues disabled, so link the PR).
 
 > Quick wins are marked with ⚡.
 
@@ -33,14 +33,15 @@ few hot spots dominate memory and time.
   for genuinely non-seekable streams.
 
 ### P1 - Single-pass, memory-bounded export
-- [x] `KdbxFile::Export3`/`Export4` (`src/kdbx_export.cc:124`, `src/kdbx_export.cc:203`) now build
+- [x] `KdbxFile::Export3`/`Export4` (`src/kdbx_export.cc:125`, `src/kdbx_export.cc:206`) now build
   the payload through a streambuf pipeline (gzip → encrypt → HMAC framing)
   that consumes the XML output incrementally, mirroring the streaming import
   path, so plaintext and ciphertext are never both fully resident.
 - Attachments in the KDBX4 inner header are written directly into the payload
   pipeline (flags byte + length prefix + raw bytes); no per-attachment
-  `std::stringstream` copy is materialized. Loading existing attachments
-  lazily is still tracked under §1 P2 "Lazy binary loading".
+  `std::stringstream` copy is materialized. Existing attachments load lazily
+  through the shared `SecureBytes` buffer and `detail::BinarySource` views
+  (§1 P2 "Bound the XML DOM and binary memory further").
 
 ### P2 - Bound the XML DOM and binary memory further
 - [x] KDBX 4 inner-header binaries are collected into one shared, zeroized
@@ -189,7 +190,8 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 - [x] `detail::FormatCodec`/`FormatCodecRegistry` (with the
   `DatabaseSerializer` alias) replaces the hand-written `switch` in
   `KeePass`. Built-in KDB/KDBX 3/KDBX 4 codecs register themselves; a new
-  dialect only registers a factory. `Find`/`Save` no longer construct codecs
+  dialect only registers a factory (in-tree; the registry is internal and not
+  exported). `Find`/`Save` no longer construct codecs
   directly (`src/format_codec.cc`).
 
 ### P2 - Single ownership model for the object graph
@@ -200,8 +202,18 @@ locked memory (see `SECURITY.md`). The following close remaining gaps.
 
 ### P3 - ABI/API stability policy
 - [x] `docs/abi-policy.md` documents the 0.x source/ABI expectations,
-  Semantic Versioning, deprecation staging, and the planned PImpl/symbol
-  visibility/C-ABI work for a stable 1.0.
+  Semantic Versioning, deprecation staging, and the PImpl/symbol visibility/
+  C-ABI work for a stable 1.0.
+- [x] Shared and static builds use hidden default visibility with explicit
+  `LIBKEEPASS_API` exports (plus `--exclude-libs,ALL` on ELF); most internal
+  `detail::*` helpers and statically linked dependency symbols are no longer
+  exported (`BinarySource` stays exported for `Binary`'s `shared_ptr`).
+- [x] `KeePass` and `KdbxFile` use PImpl, keeping `Key`, `KdbxXml` and option
+  flags out of the public layout; moved-from instances stay usable.
+- Remaining for 1.0: PImpl for the `detail::FormatCodec` implementations and
+  the `cipher.hh` algorithm classes, plus an exported-symbols list for macOS
+  (the hidden preset applies there, but static dependency symbols are not
+  filtered from the export trie).
 
 ### P2 - Rich, structured error taxonomy
 - [x] All exceptions derive from `keepass::Error` and expose a stable
@@ -448,9 +460,9 @@ Most-wanted commands that users of a KeePass tool expect:
 - [x] **Entry history controls:** `Entry::delete_old_history()` and
   `Database::DeleteOldHistory()` implement the `HistoryMaxItems`/
   `HistoryMaxSize` policy, and `kpx purge --keep <n>` trims instead of clearing.
-- **Lazy binary loading:** access attachment payloads on demand for databases
-  with many large binaries (§1). Export already writes attachment bytes
-  directly into the payload pipeline.
+- [x] **Lazy binary loading:** attachment payloads are accessed on demand via
+  `detail::BinarySource` views over one shared secure buffer; `Binary::data()`
+  materializes on demand and `Binary::WriteTo()` streams during export (§1).
 - [x] **Delta/backup workflows:** `Database::DeltaSince(previous)` returns a
   `DatabaseDelta` with added/modified/deleted entries matched by UUID and a
   canonical JSON export (`DatabaseDelta::ToJson`) for incremental backups.
@@ -459,7 +471,8 @@ Most-wanted commands that users of a KeePass tool expect:
 
 ## How to use this roadmap
 
-1. Pick an item (prefer P0/P1), create an issue, and link it here.
+1. Pick an item (prefer P0/P1), create a PR (or re-enable issues and file one),
+   and link it here.
 2. Update the checkbox when the change is merged and released.
 3. Move items between priorities based on real user feedback; the roadmap is a
    plan, not a contract.

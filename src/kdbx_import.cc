@@ -24,6 +24,7 @@
 #include <fstream>
 #include <memory>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include <openssl/evp.h>
@@ -57,10 +58,38 @@ using keepass::detail::WipeStream;
 
 } // namespace
 
-void KdbxFile::Reset() { xml_.Reset(); }
+KdbxFile::KdbxFile() : impl_(std::make_unique<Impl>()) {}
+
+KdbxFile::KdbxFile(const KdbxFile& other)
+    : impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : std::make_unique<Impl>()) {}
+
+KdbxFile& KdbxFile::operator=(const KdbxFile& other) {
+  if (this != &other)
+    impl_ = other.impl_ ? std::make_unique<Impl>(*other.impl_) : std::make_unique<Impl>();
+  return *this;
+}
+
+KdbxFile::KdbxFile(KdbxFile&& other)
+    : impl_(std::exchange(other.impl_, std::make_unique<Impl>())) {}
+
+KdbxFile& KdbxFile::operator=(KdbxFile&& other) {
+  if (this != &other)
+    impl_ = std::exchange(other.impl_, std::make_unique<Impl>());
+  return *this;
+}
+
+KdbxFile::~KdbxFile() = default;
+
+void KdbxFile::Reset() { impl_->xml.Reset(); }
+
+void KdbxFile::set_write_kdbx4(bool write_kdbx4) { impl_->write_kdbx4 = write_kdbx4; }
+
+void KdbxFile::set_use_cached_key(bool use_cached_key) { impl_->use_cached_key = use_cached_key; }
+
+bool KdbxFile::use_cached_key() const { return impl_->use_cached_key; }
 
 void KdbxFile::set_resource_limits(const detail::ResourceLimits& limits) {
-  xml_.set_resource_limits(limits);
+  impl_->xml.set_resource_limits(limits);
 }
 
 std::unique_ptr<Database> KdbxFile::Import(const std::string& path, const Key& key) {
@@ -78,12 +107,12 @@ std::unique_ptr<Database> KdbxFile::Import(std::istream& src, const Key& key) {
   const uint32_t version = KdbxHeader::ReadVersion(src);
 
   if (KdbxHeader::IsKdbx4(version)) {
-    xml_.set_kdbx4(true);
+    impl_->xml.set_kdbx4(true);
     return Import4(src, key);
   }
 
   if ((version & KdbxHeader::kVersionCriticalMask) == KdbxHeader::kVersion3) {
-    xml_.set_kdbx4(false);
+    impl_->xml.set_kdbx4(false);
     return Import3(src, key);
   }
 
@@ -159,18 +188,18 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   secure_zero(final_inner_random_stream_key.data(), final_inner_random_stream_key.size());
 
   // Parse XML content.
-  hashed_istreambuf hashed_streambuf(content, xml_.resource_limits());
+  hashed_istreambuf hashed_streambuf(content, impl_->xml.resource_limits());
   std::istream hashed_stream(&hashed_streambuf);
 
   if (db->compress()) {
-    gzip_istreambuf gzip_streambuf(hashed_stream, xml_.resource_limits());
+    gzip_istreambuf gzip_streambuf(hashed_stream, impl_->xml.resource_limits());
     std::istream gzip_stream(&gzip_streambuf);
 
-    xml_.Parse(gzip_stream, obfuscator, *db);
+    impl_->xml.Parse(gzip_stream, obfuscator, *db);
     if (gzip_streambuf.BudgetExceeded())
       throw ResourceLimitError("Decompressed payload exceeds the configured size limit.");
   } else {
-    xml_.Parse(hashed_stream, obfuscator, *db);
+    impl_->xml.Parse(hashed_stream, obfuscator, *db);
   }
 
   if (hashed_streambuf.BudgetExceeded())
@@ -180,7 +209,7 @@ std::unique_ptr<Database> KdbxFile::Import3(std::istream& src, const Key& key) {
   WipeStream(content);
 
   // Validate header hash.
-  if (!keepass::detail::constant_time_eq(xml_.header_hash(), header_hash))
+  if (!keepass::detail::constant_time_eq(impl_->xml.header_hash(), header_hash))
     throw FormatError("Header checksum error in KDBX.");
 
   return db;
@@ -285,7 +314,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   // wrapped in HMAC protected blocks. Read the HMAC blocks from the file and
   // decrypt the payload inside them, block by block, so that a large database
   // never requires the whole ciphertext to be materialized in memory at once.
-  hmac_istreambuf hmac_streambuf(src, hmac_key.data(), xml_.resource_limits());
+  hmac_istreambuf hmac_streambuf(src, hmac_key.data(), impl_->xml.resource_limits());
   std::istream hmac_stream(&hmac_streambuf);
 
   secure_zero(hmac_key.data(), hmac_key.size());
@@ -361,7 +390,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
   // (compressed) payload, so decompress the entire decrypted content first.
   std::stringstream plain;
   if (db->compress()) {
-    gzip_istreambuf gzip_streambuf(content, xml_.resource_limits());
+    gzip_istreambuf gzip_streambuf(content, impl_->xml.resource_limits());
     std::istream gzip_stream(&gzip_streambuf);
     std::copy(std::istreambuf_iterator<char>(gzip_stream), std::istreambuf_iterator<char>(),
               std::ostreambuf_iterator<char>(plain));
@@ -408,7 +437,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
       // A single attachment is budgeted like the XML binaries and custom icons.
       if (inner_id == kKdbxInnerHeader::kBinaries &&
-          static_cast<uint64_t>(inner_size) > xml_.resource_limits().max_binary_bytes)
+          static_cast<uint64_t>(inner_size) > impl_->xml.resource_limits().max_binary_bytes)
         throw ResourceLimitError("Inner header binary exceeds the configured size limit.");
 
       switch (inner_id) {
@@ -472,7 +501,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
           std::make_shared<detail::BufferBinarySource>(pool, descriptor.offset, descriptor.size);
       auto binary = std::make_shared<Binary>(source, descriptor.protected_data);
       inner_binaries.push_back(binary);
-      xml_.binary_pool().insert(std::make_pair(std::to_string(i), binary));
+      impl_->xml.binary_pool().insert(std::make_pair(std::to_string(i), binary));
     }
   }
 
@@ -500,7 +529,7 @@ std::unique_ptr<Database> KdbxFile::Import4(std::istream& src, const Key& key) {
 
   // Parse the XML content, which follows the inner header in the same
   // (already decompressed) payload.
-  xml_.Parse(xml_source, obfuscator, *db);
+  impl_->xml.Parse(xml_source, obfuscator, *db);
 
   // KDBX 4 attachments live in the inner header. Keep them in the meta so
   // that they are not lost when exporting to older formats.

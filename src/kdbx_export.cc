@@ -110,22 +110,22 @@ void KdbxFile::Export(const std::string& path, const Database& db, const Key& ke
 void KdbxFile::Export(std::ostream& dst, const Database& db, const Key& key) {
   Reset();
 
-  if (write_kdbx4_ || db.kdf() != Database::Kdf::kAes) {
-    xml_.set_kdbx4(true);
-    xml_.set_kdbx41(RequiresKdbx41(db));
+  if (impl_->write_kdbx4 || db.kdf() != Database::Kdf::kAes) {
+    impl_->xml.set_kdbx4(true);
+    impl_->xml.set_kdbx41(RequiresKdbx41(db));
     Export4(dst, db, key);
     return;
   }
 
-  xml_.set_kdbx4(false);
-  xml_.set_kdbx41(false);
+  impl_->xml.set_kdbx4(false);
+  impl_->xml.set_kdbx41(false);
   Export3(dst, db, key);
 }
 
 void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   // Produce the final key used for encrypting the contents.
   SecureBuffer<32> transformed_key =
-      use_cached_key_ && db.has_transformed_key()
+      impl_->use_cached_key && db.has_transformed_key()
           ? db.transformed_key().Clone()
           : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
   std::array<uint8_t, 32> final_key{};
@@ -153,7 +153,7 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
   EVP_DigestInit_ex(mdctx2, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx2, header_data.c_str(), header_data.size());
   unsigned int out_len2 = 0;
-  EVP_DigestFinal_ex(mdctx2, xml_.header_hash().data(), &out_len2);
+  EVP_DigestFinal_ex(mdctx2, impl_->xml.header_hash().data(), &out_len2);
   EVP_MD_CTX_free(mdctx2);
 
   // Write header to file.
@@ -193,10 +193,10 @@ void KdbxFile::Export3(std::ostream& dst, const Database& db, const Key& key) {
     gzip_ostreambuf gzip_streambuf(hashed_stream);
     std::ostream gzip_stream(&gzip_streambuf);
 
-    xml_.Write(gzip_stream, obfuscator, db);
+    impl_->xml.Write(gzip_stream, obfuscator, db);
     gzip_stream.flush();
   } else {
-    xml_.Write(hashed_stream, obfuscator, db);
+    impl_->xml.Write(hashed_stream, obfuscator, db);
   }
 
   hashed_stream.flush();
@@ -211,7 +211,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // key. If the database was imported and the KDF parameters were not modified,
   // the cached key can be reused; otherwise recompute it.
   SecureBuffer<32> transformed_key =
-      use_cached_key_ && db.has_transformed_key()
+      impl_->use_cached_key && db.has_transformed_key()
           ? db.transformed_key().Clone()
           : KdbxKdf::Transform(key, db, Key::SubKeyResolution::kHashSubKeys);
 
@@ -237,14 +237,14 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
 
   // Write header to a temporary buffer so that we can compute the hash and
   // HMAC of it.
-  std::string header_data = KdbxHeader::Write4(db, xml_.kdbx41());
+  std::string header_data = KdbxHeader::Write4(db, impl_->xml.kdbx41());
 
   // Compute the header hash and HMAC.
   EVP_MD_CTX* mdctx_h = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx_h, EVP_sha256(), nullptr);
   EVP_DigestUpdate(mdctx_h, header_data.c_str(), header_data.size());
   unsigned int out_len_h = 0;
-  EVP_DigestFinal_ex(mdctx_h, xml_.header_hash().data(), &out_len_h);
+  EVP_DigestFinal_ex(mdctx_h, impl_->xml.header_hash().data(), &out_len_h);
   EVP_MD_CTX_free(mdctx_h);
 
   SecureBuffer<64> hmac_key;
@@ -280,7 +280,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
 
   // Write header, stored hash and stored HMAC to the file.
   dst.write(header_data.data(), static_cast<std::streamsize>(header_data.size()));
-  conserve<std::array<uint8_t, 32>>(dst, xml_.header_hash());
+  conserve<std::array<uint8_t, 32>>(dst, impl_->xml.header_hash());
   conserve<std::array<uint8_t, 32>>(dst, header_hmac);
 
   // The header buffer transiently holds key material (master seed, KDF salt).
@@ -296,7 +296,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   // seen binaries (shared_ptr hashing compares the pointee address) makes the
   // deduplication O(n); the vector preserves the first-occurrence order so the
   // pool references stay stable.
-  xml_.binary_pool().clear();
+  impl_->xml.binary_pool().clear();
   std::vector<std::shared_ptr<Binary>> ordered_binaries;
   std::unordered_set<std::shared_ptr<Binary>> seen_binaries;
   const auto collect = [&](const auto& self, const std::shared_ptr<Group>& group) -> void {
@@ -319,7 +319,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
   collect(collect, db.root());
 
   for (std::size_t i = 0; i < ordered_binaries.size(); ++i) {
-    xml_.binary_pool().insert(std::make_pair(std::to_string(i), ordered_binaries[i]));
+    impl_->xml.binary_pool().insert(std::make_pair(std::to_string(i), ordered_binaries[i]));
   }
 
   // Write content stream: inner header followed by the (optionally gzip
@@ -359,7 +359,7 @@ void KdbxFile::Export4(std::ostream& dst, const Database& db, const Key& key) {
     conserve<uint8_t>(inner_target, static_cast<uint8_t>(kKdbxInnerHeader::kEnd));
     conserve<uint32_t>(inner_target, 0);
 
-    xml_.Write(inner_target, obfuscator, db);
+    impl_->xml.Write(inner_target, obfuscator, db);
   };
 
   if (db.cipher() == Database::Cipher::kAes || db.cipher() == Database::Cipher::kTwofish) {

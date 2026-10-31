@@ -29,8 +29,6 @@
 #include <mutex>
 #include <ostream>
 
-#include "libkeepass/export.hh"
-
 namespace keepass {
 
 class Database;
@@ -63,7 +61,10 @@ struct FormatCodecOptions {
  * new dialect can be added by registering a factory without touching the
  * unified API.
  */
-class LIBKEEPASS_API FormatCodec {
+// Internal abstraction: hidden from the public ABI (the vtable and typeinfo are
+// only needed inside libkeepass). The registry below is the only entry point
+// that the test suite uses, so only those members stay exported.
+class FormatCodec {
 public:
   virtual ~FormatCodec() = default;
 
@@ -85,10 +86,11 @@ using FormatCodecFactory = std::function<std::unique_ptr<FormatCodec>(const Form
  *
  * The built-in KDB and KDBX codecs are registered by the registry constructor
  * (function-local static initialization, so there is no cross-translation-unit
- * static initialization order problem). Additional dialects may be registered
- * before opening a database.
+ * static initialization order problem). The registry is internal to the
+ * library: registration happens in `src/format_codec.cc` and its symbols are
+ * not exported, so out-of-tree dialects cannot register a factory.
  */
-class LIBKEEPASS_API FormatCodecRegistry final {
+class FormatCodecRegistry final {
 public:
   /// Returns the process-wide registry.
   static FormatCodecRegistry& Instance();
