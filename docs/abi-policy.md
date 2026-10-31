@@ -40,13 +40,28 @@ describes what consumers can rely on and how changes are staged.
    `1.0`, with a `CHANGELOG.md` entry and (where applicable) a migration section
    in `docs/migration-*.md`.
 
-## Planned hardening for 1.0
+## Hardening for 1.0
 
-- `PImpl` for `KeePass`, `KdbxFile` and the format codecs so their layout and
-  third-party dependencies (OpenSSL) do not leak into the ABI.
-- A generated symbol-version script or `-fvisibility=hidden` plus explicit
-  exports on all platforms.
+- `PImpl` for `KeePass` and `KdbxFile` is implemented: their public headers
+  only hold `std::unique_ptr<Impl>`, and per-operation state (including
+  `KdbxXml` and the key/format options) lives in the implementation files.
+  Copying deep-copies that state; moving transfers it and leaves the source in
+  a default-constructed, fully usable state (the move allocates a fresh
+  default-initialized implementation and may throw). The format codecs under
+  `keepass::detail` still expose their layout and remain a follow-up item.
+- Hidden symbol visibility is implemented for GCC/Clang builds (shared and
+  static): `CXX_VISIBILITY_PRESET hidden` plus `VISIBILITY_INLINES_HIDDEN`,
+  with `LIBKEEPASS_API` marking the intentional exports. On ELF,
+  `--exclude-libs,ALL` also hides symbols from statically linked dependencies.
+  On macOS the hidden preset applies but there is no archive-level exclusion,
+  so statically linked dependency symbols can still appear in the export trie.
+  Windows uses `__declspec`; a version script is not used.
+- Most `keepass::detail` helpers are hidden. `detail::BinarySource` and
+  `detail::BufferBinarySource` stay exported because `Binary` owns a source
+  through `std::shared_ptr`, so the deleter and virtual destructor must resolve
+  in consumer translation units.
 - The C ABI (`libkeepass-c`, see `capi/include/libkeepass-c.h`) is available
-  now and has its own deliberately small surface for language bindings. It
-  follows the same deprecation policy; the C++ API is not a stable ABI for FFI
+  now and has its own deliberately small surface for language bindings. It is
+  built with default visibility so the `kp_*` entry points stay exported, and
+  follows the same deprecation policy. The C++ API is not a stable ABI for FFI
   consumers.

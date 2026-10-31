@@ -13,6 +13,12 @@ else()
 endif()
 
 target_compile_features(libkeepass-c PUBLIC cxx_std_17)
+# libkeepass-c deliberately keeps the compiler's default symbol visibility
+# (unlike the C++ library, which uses hidden visibility plus LIBKEEPASS_API).
+# capi/include/libkeepass-c.h has no export/visibility macro on purpose: it is
+# a plain C header usable from any FFI, and the small set of kp_* entry points
+# must stay exported. The C ABI therefore remains a stable, self-contained
+# surface even though the C++ symbols it links against are hidden.
 target_include_directories(libkeepass-c
         PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

@@ -30,6 +30,7 @@
 #include <ostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "libkeepass/database.hh"
 #include "libkeepass/detail/limits.hh"
@@ -122,6 +123,11 @@ private:
   BinaryPool binary_pool_;
   IconPool icon_pool_;
   GroupPool group_pool_;
+
+  /// UUIDs already parsed from the group tree. Reusing one would make the
+  /// object graph cyclic (a group becoming its own ancestor), which would
+  /// recurse forever during serialization.
+  std::unordered_set<std::string> parsed_group_ids_;
   std::array<uint8_t, 32> header_hash_ = {{0}};
 
   detail::ResourceLimits resource_limits_ = {};

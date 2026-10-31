@@ -39,6 +39,7 @@ void KdbxXml::Reset() {
   binary_pool_.clear();
   icon_pool_.clear();
   group_pool_.clear();
+  parsed_group_ids_.clear();
   header_hash_ = {0};
   groups_seen_ = 0;
   entries_seen_ = 0;

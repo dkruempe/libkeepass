@@ -73,6 +73,23 @@ public:
    */
   KeePass(const std::string& password, const std::string& keyfile = "");
 
+  /// Copy-constructs an importer/exporter with a deep copy of its state.
+  KeePass(const KeePass& other);
+
+  /// Copy-assigns, replacing the state with a deep copy of @p other.
+  KeePass& operator=(const KeePass& other);
+
+  /// Move-constructs, leaving @p other in a default-constructed state.
+  /// Moves allocate and may throw.
+  KeePass(KeePass&& other);
+
+  /// Move-assigns, leaving @p other in a default-constructed state.
+  /// Moves allocate and may throw.
+  KeePass& operator=(KeePass&& other);
+
+  /// Destroys the importer/exporter and wipes its key material.
+  ~KeePass();
+
   /// Opens a KeePass (KDB or KDBX) database file.
   /**
    * @param path Path to the database file on disk.
@@ -129,7 +146,7 @@ public:
 
   /// Saves a database to a stream using a new key.
   /**
-   * The key is used only for this save and \ref key_ is restored afterwards.
+   * The key is used only for this save and the stored key is restored afterwards.
    * The output format is taken from \ref SetFormat if set, otherwise a KDBX
    * format is chosen based on the database KDF and cipher. KDB cannot be
    * selected for stream output because there is no file extension.
@@ -189,10 +206,10 @@ public:
               const std::string& keyfile = "");
 
   /// Selects the output format.
-  void SetFormat(Format format) { format_ = format; }
+  void SetFormat(Format format);
 
   /// Returns the configured output format.
-  Format GetFormat() const { return format_; }
+  Format GetFormat() const;
 
   /// Creates a new empty database with generated cryptographic material.
   /**
@@ -214,6 +231,8 @@ public:
                                           Database::Kdf kdf = Database::Kdf::kArgon2id);
 
 private:
+  struct Impl;
+
   std::unique_ptr<Database> Import(std::istream& src, Format format);
   void Save(std::ostream& dst, const Database& db, Format format);
   static void SaveWithOptions(std::ostream& dst, const Database& db, const Key& key, Format format,
@@ -221,8 +240,7 @@ private:
   Format ResolveOutputFormat(const std::string& path, const Database& db) const;
   Format ResolveStreamFormat(const Database& db) const;
 
-  Key key_;
-  Format format_ = Format::kAuto;
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace keepass

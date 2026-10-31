@@ -114,7 +114,7 @@ the database's compression flag is `gzip`.
 
 ## KDBX 3 payload layout
 
-Import path (`KdbxFile::Import3`, `src/kdbx_import.cc:91`) — from ciphertext to XML:
+Import path (`KdbxFile::Import3`, `src/kdbx_import.cc:123`) — from ciphertext to XML:
 
 ```
 Encrypted payload (AES-256-CBC, PKCS#7)
@@ -128,7 +128,7 @@ Encrypted payload (AES-256-CBC, PKCS#7)
 
 The plaintext begins with the 32-byte **content stream start bytes** stored in
 the header. They are decrypted too and compared against the header value —
-this doubles as a fast password check (`src/kdbx_import.cc:153`).
+this doubles as a fast password check (`src/kdbx_import.cc:176`).
 
 ## KDBX 4 payload layout
 
@@ -167,10 +167,10 @@ Cipher IDs in the KDBX 4 header (`src/kdbx_header.cc:45`):
 
 Export mirrors the import layers in reverse order:
 
-*   `KdbxFile::Export3` (`src/kdbx_export.cc:124`): write header → derive final key →
+*   `KdbxFile::Export3` (`src/kdbx_export.cc:125`): write header → derive final key →
     serialize XML → optional gzip → `hashed_ostreambuf` → prepend start bytes →
     `encrypt_cbc` → write.
-*   `KdbxFile::Export4` (`src/kdbx_export.cc:203`): write header + stored hash + stored
+*   `KdbxFile::Export4` (`src/kdbx_export.cc:206`): write header + stored hash + stored
     HMAC → serialize XML → optional gzip → encrypt (`encrypt_cbc` or ChaCha20) →
     wrap in `hmac_ostreambuf` → write.
 

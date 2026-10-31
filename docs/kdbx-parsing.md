@@ -48,7 +48,7 @@ stateless modules:
 ```
 
 The version's critical mask `0xffff0000` selects the parser
-(`KdbxFile::Import`, `src/kdbx_import.cc:72`):
+(`KdbxFile::Import`, `src/kdbx_import.cc:103`):
 
 *   `0x00030000` → `Import3` (KDBX 3)
 *   `0x00040000` → `Import4` (KDBX 4.0)
@@ -96,7 +96,7 @@ before any unbounded allocation runs.
 
 ## Import pipeline
 
-### `KdbxFile::Import` (`src/kdbx_import.cc:72`)
+### `KdbxFile::Import` (`src/kdbx_import.cc:103`)
 
 1.  `Reset()` shared state (delegates to `KdbxXml::Reset`,
     `src/kdbx_xml.cc:38`).
@@ -104,7 +104,7 @@ before any unbounded allocation runs.
     `src/kdbx_header.cc:159`).
 3.  Delegate to `Import3` or `Import4`.
 
-### `Import3` (`src/kdbx_import.cc:91`)
+### `Import3` (`src/kdbx_import.cc:123`)
 
 1.  **Parse header fields** into a fresh `Database` (`KdbxHeader::Parse3`,
     `src/kdbx_header.cc:172`: cipher, compression, seeds, IV, inner stream
@@ -122,7 +122,7 @@ before any unbounded allocation runs.
 8.  **Verify stored header hash** against `<Meta><HeaderHash>`; this happens
     after the XML is parsed because the hash is stored inside the XML.
 
-### `Import4` (`src/kdbx_import.cc:191`)
+### `Import4` (`src/kdbx_import.cc:218`)
 
 1.  **Parse header fields**, including the KDF `VariantDictionary`
     (`KdbxHeader::Parse4`, `src/kdbx_header.cc:260`; Argon2/AES parameters via
@@ -138,7 +138,7 @@ before any unbounded allocation runs.
     database is never fully materialized: `decrypt_cbc_stream` for AES/Twofish
     (`src/cipher.cc`), a chunked 64-byte keystream loop for ChaCha20.
 7.  Optional **gzip** decompress of the *entire* payload.
-8.  **Parse inner header** (`src/kdbx_import.cc:375`):
+8.  **Parse inner header** (`src/kdbx_import.cc:407`):
 
     | ID | Field | Content |
     |---|---|---|
@@ -211,7 +211,7 @@ Only the XML body schema is extended (`src/kdbx_xml.cc`):
 
 `Export4` writes `0x00040001` only when the database uses 4.1-only features,
 otherwise `0x00040000` (mirrors KeePass' `GetMinKdbxVersion`, verified against
-KeePass 2.57; the decision is `RequiresKdbx41` in `src/kdbx_export.cc:82`). Two rules
+KeePass 2.57; the decision is `RequiresKdbx41` in `src/kdbx_export.cc:83`). Two rules
 differ from a naive reading of the format:
 
 *   A `PreviousParentGroup` reference does **not** enforce KDBX 4.1. KeePass
@@ -225,12 +225,12 @@ differ from a naive reading of the format:
 
 ## Export pipeline
 
-### `KdbxFile::Export` (`src/kdbx_export.cc:109`)
+### `KdbxFile::Export` (`src/kdbx_export.cc:110`)
 
 Writes KDBX 4 when forced via `set_write_kdbx4(true)` or when the database KDF
 is not AES; otherwise writes KDBX 3.
 
-### `Export3` (`src/kdbx_export.cc:124`)
+### `Export3` (`src/kdbx_export.cc:125`)
 
 1.  Derive/reuse `transformed_key` and `final_key`.
 2.  Serialize the header fields via `KdbxHeader::Write3`
@@ -240,7 +240,7 @@ is not AES; otherwise writes KDBX 3.
     XML is optionally gzip-compressed inside the hashed stream.
 4.  `encrypt_cbc` the content stream.
 
-### `Export4` (`src/kdbx_export.cc:203`)
+### `Export4` (`src/kdbx_export.cc:206`)
 
 1.  Derive/reuse `transformed_key`; compute `final_key`, `hmac_key` and the
     header HMAC.

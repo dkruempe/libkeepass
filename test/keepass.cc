@@ -26,6 +26,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -33,10 +34,10 @@
 #include "config.hh"
 #include "libkeepass/cipher_registry.hh"
 #include "libkeepass/database.hh"
-#include "libkeepass/detail/format_codec.hh"
 #include "libkeepass/entry.hh"
 #include "libkeepass/exception.hh"
 #include "libkeepass/group.hh"
+#include "libkeepass/kdbx.hh"
 #include "libkeepass/kdf_registry.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
@@ -254,10 +255,47 @@ TEST_F(KeePassTest, RegistriesExposeBuiltins) {
   EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kAes));
   EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kArgon2d));
   EXPECT_TRUE(KdfRegistry::Instance().Contains(Database::Kdf::kArgon2id));
+}
 
-  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdb));
-  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdbx3));
-  EXPECT_TRUE(detail::FormatCodecRegistry::Instance().Contains(detail::kFormatKdbx4));
+TEST_F(KeePassTest, CopyAndMoveLeaveUsableState) {
+  KeePass original("password");
+  original.SetFormat(KeePass::Format::kKdbx4);
+
+  KeePass copy(original);
+  EXPECT_EQ(copy.GetFormat(), KeePass::Format::kKdbx4);
+
+  KeePass moved(std::move(copy));
+  EXPECT_EQ(moved.GetFormat(), KeePass::Format::kKdbx4);
+  // NOLINTNEXTLINE(bugprone-use-after-move, clang-analyzer-cplusplus.Move)
+  EXPECT_EQ(copy.GetFormat(), KeePass::Format::kAuto);
+  copy.SetFormat(KeePass::Format::kKdbx3);
+  EXPECT_EQ(copy.GetFormat(), KeePass::Format::kKdbx3);
+
+  KeePass assigned;
+  assigned = std::move(moved);
+  EXPECT_EQ(assigned.GetFormat(), KeePass::Format::kKdbx4);
+  // NOLINTNEXTLINE(bugprone-use-after-move, clang-analyzer-cplusplus.Move)
+  EXPECT_EQ(moved.GetFormat(), KeePass::Format::kAuto);
+  moved.SetFormat(KeePass::Format::kKdb);
+  EXPECT_EQ(moved.GetFormat(), KeePass::Format::kKdb);
+}
+
+TEST_F(KeePassTest, KdbxFileCopyAndMoveLeaveUsableState) {
+  KdbxFile file;
+  file.set_use_cached_key(false);
+
+  KdbxFile copy(file);
+  EXPECT_FALSE(copy.use_cached_key());
+
+  KdbxFile moved(std::move(copy));
+  EXPECT_FALSE(moved.use_cached_key());
+  // NOLINTNEXTLINE(bugprone-use-after-move, clang-analyzer-cplusplus.Move)
+  EXPECT_TRUE(copy.use_cached_key());
+  copy.set_use_cached_key(false);
+  EXPECT_FALSE(copy.use_cached_key());
+
+  moved.set_use_cached_key(true);
+  EXPECT_TRUE(moved.use_cached_key());
 }
 
 TEST_F(KeePassTest, ErrorCategoriesAndOffsets) {

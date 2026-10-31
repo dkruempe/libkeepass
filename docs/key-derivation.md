@@ -38,7 +38,7 @@ Anything else raises `FormatError: Unknown key file format`.
     sub keys are combined with `SHA-256` only when the key is truly composite.
 
 Import uses `kHashSubKeys` for both KDBX 3 and KDBX 4
-(`src/kdbx_import.cc:115`, `:222`).
+(`src/kdbx_import.cc:147`, `:249`).
 
 ## Key derivation functions
 
@@ -120,8 +120,8 @@ against KeePassXC's `KeePass2.cpp` concludes:
   version `0x10`/`0x13` handling.
 * The optional Argon2 parameters `K` (secret key) and `A` (associated data) are
   supported by the format but never written by KeePass itself; unknown variant
-  dictionary entries are ignored on import (tolerance policy, see TODO
-  "Entscheidungen").
+  dictionary entries are ignored on import (see the tolerance policy in
+  `docs/interop.md`).
 
 ## Deriving the final keys (KDBX 3 / 4)
 
@@ -133,8 +133,8 @@ Starting from `transformed_key`, two keys are computed:
 final_key = SHA-256(master_seed || transformed_key)
 ```
 
-Used to instantiate the payload cipher (`src/kdbx_import.cc:130` for KDBX 3,
-`:278` for KDBX 4).
+Used to instantiate the payload cipher (`src/kdbx_import.cc:160` for KDBX 3,
+`:305` for KDBX 4).
 
 ### HMAC key (KDBX 4 only)
 
@@ -143,18 +143,18 @@ hmac_key          = SHA-512(master_seed || transformed_key || 0x01)
 header_hmac_key   = SHA-512(0xFF x 8        || hmac_key)
 ```
 
-*   `hmac_key` authenticates the HMAC blocks of the payload (`src/kdbx_import.cc:292`).
+*   `hmac_key` authenticates the HMAC blocks of the payload (`src/kdbx_import.cc:254`).
 *   `header_hmac_key` authenticates the header itself; the stored 32-byte header
-    HMAC is `HMAC-SHA256(header_hmac_key, header_bytes)` (`src/kdbx_import.cc:249`).
+    HMAC is `HMAC-SHA256(header_hmac_key, header_bytes)` (`src/kdbx_import.cc:264`).
 *   Per-block HMAC sub keys are derived lazily in `src/stream.cc` as
     `SHA-512(block_index || hmac_key)`.
 
 ## Transformed key caching
 
 `Database::transformed_key()` / `has_transformed_key()` cache the derived key
-(`src/kdbx_import.cc:116`, `:223`). `Export3` / `Export4` reuse the cached value
+(`src/kdbx_import.cc:148`, `:250`). `Export3` / `Export4` reuse the cached value
 when present, so re-exporting an imported database does not rerun an
-expensive KDF unless the KDF parameters changed (`src/kdbx_export.cc:127`, `:211`).
+expensive KDF unless the KDF parameters changed (`src/kdbx_export.cc:128`, `:214`).
 
 ## Example: full KDBX 4 password-only flow
 

@@ -39,9 +39,11 @@
 #include "libkeepass/icon.hh"
 #include "libkeepass/kdb.hh"
 #include "libkeepass/kdbx.hh"
+#include "libkeepass/kdbx_xml.hh"
 #include "libkeepass/keepass.hh"
 #include "libkeepass/key.hh"
 #include "libkeepass/metadata.hh"
+#include "libkeepass/random.hh"
 #include "libkeepass/secure.hh"
 
 using namespace keepass;
@@ -304,6 +306,35 @@ TEST(RobustnessTest, KdbxXmlDepthLimit) {
   detail::ResourceLimits limits;
   limits.max_xml_depth = 2;
   ExpectImportThrows(payload, limits);
+}
+
+TEST(RobustnessTest, KdbxXmlDuplicateGroupUuidRejected) {
+  // A nested group that reuses an ancestor's UUID used to make the object
+  // graph cyclic and overflow the stack in KdbxXml::WriteGroup (fuzzer
+  // finding in fuzz_xml).
+  const std::string xml = R"(<?xml version="1.0" encoding="utf-8"?>
+<KeePassFile>
+  <Meta><Generator>test</Generator></Meta>
+  <Root>
+    <Group>
+      <UUID>AAAAAAAAAAAAAAAAAAAAAA==</UUID>
+      <Name>root</Name>
+      <Group>
+        <UUID>AAAAAAAAAAAAAAAAAAAAAA==</UUID>
+        <Name>child</Name>
+      </Group>
+    </Group>
+  </Root>
+</KeePassFile>)";
+
+  KdbxXml parser;
+  parser.set_kdbx4(true);
+  std::istringstream input(xml);
+  Database db;
+  const std::array<uint8_t, 32> key{};
+  RandomObfuscator obfuscator(RandomObfuscator::Type::kSalsa20, key);
+
+  EXPECT_THROW(parser.Parse(input, obfuscator, db), FormatError);
 }
 
 TEST(RobustnessTest, KdbxXmlGroupCountLimit) {

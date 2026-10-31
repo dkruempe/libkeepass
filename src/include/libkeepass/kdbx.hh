@@ -44,14 +44,7 @@ class Key;
  */
 class LIBKEEPASS_API KdbxFile final {
 private:
-  /** Force KDBX 4 output even if the database could be written as KDBX 3. */
-  bool write_kdbx4_ = false;
-
-  /** Reuse a transformed key cached on the Database instead of deriving it. */
-  bool use_cached_key_ = true;
-
-  /** KDBX XML body serializer/deserializer holding all per-operation state. */
-  KdbxXml xml_;
+  struct Impl;
 
   /// Resets all internal pools and state for a new import/export operation.
   void Reset();
@@ -89,6 +82,26 @@ private:
   void Export4(std::ostream& dst, const Database& db, const Key& key);
 
 public:
+  /// Constructs a KDBX importer/exporter with default options.
+  KdbxFile();
+
+  /// Copy-constructs an importer/exporter with a deep copy of its state.
+  KdbxFile(const KdbxFile& other);
+
+  /// Copy-assigns, replacing the state with a deep copy of @p other.
+  KdbxFile& operator=(const KdbxFile& other);
+
+  /// Move-constructs an importer/exporter, leaving @p other in a
+  /// default-constructed state. Moves allocate and may throw.
+  KdbxFile(KdbxFile&& other);
+
+  /// Move-assigns, leaving @p other in a default-constructed state.
+  /// Moves allocate and may throw.
+  KdbxFile& operator=(KdbxFile&& other);
+
+  /// Destroys the importer/exporter and wipes its per-operation state.
+  ~KdbxFile();
+
   /// Imports a KDBX database from a file path.
   /**
    * @param path Path to the KDBX database file on disk.
@@ -122,7 +135,7 @@ public:
   void Export(std::ostream& dst, const Database& db, const Key& key);
 
   /** Forces the exporter to produce a KDBX 4 format database. */
-  void set_write_kdbx4(bool write_kdbx4) { write_kdbx4_ = write_kdbx4; }
+  void set_write_kdbx4(bool write_kdbx4);
 
   /**
    * Selects whether a transformed key cached on the Database may be reused.
@@ -131,13 +144,16 @@ public:
    * one. Enabled by default, so keyless saves of freshly created or imported
    * databases can reuse the cache.
    */
-  void set_use_cached_key(bool use_cached_key) { use_cached_key_ = use_cached_key; }
+  void set_use_cached_key(bool use_cached_key);
 
   /** Returns whether a cached transformed key may be reused. */
-  bool use_cached_key() const { return use_cached_key_; }
+  bool use_cached_key() const;
 
   /** Sets the resource budgets enforced while importing and parsing. */
   void set_resource_limits(const detail::ResourceLimits& limits);
+
+private:
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace keepass

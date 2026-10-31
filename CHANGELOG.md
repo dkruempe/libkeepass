@@ -158,9 +158,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   returned an empty group while the tree group carried the entries.
   `ParseGroup` now reuses a pooled placeholder when the UUID was already
   resolved.
+- A group UUID that already appeared in the parsed group tree is rejected with
+  `FormatError` instead of reusing the pooled instance. Reusing an ancestor
+  made the object graph cyclic and recursed without bound in
+  `KdbxXml::WriteGroup` (found by `fuzz_xml`); regression test in
+  `test/robustness.cc`.
 
 ### Changed
 
+- **Breaking (ABI):** the library is now built with hidden default symbol
+  visibility (`CXX_VISIBILITY_PRESET hidden`, `VISIBILITY_INLINES_HIDDEN`),
+  shared and static. Only declarations marked `LIBKEEPASS_API` and the `kp_*`
+  C ABI are exported; most internal `keepass::detail::*` helpers and
+  statically linked dependency symbols no longer appear in the dynamic symbol
+  table (`--exclude-libs,ALL` on ELF). `detail::BinarySource`/
+  `BufferBinarySource` remain exported because `Binary` holds them through
+  `std::shared_ptr`.
+- **Breaking (ABI):** `KeePass` and `KdbxFile` now use a PImpl
+  (`std::unique_ptr<Impl>`), so their layout no longer exposes `Key`,
+  `KdbxXml` or option flags in the public header. Copying deep-copies the
+  state; moving transfers it and leaves the source default-constructed but
+  fully usable (previously a move of `KeePass` fell back to a deep copy).
+  Moves allocate a fresh default implementation and may throw.
 - Format signatures, KDBX version constants, cipher/KDF UUIDs and the
   outer-header field cap are centralized in
   `libkeepass/detail/constants.hh`; the codecs and the public `KdbxHeader`

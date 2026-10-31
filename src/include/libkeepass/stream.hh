@@ -120,7 +120,7 @@ public:
  * Used internally by hashed_istreambuf and hashed_ostreambuf to compute
  * and verify block integrity checksums.
  */
-class hashed_basic_streambuf {
+class LIBKEEPASS_API hashed_basic_streambuf {
 protected:
   /**
    * @brief Header written before each data block in the hashed stream format.

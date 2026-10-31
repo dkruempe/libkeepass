@@ -45,12 +45,19 @@ std::shared_ptr<Group> KdbxXml::ParseGroup(const pugi::xml_node& group_node,
   // Metadata-referenced groups (RecycleBinUUID, EntryTemplatesGroup) may have
   // been created as placeholders by GetGroup before the tree is parsed. Reuse
   // that instance so the metadata link stays valid; otherwise the parsed tree
-  // group would differ from the group the metadata points to.
+  // group would differ from the group the metadata points to. A UUID that is
+  // already part of the parsed tree, however, would turn the tree into a cycle
+  // (fuzzer finding: a nested group reusing an ancestor's UUID caused
+  // unbounded recursion in WriteGroup), so reject it.
+  const std::string group_id = group_node.child_value("UUID");
+  if (!group_id.empty() && !parsed_group_ids_.insert(group_id).second)
+    throw FormatError("Duplicate group UUID in KDBX XML.");
+
   std::shared_ptr<Group> group;
-  auto pool_it = group_pool_.find(group_node.child_value("UUID"));
+  auto pool_it = group_pool_.find(group_id);
   if (pool_it == group_pool_.end()) {
     group = std::make_shared<Group>();
-    group_pool_.insert(std::make_pair(group_node.child_value("UUID"), group));
+    group_pool_.insert(std::make_pair(group_id, group));
   } else {
     group = pool_it->second;
   }

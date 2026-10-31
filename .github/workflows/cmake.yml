@@ -57,6 +57,10 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ matrix.build-type }} -j $(nproc)
 
+      - name: Check exported ABI symbols
+        if: matrix.build-type == 'Release'
+        run: tools/check_symbols.sh build
+
       # Round-trip benchmark: export and import timings plus peak RSS. The
       # absolute threshold is deliberately generous for shared CI runners
       # (which are also built with coverage here); the export/import ratio is

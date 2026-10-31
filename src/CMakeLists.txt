@@ -30,6 +30,27 @@ else()
     add_library(libkeepass STATIC ${headers} ${sources})
 endif()
 
+# ABI hardening: every symbol is hidden by default and only declarations marked
+# LIBKEEPASS_API are exported (see include/libkeepass/export.hh and
+# docs/abi-policy.md). This keeps internal helpers (detail::*, pugixml adapters)
+# out of the dynamic symbol table. The static build uses the same preset so a
+# static archive linked into another shared object does not re-export libkeepass
+# symbols; its LIBKEEPASS_API expands to nothing (LIBKEEPASS_STATIC).
+set_target_properties(libkeepass PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
+if (LIBKEEPASS_BUILD_SHARED)
+    # The Conan dependencies (OpenSSL, zlib, pugixml, argon2) are linked
+    # statically into the shared library. Hide their symbols too, so only
+    # LIBKEEPASS_API declarations appear in the dynamic symbol table. This is
+    # ELF-only; macOS and Windows have different linker mechanisms.
+    if (UNIX AND NOT APPLE)
+        target_link_options(libkeepass PRIVATE "LINKER:--exclude-libs,ALL")
+    endif()
+else()
+    target_compile_definitions(libkeepass PUBLIC LIBKEEPASS_STATIC=1)
+endif()
+
 # aes_ni.cc uses AES-NI intrinsics, which are an x86/x86-64 extension. Detect
 # the target architecture by asking the compiler directly (this mirrors the
 # LIBKEEPASS_AES_NI preprocessor guard in aes_ni.hh), so the -maes ISA flag is
