@@ -71,8 +71,12 @@ KeePass& KeePass::operator=(const KeePass& other) {
   return *this;
 }
 
+// The move allocates a fresh default implementation so the source stays
+// usable; it can therefore not be noexcept.
+// NOLINTNEXTLINE(performance-noexcept-move-constructor)
 KeePass::KeePass(KeePass&& other) : impl_(std::exchange(other.impl_, std::make_unique<Impl>())) {}
 
+// NOLINTNEXTLINE(performance-noexcept-move-constructor)
 KeePass& KeePass::operator=(KeePass&& other) {
   if (this != &other)
     impl_ = std::exchange(other.impl_, std::make_unique<Impl>());

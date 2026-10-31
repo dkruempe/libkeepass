@@ -69,9 +69,13 @@ KdbxFile& KdbxFile::operator=(const KdbxFile& other) {
   return *this;
 }
 
+// The move allocates a fresh default implementation so the source stays
+// usable; it can therefore not be noexcept.
+// NOLINTNEXTLINE(performance-noexcept-move-constructor)
 KdbxFile::KdbxFile(KdbxFile&& other)
     : impl_(std::exchange(other.impl_, std::make_unique<Impl>())) {}
 
+// NOLINTNEXTLINE(performance-noexcept-move-constructor)
 KdbxFile& KdbxFile::operator=(KdbxFile&& other) {
   if (this != &other)
     impl_ = std::exchange(other.impl_, std::make_unique<Impl>());
